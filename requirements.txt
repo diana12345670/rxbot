@@ -3,3 +3,4 @@ flask
 aiohttp
 pytz
 python-dotenv
+psutil
