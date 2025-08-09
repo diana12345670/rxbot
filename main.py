@@ -205,8 +205,8 @@ def run():
     while True:
         try:
             # Ping mais frequente: 25 segundos
-            await asyncio.sleep(25)
-            ping_count += 1
+            #await asyncio.sleep(25)
+            #ping_count += 1
 
             success = False
             # Usar timeout mais baixo e conexão mais rápida
