@@ -1504,8 +1504,15 @@ async def on_reaction_add(reaction, user):
     if message.id in active_games:
         game_data = active_games[message.id]
 
-        if game_data['user'] != user.id:
-            return
+        # Verificar se é o usuário correto para este tipo de interação
+        if game_data.get('type') in ['ticket_creation', 'ticket_confirmation', 'ticket_tier_confirmation', 'clear_confirmation', 'ban_confirmation']:
+            if game_data.get('user') != user.id:
+                # Remover reação de usuário não autorizado
+                try:
+                    await reaction.remove(user)
+                except:
+                    pass
+                return
 
         if game_data['type'] == 'ticket_creation':
             emoji_to_motivo = {
@@ -1530,6 +1537,14 @@ async def on_reaction_add(reaction, user):
                     })()
 
                     await create_ticket_channel(ctx_mock, motivo, user)
+                    
+                    # Editar mensagem original para mostrar que foi processado
+                    embed = create_embed(
+                        "✅ Ticket Criado!",
+                        f"Seu ticket foi criado com sucesso!\n**Motivo:** {motivo}",
+                        color=0x00ff00
+                    )
+                    await message.edit(embed=embed)
                     del active_games[message.id]
                 except Exception as e:
                     logger.error(f"Erro ao criar ticket: {e}")
@@ -1546,6 +1561,14 @@ async def on_reaction_add(reaction, user):
                     })()
 
                     await create_ticket_channel(ctx_mock, motivo, user)
+                    
+                    # Editar mensagem de confirmação
+                    embed = create_embed(
+                        "✅ Ticket Criado!",
+                        f"Seu ticket foi criado com sucesso!\n**Motivo:** {motivo}",
+                        color=0x00ff00
+                    )
+                    await message.edit(embed=embed)
                     del active_games[message.id]
                 except Exception as e:
                     logger.error(f"Erro ao criar ticket: {e}")
@@ -1555,30 +1578,148 @@ async def on_reaction_add(reaction, user):
                 await message.edit(embed=embed)
                 del active_games[message.id]
 
+        elif game_data['type'] == 'ticket_tier_confirmation':
+            if str(reaction.emoji) == "✅":
+                motivo = game_data['motivo']
+
+                try:
+                    ctx_mock = type('MockCtx', (), {
+                        'guild': message.guild,
+                        'channel': message.channel,
+                        'send': message.channel.send
+                    })()
+
+                    await create_ticket_channel(ctx_mock, motivo, user)
+                    
+                    # Editar mensagem de confirmação
+                    embed = create_embed(
+                        "✅ Ticket Tier Criado!",
+                        f"Seu ticket tier foi criado com sucesso!\n**Motivo:** {motivo}",
+                        color=0xffd700
+                    )
+                    await message.edit(embed=embed)
+                    del active_games[message.id]
+                except Exception as e:
+                    logger.error(f"Erro ao criar ticket tier: {e}")
+
+            elif str(reaction.emoji) == "❌":
+                embed = create_embed("❌ Ticket Tier Cancelado", "Criação de ticket tier cancelada pelo usuário.", color=0xff6b6b)
+                await message.edit(embed=embed)
+                del active_games[message.id]
+
         elif game_data['type'] == 'clear_confirmation':
             if str(reaction.emoji) == "✅":
                 amount = game_data['amount']
-                channel = message.guild.get_channel(game_data['channel'])
+                channel_id = game_data['channel']
+                channel = message.guild.get_channel(channel_id)
+
+                if not channel:
+                    embed = create_embed("❌ Erro", "Canal não encontrado!", color=0xff0000)
+                    await message.edit(embed=embed)
+                    del active_games[message.id]
+                    return
 
                 try:
-                    await channel.purge(limit=amount + 1)  # +1 para incluir a mensagem de confirmação
+                    # Deletar a mensagem de confirmação primeiro
+                    try:
+                        await message.delete()
+                    except:
+                        pass
+                    
+                    # Limpar mensagens do canal
+                    deleted = await channel.purge(limit=amount)
 
                     confirm_embed = create_embed(
                         "🧹 Limpeza Concluída",
-                        f"**{amount} mensagens foram deletadas com sucesso!**",
+                        f"**{len(deleted)} mensagens foram deletadas com sucesso!**",
                         color=0x00ff00
                     )
                     await channel.send(embed=confirm_embed, delete_after=5)
                     del active_games[message.id]
                 except Exception as e:
                     logger.error(f"Erro na limpeza: {e}")
+                    embed = create_embed("❌ Erro na Limpeza", f"Erro: {str(e)[:100]}", color=0xff0000)
+                    try:
+                        await channel.send(embed=embed, delete_after=10)
+                    except:
+                        pass
+                    if message.id in active_games:
+                        del active_games[message.id]
 
             elif str(reaction.emoji) == "❌":
                 embed = create_embed("❌ Limpeza Cancelada", "Operação cancelada pelo usuário.", color=0xff6b6b)
                 await message.edit(embed=embed)
                 del active_games[message.id]
 
+        elif game_data['type'] == 'ban_confirmation':
+            if user.id != game_data['user']:
+                try:
+                    await reaction.remove(user)
+                except:
+                    pass
+                return
+
+            if str(reaction.emoji) == "✅":
+                try:
+                    member_id = game_data['member_id']
+                    reason = game_data['reason']
+                    
+                    member = message.guild.get_member(member_id)
+                    if not member:
+                        embed = create_embed("❌ Erro", "Membro não encontrado!", color=0xff0000)
+                        await message.edit(embed=embed)
+                        del active_games[message.id]
+                        return
+
+                    # Executar ban
+                    await member.ban(reason=reason)
+
+                    # Confirmar ban
+                    embed = create_embed(
+                        "🔨 Membro Banido!",
+                        f"**Usuário:** {member.name}#{member.discriminator}\n"
+                        f"**Motivo:** {reason}\n"
+                        f"**Moderador:** {user.mention}",
+                        color=0xff0000
+                    )
+                    await message.edit(embed=embed)
+                    del active_games[message.id]
+
+                    # Log da moderação
+                    try:
+                        with db_lock:
+                            conn = get_db_connection()
+                            cursor = conn.cursor()
+                            cursor.execute('''
+                                INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
+                                VALUES (?, ?, ?, ?, ?)
+                            ''', (message.guild.id, member_id, user.id, 'ban', reason))
+                            conn.commit()
+                            conn.close()
+                    except Exception as e:
+                        logger.error(f"Erro ao salvar log de moderação: {e}")
+
+                except Exception as e:
+                    logger.error(f"Erro ao banir membro: {e}")
+                    embed = create_embed("❌ Erro", f"Erro ao banir membro: {str(e)[:100]}", color=0xff0000)
+                    await message.edit(embed=embed)
+                    if message.id in active_games:
+                        del active_games[message.id]
+
+            elif str(reaction.emoji) == "❌":
+                embed = create_embed("❌ Ban Cancelado", "Operação de ban cancelada.", color=0xffaa00)
+                await message.edit(embed=embed)
+                del active_games[message.id]
+
         elif game_data['type'] == 'close_ticket_confirmation':
+            # Verificar se é o usuário que iniciou o fechamento
+            if user.id != game_data['closer']:
+                try:
+                    await reaction.remove(user)
+                except:
+                    pass
+                return
+
             if str(reaction.emoji) == "✅":
                 try:
                     # Fechar ticket
@@ -1597,8 +1738,8 @@ async def on_reaction_add(reaction, user):
                             ''', (closer_id, message.channel.id))
                             conn.commit()
                             conn.close()
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.error(f"Erro ao atualizar ticket no banco: {e}")
 
                     # Enviar mensagem de fechamento
                     final_embed = create_embed(
@@ -1609,12 +1750,13 @@ async def on_reaction_add(reaction, user):
                         color=0xff6b6b
                     )
 
-                    await message.channel.send(embed=final_embed)
+                    await message.edit(embed=final_embed)
                     await asyncio.sleep(5)
 
                     # Deletar canal
                     await message.channel.delete()
-                    del active_games[message.id]
+                    if message.id in active_games:
+                        del active_games[message.id]
 
                 except Exception as e:
                     logger.error(f"Erro ao fechar ticket: {e}")
@@ -1624,7 +1766,8 @@ async def on_reaction_add(reaction, user):
                         color=0xff0000
                     )
                     await message.channel.send(embed=error_embed)
-                    del active_games[message.id]
+                    if message.id in active_games:
+                        del active_games[message.id]
 
             elif str(reaction.emoji) == "❌":
                 embed = create_embed("❌ Fechamento Cancelado", "Ticket não foi fechado.", color=0xffaa00)
@@ -1634,6 +1777,10 @@ async def on_reaction_add(reaction, user):
         elif game_data['type'] == 'trade_invitation':
             # Apenas o usuário convidado pode aceitar/recusar
             if user.id != game_data['target']:
+                try:
+                    await reaction.remove(user)
+                except:
+                    pass
                 return
 
             if str(reaction.emoji) == "✅":
@@ -1668,10 +1815,20 @@ async def on_reaction_add(reaction, user):
                 del active_games[message.id]
 
     # Sistema de fechar tickets - CORRIGIDO
-    if str(reaction.emoji) == "🔒" and message.channel.name.startswith('ticket-'):
+    if str(reaction.emoji) == "🔒" and hasattr(message.channel, 'name') and message.channel.name.startswith('ticket-'):
         # Verificar se usuário tem permissão OU é o criador do ticket
-        has_permission = user.guild_permissions.manage_channels
+        has_permission = False
         is_creator = False
+
+        # Verificar permissões de forma mais segura
+        try:
+            member = message.guild.get_member(user.id)
+            if member:
+                has_permission = (member.guild_permissions.manage_channels or 
+                                member.guild_permissions.administrator or
+                                any(role.name.lower() in ['admin', 'mod', 'staff', 'moderador'] for role in member.roles))
+        except:
+            pass
 
         try:
             # Verificar se é o criador do ticket
@@ -1683,8 +1840,8 @@ async def on_reaction_add(reaction, user):
                 if result and result[0] == user.id:
                     is_creator = True
                 conn.close()
-        except:
-            pass
+        except Exception as e:
+            logger.error(f"Erro ao verificar criador do ticket: {e}")
 
         if not (has_permission or is_creator):
             # Enviar mensagem de erro temporária
@@ -2981,11 +3138,14 @@ async def ban_member(ctx, member: discord.Member, *, reason="Sem motivo especifi
 
 **Você está prestes a BANIR um membro!**
 
-**👤 Usuário:** {member.mention}
+**👤 Usuário:** {member.mention} ({member.name}#{member.discriminator})
 **🛡️ Moderador:** {ctx.author.mention}
 **📝 Motivo:** {reason}
 
-**Esta é realmente a melhor solução?**""",
+**⚠️ Esta ação é IRREVERSÍVEL!**
+**Tem certeza que deseja continuar?**
+
+Reaja com ✅ para confirmar ou ❌ para cancelar""",
         color=0xff0000
     )
 
