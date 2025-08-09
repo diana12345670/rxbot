@@ -94,7 +94,7 @@ except ImportError:
 from flask import Flask
 from threading import Thread
 
-app = Flask('')
+#app = Flask('')
 
 @app.route('/')
 def home():
@@ -190,12 +190,12 @@ def heartbeat():
 def run():
     app.run(host='0.0.0.0', port=8080, threaded=True)
 
-def keep_alive():
+#def keep_alive():
     t = Thread(target=run, daemon=True)
     t.start()
 
 # Sistema de auto-ping ULTRA AGRESSIVO para nunca hibernar
-async def auto_ping():
+#async def auto_ping():
     """Sistema de auto-ping otimizado para nunca hibernar"""
     import aiohttp
     consecutive_failures = 0
@@ -288,7 +288,7 @@ async def auto_ping():
             gc.collect()
             await asyncio.sleep(3)
 
-async def external_keepalive():
+#async def external_keepalive():
     """Sistema de keep-alive externo otimizado"""
     import aiohttp
     ping_count = 0
@@ -371,7 +371,7 @@ async def external_keepalive():
             logger.error(f"❌ Keep-alive externo crítico: {e}")
             await asyncio.sleep(20)  # Espera menor para recuperação mais rápida
 
-async def heartbeat_system():
+#async def heartbeat_system():
     """Sistema de heartbeat otimizado para máxima disponibilidade"""
     import aiohttp
     heartbeat_count = 0
@@ -666,7 +666,7 @@ def init_database():
                 conn.close()
 
 # Sistema EXTREMO anti-hibernação - Último recurso
-async def extreme_anti_hibernation():
+#async def extreme_anti_hibernation():
     """Sistema EXTREMO que impede hibernação usando múltiplas estratégias"""
     count = 0
 
@@ -743,7 +743,7 @@ async def extreme_anti_hibernation():
             await asyncio.sleep(10)
 
 # Monitor de sistema de emergência com auto-restart
-async def emergency_system_monitor():
+#async def emergency_system_monitor():
     """Monitor de emergência que pode reiniciar sistemas críticos"""
     monitor_count = 0
     critical_failures = 0
@@ -1346,14 +1346,14 @@ async def on_ready():
 
         # Criar tasks de proteção
         protection_tasks = [
-            auto_ping(),
-            external_keepalive(), 
-            heartbeat_system(),
-            health_monitor(),
-            emergency_keeper(),
-            extreme_anti_hibernation(),
-            emergency_system_monitor(),
-            auto_reconnect_system()  # Novo sistema de reconexão
+            #auto_ping(),
+            #external_keepalive(), 
+            #heartbeat_system(),
+            #health_monitor(),
+            #emergency_keeper(),
+            #extreme_anti_hibernation(),
+            #emergency_system_monitor(),
+            #auto_reconnect_system()  # Novo sistema de reconexão
         ]
 
         for task in protection_tasks:
@@ -1413,7 +1413,7 @@ async def on_resumed():
         logger.error(f"Erro ao enviar alerta de reconexão: {e}")
 
 # Sistema de reconexão automática melhorado
-async def auto_reconnect_system():
+#async def auto_reconnect_system():
     """Sistema que monitora e força reconexão se necessário"""
     disconnect_count = 0
 
@@ -1555,7 +1555,7 @@ async def on_reaction_add(reaction, user):
                     # Fechar ticket
                     closer_id = game_data['closer']
                     closer = message.guild.get_member(closer_id)
-                    
+
                     # Atualizar banco de dados
                     try:
                         with db_lock:
@@ -1570,7 +1570,7 @@ async def on_reaction_add(reaction, user):
                             conn.close()
                     except:
                         pass
-                    
+
                     # Enviar mensagem de fechamento
                     final_embed = create_embed(
                         "🔒 Ticket Fechado",
@@ -1579,14 +1579,14 @@ async def on_reaction_add(reaction, user):
                         f"Este canal será deletado em 5 segundos...",
                         color=0xff6b6b
                     )
-                    
+
                     await message.channel.send(embed=final_embed)
                     await asyncio.sleep(5)
-                    
+
                     # Deletar canal
                     await message.channel.delete()
                     del active_games[message.id]
-                    
+
                 except Exception as e:
                     logger.error(f"Erro ao fechar ticket: {e}")
                     error_embed = create_embed(
@@ -1607,7 +1607,7 @@ async def on_reaction_add(reaction, user):
         # Verificar se usuário tem permissão OU é o criador do ticket
         has_permission = user.guild_permissions.manage_channels
         is_creator = False
-        
+
         try:
             # Verificar se é o criador do ticket
             with db_lock:
@@ -1620,7 +1620,7 @@ async def on_reaction_add(reaction, user):
                 conn.close()
         except:
             pass
-        
+
         if not (has_permission or is_creator):
             # Enviar mensagem de erro temporária
             try:
@@ -1644,11 +1644,11 @@ async def on_reaction_add(reaction, user):
             f"Reaja com ✅ para confirmar ou ❌ para cancelar.",
             color=0xff6b6b
         )
-        
+
         confirm_msg = await message.channel.send(embed=confirm_embed)
         await confirm_msg.add_reaction("✅")
         await confirm_msg.add_reaction("❌")
-        
+
         # Armazenar para processar confirmação
         active_games[confirm_msg.id] = {
             'type': 'close_ticket_confirmation',
@@ -1758,7 +1758,7 @@ async def on_member_join(member):
             pass
 
 # Sistema de monitoramento de saúde para detectar problemas
-async def health_monitor():
+#async def health_monitor():
     """Monitor de saúde que detecta quando o bot está em risco"""
     last_activity = datetime.datetime.now()
     consecutive_issues = 0
@@ -1819,7 +1819,7 @@ async def health_monitor():
             await asyncio.sleep(30)
 
 # Sistema de emergência - último recurso
-async def emergency_keeper():
+#async def emergency_keeper():
     """Sistema de emergência que atua quando tudo mais falha"""
     emergency_count = 0
 
@@ -2973,19 +2973,19 @@ async def transferir(ctx, user: discord.Member, amount: int):
         embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     if user == ctx.author:
         embed = create_embed("❌ Impossível", "Você não pode transferir para si mesmo!", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     sender_data = get_user_data(ctx.author.id)
     if not sender_data:
         update_user_data(ctx.author.id)
         sender_data = get_user_data(ctx.author.id)
-    
+
     sender_coins = sender_data[1]
-    
+
     if sender_coins < amount:
         embed = create_embed(
             "💸 Dinheiro insuficiente",
@@ -2994,38 +2994,38 @@ async def transferir(ctx, user: discord.Member, amount: int):
         )
         await ctx.send(embed=embed)
         return
-    
+
     # Processar transferência
     try:
         receiver_data = get_user_data(user.id)
         if not receiver_data:
             update_user_data(user.id)
             receiver_data = get_user_data(user.id)
-        
+
         receiver_coins = receiver_data[1]
-        
+
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             # Atualizar saldos
             cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (sender_coins - amount, ctx.author.id))
             cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (receiver_coins + amount, user.id))
-            
+
             # Registrar transações
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (ctx.author.id, ctx.guild.id, 'transfer_out', -amount, f"Transferiu para {user.name}"))
-            
+
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (user.id, ctx.guild.id, 'transfer_in', amount, f"Recebeu de {ctx.author.name}"))
-            
+
             conn.commit()
             conn.close()
-        
+
         embed = create_embed(
             "✅ Transferência realizada!",
             f"**De:** {ctx.author.mention}\n"
@@ -3035,7 +3035,7 @@ async def transferir(ctx, user: discord.Member, amount: int):
             color=0x00ff00
         )
         await ctx.send(embed=embed)
-        
+
         # Notificar receptor
         try:
             dm_embed = create_embed(
@@ -3047,7 +3047,7 @@ async def transferir(ctx, user: discord.Member, amount: int):
             await user.send(embed=dm_embed)
         except:
             pass
-    
+
     except Exception as e:
         logger.error(f"Erro na transferência: {e}")
         embed = create_embed("❌ Erro", "Erro ao processar transferência!", color=0xff0000)
@@ -3060,14 +3060,14 @@ async def depositar(ctx, amount: int):
         embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     user_data = get_user_data(ctx.author.id)
     if not user_data:
         update_user_data(ctx.author.id)
         user_data = get_user_data(ctx.author.id)
-    
+
     coins, bank = user_data[1], user_data[5]
-    
+
     if coins < amount:
         embed = create_embed(
             "💸 Dinheiro insuficiente",
@@ -3076,7 +3076,7 @@ async def depositar(ctx, amount: int):
         )
         await ctx.send(embed=embed)
         return
-    
+
     try:
         with db_lock:
             conn = get_db_connection()
@@ -3085,7 +3085,7 @@ async def depositar(ctx, amount: int):
                           (coins - amount, bank + amount, ctx.author.id))
             conn.commit()
             conn.close()
-        
+
         embed = create_embed(
             "🏦 Depósito realizado!",
             f"**Valor depositado:** {amount:,} moedas\n"
@@ -3095,7 +3095,7 @@ async def depositar(ctx, amount: int):
             color=0x00ff00
         )
         await ctx.send(embed=embed)
-    
+
     except Exception as e:
         logger.error(f"Erro no depósito: {e}")
         embed = create_embed("❌ Erro", "Erro ao depositar!", color=0xff0000)
@@ -3108,14 +3108,14 @@ async def sacar(ctx, amount: int):
         embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     user_data = get_user_data(ctx.author.id)
     if not user_data:
         update_user_data(ctx.author.id)
         user_data = get_user_data(ctx.author.id)
-    
+
     coins, bank = user_data[1], user_data[5]
-    
+
     if bank < amount:
         embed = create_embed(
             "🏦 Saldo insuficiente no banco",
@@ -3124,7 +3124,7 @@ async def sacar(ctx, amount: int):
         )
         await ctx.send(embed=embed)
         return
-    
+
     try:
         with db_lock:
             conn = get_db_connection()
@@ -3133,7 +3133,7 @@ async def sacar(ctx, amount: int):
                           (coins + amount, bank - amount, ctx.author.id))
             conn.commit()
             conn.close()
-        
+
         embed = create_embed(
             "💰 Saque realizado!",
             f"**Valor sacado:** {amount:,} moedas\n"
@@ -3143,7 +3143,7 @@ async def sacar(ctx, amount: int):
             color=0x00ff00
         )
         await ctx.send(embed=embed)
-    
+
     except Exception as e:
         logger.error(f"Erro no saque: {e}")
         embed = create_embed("❌ Erro", "Erro ao sacar!", color=0xff0000)
@@ -3156,16 +3156,16 @@ async def trabalhar(ctx):
     if not user_data:
         update_user_data(ctx.author.id)
         user_data = get_user_data(ctx.author.id)
-    
+
     # Verificar cooldown (2 horas)
     try:
         settings_data = user_data[11]
         settings = json.loads(settings_data) if settings_data else {}
         last_work = settings.get('last_work', 0)
-        
+
         current_time = time.time()
         cooldown_time = WORK_COOLDOWN  # 2 horas
-        
+
         if current_time - last_work < cooldown_time:
             remaining = cooldown_time - (current_time - last_work)
             embed = create_embed(
@@ -3177,7 +3177,7 @@ async def trabalhar(ctx):
             return
     except:
         settings = {}
-    
+
     # Trabalhos disponíveis
     trabalhos = [
         {"nome": "Programador", "min": 150, "max": 300, "emoji": "💻"},
@@ -3187,37 +3187,37 @@ async def trabalhar(ctx):
         {"nome": "Mecânico", "min": 90, "max": 180, "emoji": "🔧"},
         {"nome": "Designer", "min": 110, "max": 240, "emoji": "🎨"},
     ]
-    
+
     trabalho = random.choice(trabalhos)
     ganho = random.randint(trabalho["min"], trabalho["max"])
-    
+
     # Bonus por level
     level = user_data[3]
     bonus = int(ganho * (level * 0.05))  # 5% por level
     ganho_total = ganho + bonus
-    
+
     try:
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             # Atualizar dinheiro
             new_coins = user_data[1] + ganho_total
             cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
-            
+
             # Atualizar cooldown
             settings['last_work'] = current_time
             cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
-            
+
             # Registrar transação
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (ctx.author.id, ctx.guild.id, 'work', ganho_total, f"Trabalhou como {trabalho['nome']}"))
-            
+
             conn.commit()
             conn.close()
-        
+
         embed = create_embed(
             f"{trabalho['emoji']} Trabalho Concluído!",
             f"**Profissão:** {trabalho['nome']}\n"
@@ -3229,13 +3229,13 @@ async def trabalhar(ctx):
             color=0x00ff00
         )
         await ctx.send(embed=embed)
-        
+
         # Chance de ganhar XP
         if random.randint(1, 100) <= 30:  # 30% chance
             xp_bonus = random.randint(10, 25)
             add_xp(ctx.author.id, xp_bonus)
             await ctx.send(f"🎉 Bônus: +{xp_bonus} XP por trabalhar bem!")
-    
+
     except Exception as e:
         logger.error(f"Erro no trabalho: {e}")
         embed = create_embed("❌ Erro", "Erro ao trabalhar!", color=0xff0000)
@@ -3248,16 +3248,16 @@ async def crime(ctx):
     if not user_data:
         update_user_data(ctx.author.id)
         user_data = get_user_data(ctx.author.id)
-    
+
     # Verificar cooldown (4 horas)
     try:
         settings_data = user_data[11]
         settings = json.loads(settings_data) if settings_data else {}
         last_crime = settings.get('last_crime', 0)
-        
+
         current_time = time.time()
         cooldown_time = CRIME_COOLDOWN  # 4 horas
-        
+
         if current_time - last_crime < cooldown_time:
             remaining = cooldown_time - (current_time - last_crime)
             embed = create_embed(
@@ -3269,10 +3269,10 @@ async def crime(ctx):
             return
     except:
         settings = {}
-    
+
     # 60% chance de sucesso
     sucesso = random.randint(1, 100) <= 60
-    
+
     crimes = [
         {"nome": "Hackear banco", "ganho": (800, 1500), "perda": (200, 400), "emoji": "💻"},
         {"nome": "Roubar loja", "ganho": (300, 800), "perda": (100, 300), "emoji": "🏪"},
@@ -3280,26 +3280,26 @@ async def crime(ctx):
         {"nome": "Golpe online", "ganho": (500, 1200), "perda": (150, 350), "emoji": "📱"},
         {"nome": "Contrabando", "ganho": (600, 1000), "perda": (200, 500), "emoji": "📦"},
     ]
-    
+
     crime = random.choice(crimes)
-    
+
     try:
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             if sucesso:
                 # Crime bem-sucedido
                 ganho = random.randint(crime["ganho"][0], crime["ganho"][1])
                 new_coins = user_data[1] + ganho
-                
+
                 cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
-                
+
                 cursor.execute('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
                     VALUES (?, ?, ?, ?, ?)
                 ''', (ctx.author.id, ctx.guild.id, 'crime_success', ganho, f"Crime bem-sucedido: {crime['nome']}"))
-                
+
                 embed = create_embed(
                     f"🎭 Crime Bem-Sucedido!",
                     f"**Crime:** {crime['emoji']} {crime['nome']}\n"
@@ -3308,20 +3308,20 @@ async def crime(ctx):
                     f"🕵️ *Ninguém te viu...*",
                     color=0x00ff00
                 )
-                
+
             else:
                 # Crime falhou
                 perda = random.randint(crime["perda"][0], crime["perda"][1])
                 perda = min(perda, user_data[1])  # Não pode perder mais do que tem
                 new_coins = max(0, user_data[1] - perda)
-                
+
                 cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
-                
+
                 cursor.execute('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
                     VALUES (?, ?, ?, ?, ?)
                 ''', (ctx.author.id, ctx.guild.id, 'crime_fail', -perda, f"Crime falhou: {crime['nome']}"))
-                
+
                 embed = create_embed(
                     f"🚔 Crime Falhou!",
                     f"**Crime:** {crime['emoji']} {crime['nome']}\n"
@@ -3330,16 +3330,16 @@ async def crime(ctx):
                     f"🚨 *A polícia te pegou!*",
                     color=0xff0000
                 )
-            
+
             # Atualizar cooldown
             settings['last_crime'] = current_time
             cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
-            
+
             conn.commit()
             conn.close()
-        
+
         await ctx.send(embed=embed)
-    
+
     except Exception as e:
         logger.error(f"Erro no crime: {e}")
         embed = create_embed("❌ Erro", "Erro ao cometer crime!", color=0xff0000)
@@ -3350,16 +3350,16 @@ async def weekly(ctx):
     """Recompensa semanal"""
     user_id = ctx.author.id
     data = get_user_data(user_id)
-    
+
     if not data:
         update_user_data(user_id)
         data = get_user_data(user_id)
-    
+
     last_weekly = data[7]
     today = datetime.date.today()
     week_start = today - datetime.timedelta(days=today.weekday())
     week_start_str = week_start.isoformat()
-    
+
     if last_weekly and last_weekly >= week_start_str:
         next_week = week_start + datetime.timedelta(days=7)
         embed = create_embed(
@@ -3369,10 +3369,10 @@ async def weekly(ctx):
         )
         await ctx.send(embed=embed)
         return
-    
+
     # Update user data
     new_coins = data[1] + WEEKLY_REWARD
-    
+
     try:
         with db_lock:
             conn = get_db_connection()
@@ -3383,7 +3383,7 @@ async def weekly(ctx):
             conn.close()
     except Exception as e:
         logger.error(f"Error updating weekly: {e}")
-    
+
     embed = create_embed(
         "🎁 Recompensa Semanal!",
         f"""**Recompensa:** {WEEKLY_REWARD:,} moedas
@@ -3399,15 +3399,15 @@ async def monthly(ctx):
     """Recompensa mensal"""
     user_id = ctx.author.id
     data = get_user_data(user_id)
-    
+
     if not data:
         update_user_data(user_id)
         data = get_user_data(user_id)
-    
+
     last_monthly = data[8]
     today = datetime.date.today()
     month_start = today.replace(day=1).isoformat()
-    
+
     if last_monthly == month_start:
         next_month = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
         embed = create_embed(
@@ -3417,10 +3417,10 @@ async def monthly(ctx):
         )
         await ctx.send(embed=embed)
         return
-    
+
     # Update user data
     new_coins = data[1] + MONTHLY_REWARD
-    
+
     try:
         with db_lock:
             conn = get_db_connection()
@@ -3431,7 +3431,7 @@ async def monthly(ctx):
             conn.close()
     except Exception as e:
         logger.error(f"Error updating monthly: {e}")
-    
+
     embed = create_embed(
         "🎁 Recompensa Mensal!",
         f"""**Recompensa:** {MONTHLY_REWARD:,} moedas
@@ -3944,13 +3944,13 @@ LOJA_ITENS = {
 async def loja(ctx):
     """Ver loja de itens"""
     global_stats['commands_used'] += 1
-    
+
     embed = create_embed(
         "🛒 Loja Premium do RXbot",
         "✨ Itens exclusivos e poderosos disponíveis!\nUse `RXcomprar <id>` para comprar um item!",
         color=0xffd700
     )
-    
+
     raridade_cores = {
         "Comum": "⚪",
         "Incomum": "🟢", 
@@ -3958,7 +3958,7 @@ async def loja(ctx):
         "Épico": "🟣",
         "Lendário": "🟡"
     }
-    
+
     for item_id, item in LOJA_ITENS.items():
         raridade_emoji = raridade_cores.get(item['raridade'], "⚪")
         embed.add_field(
@@ -3968,7 +3968,7 @@ async def loja(ctx):
                   f"📝 **Função:** {item['descricao']}",
             inline=True
         )
-    
+
     embed.set_footer(text="💡 Use RXinventario para ver seus itens | RXusar <id> para usar")
     await ctx.send(embed=embed)
 
@@ -3979,21 +3979,21 @@ async def comprar_item(ctx, item_id: int = None):
         embed = create_embed("❌ ID necessário", "Use: `RXcomprar <id>`\nVeja a loja com `RXloja`", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     if item_id not in LOJA_ITENS:
         embed = create_embed("❌ Item não encontrado", "Use `RXloja` para ver itens disponíveis", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     item = LOJA_ITENS[item_id]
     user_data = get_user_data(ctx.author.id)
-    
+
     if not user_data:
         update_user_data(ctx.author.id)
         user_data = get_user_data(ctx.author.id)
-    
+
     coins = user_data[1]
-    
+
     if coins < item['preco']:
         embed = create_embed(
             "💸 Dinheiro insuficiente",
@@ -4003,38 +4003,38 @@ async def comprar_item(ctx, item_id: int = None):
         )
         await ctx.send(embed=embed)
         return
-    
+
     # Processar compra
     try:
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             # Remover dinheiro
             new_coins = coins - item['preco']
             cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
-            
+
             # Adicionar ao inventário
             cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (ctx.author.id,))
             inventory_data = cursor.fetchone()[0]
             inventory = json.loads(inventory_data) if inventory_data else {}
-            
+
             if str(item_id) in inventory:
                 inventory[str(item_id)] += 1
             else:
                 inventory[str(item_id)] = 1
-            
+
             cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), ctx.author.id))
-            
+
             # Registrar transação
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (ctx.author.id, ctx.guild.id, 'compra', -item['preco'], f"Comprou {item['nome']}"))
-            
+
             conn.commit()
             conn.close()
-        
+
         embed = create_embed(
             f"✅ Compra realizada!",
             f"**Item:** {item['emoji']} {item['nome']}\n"
@@ -4044,113 +4044,117 @@ async def comprar_item(ctx, item_id: int = None):
             color=0x00ff00
         )
         await ctx.send(embed=embed)
-        
+
     except Exception as e:
         logger.error(f"Erro na compra: {e}")
         embed = create_embed("❌ Erro", "Erro ao processar compra!", color=0xff0000)
         await ctx.send(embed=embed)
 
-@bot.command(name='inventario', aliases=['inventory', 'inv'])
-async def inventario(ctx, user: discord.Member = None):
-    """Ver inventário de itens"""
-    target = user or ctx.author
-    user_data = get_user_data(target.id)
-    
-    if not user_data:
-        embed = create_embed("📦 Inventário vazio", f"{target.display_name} ainda não tem itens!", color=0xffaa00)
-        await ctx.send(embed=embed)
-        return
-    
+    @bot.command(name="inventario", aliases=["inv"])
+    async def inventario(ctx, membro: discord.Member = None):
+        """Mostra o inventário de um usuário"""
+        alvo = membro or ctx.author
+        user_data = get_user_data(alvo.id)
+        inventory = json.loads(user_data[10]) if user_data[10] else {}
+        if not inventory:
+            await ctx.send(f"📦 O inventário de {alvo.mention} está vazio!")
+        else:
+            itens = "\n".join([f"**{item}**: {quantidade}" for item, quantidade in inventory.items()])
+            await ctx.send(f"📦 **Inventário de {alvo.mention}:**\n{itens}")
+
+
     inventory_data = user_data[10]
     inventory = json.loads(inventory_data) if inventory_data else {}
-    
+
     if not inventory:
         embed = create_embed("📦 Inventário vazio", f"{target.display_name} ainda não tem itens!", color=0xffaa00)
         await ctx.send(embed=embed)
         return
-    
+
     embed = create_embed(
         f"🎒 Inventário de {target.display_name}",
         "Seus itens comprados na loja:",
         color=0x7289da
     )
-    
+
     total_valor = 0
     for item_id, quantidade in inventory.items():
         if int(item_id) in LOJA_ITENS:
             item = LOJA_ITENS[int(item_id)]
             valor_total = item['preco'] * quantidade
             total_valor += valor_total
-            
+
             embed.add_field(
                 name=f"{item['emoji']} {item['nome']}",
                 value=f"**Quantidade:** {quantidade}\n**Valor:** {valor_total:,} moedas",
                 inline=True
             )
-    
+
     embed.add_field(
         name="💎 Valor Total do Inventário",
         value=f"{total_valor:,} moedas",
         inline=False
     )
-    
+
     await ctx.send(embed=embed)
 
-@bot.command(name='usar', aliases=['use'])
-async def usar_item(ctx, item_id: int = None):
-    """Usar item do inventário"""
-    if not item_id:
-        embed = create_embed("❌ ID necessário", "Use: `RXusar <id>`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-    
+    @bot.command(name="usar")
+    async def use_item(ctx, item: str):
+        """Usa um item do seu inventário"""
+        user_data = get_user_data(ctx.author.id)
+        inventory = json.loads(user_data[10]) if user_data[10] else {}
+        if inventory.get(item, 0) > 0:
+            inventory[item] -= 1
+            if inventory[item] == 0:
+                del inventory[item]
+            update_user_data(ctx.author.id, inventory=inventory)
+            await ctx.send(f"🎯 Você usou 1x **{item}**!")
+            # Aqui você pode adicionar efeitos do item
+        else:
+            await ctx.send(f"❌ Você não tem **{item}** no inventário!")
+
     user_data = get_user_data(ctx.author.id)
     if not user_data:
         embed = create_embed("❌ Sem itens", "Você não tem itens para usar!", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     inventory_data = user_data[10]
     inventory = json.loads(inventory_data) if inventory_data else {}
-    
-    if str(item_id) not in inventory or inventory[str(item_id)] <= 0:
-        embed = create_embed("❌ Item não encontrado", "Você não possui este item!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-    
+
     if item_id not in LOJA_ITENS:
         embed = create_embed("❌ Item inválido", "Este item não existe!", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     item = LOJA_ITENS[item_id]
-    
+
     # Remover item do inventário
     try:
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             inventory[str(item_id)] -= 1
             if inventory[str(item_id)] <= 0:
                 del inventory[str(item_id)]
-            
+
             cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), ctx.author.id))
-            
+
             # Aplicar efeito do item (implementar conforme necessário)
             cursor.execute('SELECT settings FROM users WHERE user_id = ?', (ctx.author.id,))
             settings_data = cursor.fetchone()[0]
             settings = json.loads(settings_data) if settings_data else {}
-            
+
             # Exemplo de efeitos
             if item_id == 8:  # Ticket Prioritário
                 settings['priority_tickets'] = settings.get('priority_tickets', 0) + 1
-            
+
             cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
-            
+
             conn.commit()
             conn.close()
-        
+
         embed = create_embed(
             f"✅ Item usado!",
             f"**{item['emoji']} {item['nome']}** foi usado com sucesso!\n"
@@ -4158,11 +4162,25 @@ async def usar_item(ctx, item_id: int = None):
             color=0x00ff00
         )
         await ctx.send(embed=embed)
-        
+
     except Exception as e:
         logger.error(f"Erro ao usar item: {e}")
         embed = create_embed("❌ Erro", "Erro ao usar item!", color=0xff0000)
         await ctx.send(embed=embed)
+
+# additen
+@bot.command(name="additem")
+@commands.has_permissions(administrator=True)  # Apenas administradores podem usar
+async def add_item(ctx, item: str, quantidade: int = 1, membro: discord.Member = None):
+    """Adiciona um item ao inventário de um usuário (ADM apenas)"""
+    # Se não especificar o membro, adiciona para quem executou o comando
+    alvo = membro or ctx.author
+    user_data = get_user_data(alvo.id)
+    inventory = json.loads(user_data[10]) if user_data[10] else {}
+    inventory[item] = inventory.get(item, 0) + quantidade
+    update_user_data(alvo.id, inventory=inventory)
+    await ctx.send(f"✅ {quantidade}x **{item}** adicionado ao inventário de {alvo.mention}!")
+
 
 # ============ COMANDOS DE ADMINISTRAÇÃO AVANÇADOS ============
 @bot.command(name='addsaldo', aliases=['addcoins', 'addmoney'])
@@ -4173,7 +4191,7 @@ async def add_saldo(ctx, user: discord.Member, amount: int):
         embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     try:
         user_data = get_user_data(user.id)
         if not user_data:
@@ -4181,23 +4199,23 @@ async def add_saldo(ctx, user: discord.Member, amount: int):
             current_coins = 50
         else:
             current_coins = user_data[1]
-        
+
         new_coins = current_coins + amount
-        
+
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user.id))
-            
+
             # Registrar transação
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (user.id, ctx.guild.id, 'admin_add', amount, f"Saldo adicionado por {ctx.author.name}"))
-            
+
             conn.commit()
             conn.close()
-        
+
         embed = create_embed(
             "✅ Saldo Adicionado!",
             f"**Usuário:** {user.mention}\n"
@@ -4208,7 +4226,7 @@ async def add_saldo(ctx, user: discord.Member, amount: int):
             color=0x00ff00
         )
         await ctx.send(embed=embed)
-        
+
         # Notificar usuário
         try:
             dm_embed = create_embed(
@@ -4220,7 +4238,7 @@ async def add_saldo(ctx, user: discord.Member, amount: int):
             await user.send(embed=dm_embed)
         except:
             pass
-            
+
     except Exception as e:
         logger.error(f"Erro ao adicionar saldo: {e}")
         embed = create_embed("❌ Erro", "Erro ao adicionar saldo!", color=0xff0000)
@@ -4234,16 +4252,16 @@ async def remove_saldo(ctx, user: discord.Member, amount: int):
         embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     try:
         user_data = get_user_data(user.id)
         if not user_data:
             embed = create_embed("❌ Usuário não encontrado", "Este usuário não está no banco de dados!", color=0xff0000)
             await ctx.send(embed=embed)
             return
-        
+
         current_coins = user_data[1]
-        
+
         if current_coins < amount:
             embed = create_embed(
                 "❌ Saldo insuficiente",
@@ -4252,23 +4270,23 @@ async def remove_saldo(ctx, user: discord.Member, amount: int):
             )
             await ctx.send(embed=embed)
             return
-        
+
         new_coins = max(0, current_coins - amount)
-        
+
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user.id))
-            
+
             # Registrar transação
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (user.id, ctx.guild.id, 'admin_remove', -amount, f"Saldo removido por {ctx.author.name}"))
-            
+
             conn.commit()
             conn.close()
-        
+
         embed = create_embed(
             "✅ Saldo Removido!",
             f"**Usuário:** {user.mention}\n"
@@ -4279,7 +4297,7 @@ async def remove_saldo(ctx, user: discord.Member, amount: int):
             color=0xff6b6b
         )
         await ctx.send(embed=embed)
-        
+
     except Exception as e:
         logger.error(f"Erro ao remover saldo: {e}")
         embed = create_embed("❌ Erro", "Erro ao remover saldo!", color=0xff0000)
@@ -4310,7 +4328,7 @@ async def criar_evento_clan(ctx, *, dados_evento=None):
         )
         await ctx.send(embed=embed)
         return
-    
+
     parts = [part.strip() for part in dados_evento.split('|')]
     if len(parts) < 4:
         embed = create_embed(
@@ -4320,7 +4338,7 @@ async def criar_evento_clan(ctx, *, dados_evento=None):
         )
         await ctx.send(embed=embed)
         return
-    
+
     try:
         # Parsear dados
         clans_vs = parts[0].split(' vs ')
@@ -4328,26 +4346,26 @@ async def criar_evento_clan(ctx, *, dados_evento=None):
             embed = create_embed("❌ Formato de clans inválido", "Use: `CLAN1 vs CLAN2`", color=0xff0000)
             await ctx.send(embed=embed)
             return
-        
+
         clan1 = clans_vs[0].strip().upper()
         clan2 = clans_vs[1].strip().upper()
         tipo_evento = parts[1]
         aposta = int(parts[2])
         duracao_str = parts[3]
-        
+
         # Parse duração
         time_units = {'m': 60, 'h': 3600, 'd': 86400}
         unit = duracao_str[-1].lower()
-        
+
         if unit not in time_units:
             embed = create_embed("❌ Duração inválida", "Use: m (minutos), h (horas), d (dias)", color=0xff0000)
             await ctx.send(embed=embed)
             return
-        
+
         amount = int(duracao_str[:-1])
         seconds = amount * time_units[unit]
         end_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-        
+
         # Criar embed do evento
         embed = create_embed(
             f"⚔️ EVENTO DE CLAN: {clan1} vs {clan2}",
@@ -4369,17 +4387,17 @@ Membros dos clans {clan1} e {clan2} podem reagir com:
 • Prêmio vai para o clan vencedor""",
             color=0xff6600
         )
-        
+
         evento_msg = await ctx.send(embed=embed)
         await evento_msg.add_reaction("⚔️")
         await evento_msg.add_reaction("🏆")
-        
+
         # Salvar evento no banco
         try:
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                
+
                 # Criar tabela de eventos de clan se não existir
                 cursor.execute('''CREATE TABLE IF NOT EXISTS clan_events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -4397,20 +4415,20 @@ Membros dos clans {clan1} e {clan2} podem reagir com:
                     winner_clan TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )''')
-                
+
                 cursor.execute('''
                     INSERT INTO clan_events (guild_id, creator_id, clan1, clan2, event_type, bet_amount, end_time, message_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (ctx.guild.id, ctx.author.id, clan1, clan2, tipo_evento, aposta, end_time, evento_msg.id))
-                
+
                 conn.commit()
                 conn.close()
-            
+
             logger.info(f"Evento de clan criado: {clan1} vs {clan2}")
-            
+
         except Exception as e:
             logger.error(f"Erro ao salvar evento de clan: {e}")
-    
+
     except ValueError:
         embed = create_embed("❌ Valores inválidos", "Verificar aposta (número) e duração!", color=0xff0000)
         await ctx.send(embed=embed)
@@ -4422,17 +4440,17 @@ async def listar_eventos_clan(ctx):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             cursor.execute('''
                 SELECT clan1, clan2, event_type, bet_amount, end_time, participants, status
                 FROM clan_events
                 WHERE guild_id = ? AND status = 'active'
                 ORDER BY end_time
             ''', (ctx.guild.id,))
-            
+
             eventos = cursor.fetchall()
             conn.close()
-        
+
         if not eventos:
             embed = create_embed(
                 "⚔️ Nenhum evento ativo",
@@ -4441,17 +4459,17 @@ async def listar_eventos_clan(ctx):
             )
             await ctx.send(embed=embed)
             return
-        
+
         embed = create_embed(
             "⚔️ Eventos de Clan Ativos",
             f"Encontrados {len(eventos)} evento(s) ativo(s):",
             color=0xff6600
         )
-        
+
         for evento in eventos[:5]:
             clan1, clan2, event_type, bet_amount, end_time_str, participants_json, status = evento
             participants = json.loads(participants_json) if participants_json else []
-            
+
             embed.add_field(
                 name=f"⚔️ {clan1} vs {clan2}",
                 value=f"🎮 **Tipo:** {event_type}\n"
@@ -4460,9 +4478,9 @@ async def listar_eventos_clan(ctx):
                       f"⏰ **Termina:** <t:{int(datetime.datetime.fromisoformat(end_time_str).timestamp())}:R>",
                 inline=False
             )
-        
+
         await ctx.send(embed=embed)
-        
+
     except Exception as e:
         logger.error(f"Erro ao listar eventos de clan: {e}")
 
@@ -4474,53 +4492,53 @@ async def finalizar_evento_clan(ctx, evento_id: int, clan_vencedor: str):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             # Buscar evento
             cursor.execute('''
                 SELECT clan1, clan2, bet_amount, participants, bets, message_id
                 FROM clan_events
                 WHERE id = ? AND guild_id = ? AND status = 'active'
             ''', (evento_id, ctx.guild.id))
-            
+
             evento = cursor.fetchone()
             if not evento:
                 embed = create_embed("❌ Evento não encontrado", "Evento não existe ou já foi finalizado!", color=0xff0000)
                 await ctx.send(embed=embed)
                 return
-            
+
             clan1, clan2, bet_amount, participants_json, bets_json, message_id = evento
             clan_vencedor = clan_vencedor.upper()
-            
+
             if clan_vencedor not in [clan1, clan2]:
                 embed = create_embed("❌ Clan inválido", f"Use {clan1} ou {clan2}", color=0xff0000)
                 await ctx.send(embed=embed)
                 return
-            
+
             participants = json.loads(participants_json) if participants_json else []
             bets = json.loads(bets_json) if bets_json else {}
-            
+
             # Calcular prêmios
             vencedores = [p for p in participants if bets.get(str(p), {}).get('clan') == clan_vencedor]
             premio_total = len(participants) * bet_amount
             premio_individual = premio_total // len(vencedores) if vencedores else 0
-            
+
             # Distribuir prêmios
             for user_id in vencedores:
                 user_data = get_user_data(user_id)
                 if user_data:
                     new_coins = user_data[1] + premio_individual + bet_amount  # Devolver aposta + prêmio
                     cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user_id))
-            
+
             # Marcar como finalizado
             cursor.execute('''
                 UPDATE clan_events 
                 SET status = 'finished', winner_clan = ?
                 WHERE id = ?
             ''', (clan_vencedor, evento_id))
-            
+
             conn.commit()
             conn.close()
-        
+
         embed = create_embed(
             f"🏆 {clan_vencedor} VENCEU!",
             f"**Evento #{evento_id} finalizado!**\n\n"
@@ -4532,7 +4550,7 @@ async def finalizar_evento_clan(ctx, evento_id: int, clan_vencedor: str):
             color=0xffd700
         )
         await ctx.send(embed=embed)
-        
+
     except Exception as e:
         logger.error(f"Erro ao finalizar evento: {e}")
         embed = create_embed("❌ Erro", "Erro ao finalizar evento!", color=0xff0000)
@@ -5203,7 +5221,7 @@ def run_flask():
     except Exception as e:
         logger.error(f"Erro no servidor Flask: {e}")
 
-def keep_alive():
+#def keep_alive():
     """Sistema de keep-alive melhorado"""
     flask_thread = Thread(target=run_flask, daemon=True)
     flask_thread.start()
@@ -5226,7 +5244,7 @@ def restart_bot():
                 continue
 
             # Iniciar keep-alive
-            keep_alive()
+            #keep_alive()
 
             # Aguardar Flask inicializar
             time.sleep(3)
@@ -5261,7 +5279,7 @@ def restart_bot():
 if __name__ == "__main__":
     try:
         # Iniciar keep-alive primeiro
-        keep_alive()
+        #keep_alive()
 
         # Aguardar Flask inicializar
         time.sleep(2)
