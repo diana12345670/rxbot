@@ -91,110 +91,7 @@ try:
     import email.utils
 except ImportError:
     pass
-from flask import Flask
-from threading import Thread
-
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot está online!"
-
-@app.route('/status')
-def status():
-    if not bot.is_ready():
-        return {"status": "carregando..."}
-    """Endpoint detalhado para monitoramento"""
-    uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
-
-    status_data = {
-        "status": "online",
-        "bot_name": "RXbot",
-        "uptime": format_time(uptime_seconds),
-        "uptime_seconds": uptime_seconds,
-        "guilds": len(bot.guilds),
-        "users": len(set(bot.get_all_members())),
-        "latency_ms": round(bot.latency * 1000, 2),
-        "commands_used": global_stats['commands_used'],
-        "messages_processed": global_stats['messages_processed'],
-        "timestamp": datetime.datetime.now().isoformat()
-    }
-
-    return status_data
-
-@app.route('/ping')
-def ping():
-    """Endpoint simples para ping"""
-    return "pong"
-
-@app.route('/health')
-def health():
-    """Health check endpoint"""
-    return {"healthy": True, "timestamp": datetime.datetime.now().isoformat()}
-
-@app.route('/monitor')
-def monitor():
-    """Endpoint específico para UptimeRobot com mais detalhes"""
-    try:
-        if not bot.is_ready():
-            return {"status": "starting", "ready": False}, 503
-
-        uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
-
-        return {
-            "status": "online",
-            "ready": True,
-            "uptime_seconds": uptime_seconds,
-            "latency_ms": round(bot.latency * 1000, 2),
-            "guilds": len(bot.guilds),
-            "users": len(set(bot.get_all_members())),
-            "timestamp": datetime.datetime.now().isoformat(),
-            "version": "2.0.0",
-            "keep_alive": "active"
-        }
-    except Exception as e:
-        logger.error(f"Erro no endpoint monitor: {e}")
-        return {"status": "error", "error": str(e)}, 500
-
-@app.route('/keepalive')
-def keepalive():
-    """Endpoint específico para manter ativo"""
-    return {
-        "status": "alive",
-        "timestamp": datetime.datetime.now().isoformat(),
-        "bot_ready": bot.is_ready() if 'bot' in globals() else False,
-        "uptime": format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())),
-        "auto_ping": "active"
-    }
-
-@app.route('/force-alive')
-def force_alive():
-    """Endpoint para forçar que o bot permaneça ativo"""
-    return {
-        "forced_alive": True,
-        "timestamp": datetime.datetime.now().isoformat(),
-        "message": "Keep-alive forçado com sucesso!",
-        "bot_status": "online" if bot.is_ready() else "starting"
-    }
-
-@app.route('/heartbeat')
-def heartbeat():
-    """Endpoint de heartbeat para monitoramento externo"""
-    return {
-        "heartbeat": "alive",
-        "timestamp": datetime.datetime.now().isoformat(),
-        "bot_online": bot.is_ready(),
-        "guild_count": len(bot.guilds) if bot.is_ready() else 0
-    }
-
-def run():
-    app.run(host='0.0.0.0', port=8080, threaded=True)
-
-def keep_alive():
-    t = Thread(target=run, daemon=True)
-    t.start()
-
-# Sistemas de auto-ping removidos para economizar recursos
+# Sistemas de keep-alive removidos para economizar recursos no Railway
 
 # Configuração do logging avançado
 logging.basicConfig(
@@ -459,95 +356,7 @@ def init_database():
             if conn:
                 conn.close()
 
-# Sistema EXTREMO anti-hibernação removido para economizar recursos
-
-# Monitor de sistema de emergência com auto-restart
-async def emergency_system_monitor():
-    """Monitor de emergência que pode reiniciar sistemas críticos"""
-    monitor_count = 0
-    critical_failures = 0
-
-    while True:
-        try:
-            await asyncio.sleep(180)  # A cada 3 minutos
-            monitor_count += 1
-
-            logger.info(f"🔍 Monitor de emergência #{monitor_count}")
-
-            # Verificar se Flask está respondendo
-            flask_ok = False
-            try:
-                import aiohttp
-                async with aiohttp.ClientSession() as session:
-                    async with session.get('http://0.0.0.0:8080/ping', timeout=5) as response:
-                        if response.status == 200:
-                            flask_ok = True
-            except:
-                pass
-
-            # Verificar se bot está conectado
-            bot_ok = bot.is_ready()
-
-            # Verificar latência
-            latency_ok = bot.latency < 10.0 if bot_ok else False
-
-            # Avaliar estado geral
-            systems_ok = sum([flask_ok, bot_ok, latency_ok])
-
-            if systems_ok >= 2:
-                logger.info(f"✅ Monitor #{monitor_count}: {systems_ok}/3 sistemas OK")
-                critical_failures = 0
-            else:
-                critical_failures += 1
-                logger.error(f"🚨 Monitor #{monitor_count}: APENAS {systems_ok}/3 sistemas OK! (Falha #{critical_failures})")
-
-                # Se muitas falhas consecutivas, ações drásticas
-                if critical_failures >= 3:
-                    logger.error("💀 EMERGÊNCIA CRÍTICA! Executando recuperação total...")
-
-                    try:
-                        # Força garbage collection agressivo
-                        import gc
-                        gc.collect()
-
-                        # Tentar "acordar" o sistema com requests externos
-                        import requests
-                        for i in range(5):
-                            try:
-                                requests.get('http://0.0.0.0:8080/force-alive', timeout=3)
-                                await asyncio.sleep(1)
-                            except:
-                                pass
-
-                        # Notificar canal de alerta se possível
-                        if bot.is_ready():
-                            try:
-                                channel = bot.get_channel(CHANNEL_ID_ALERTA)
-                                if channel:
-                                    embed = create_embed(
-                                        "🚨 EMERGÊNCIA CRÍTICA DETECTADA",
-                                        f"Sistema de emergência acionado!\n"
-                                        f"**Monitor:** #{monitor_count}\n"
-                                        f"**Falhas consecutivas:** {critical_failures}\n"
-                                        f"**Flask OK:** {'✅' if flask_ok else '❌'}\n"
-                                        f"**Bot OK:** {'✅' if bot_ok else '❌'}\n"
-                                        f"**Latência OK:** {'✅' if latency_ok else '❌'}\n"
-                                        f"**Recuperação:** Iniciada automaticamente",
-                                        color=0xff0000
-                                    )
-                                    await channel.send(embed=embed)
-                            except:
-                                pass
-
-                        logger.info("🆘 Recuperação de emergência executada!")
-                        critical_failures = 0
-
-                    except Exception as e:
-                        logger.error(f"Erro na recuperação de emergência: {e}")
-
-        except Exception as e:
-            logger.error(f"❌ Erro no monitor de emergência: {e}")
-            await asyncio.sleep(30)
+# Sistemas de monitoramento anti-hibernação removidos para economizar recursos
 
 # Initialize database
 init_database()
@@ -1059,21 +868,7 @@ async def on_ready():
         except Exception as e:
             logger.error(f"Erro ao iniciar background tasks: {e}")
 
-    # Iniciar sistemas básicos de proteção apenas uma vez
-    if not hasattr(bot, '_protection_started'):
-        bot._protection_started = True
-
-        # Criar tasks básicos de proteção (removidos sistemas que consomem muitos recursos)
-        protection_tasks = [
-            emergency_keeper(),
-            emergency_system_monitor(),
-            auto_reconnect_system()
-        ]
-
-        for task in protection_tasks:
-            asyncio.create_task(task)
-
-        logger.info("🛡️ Sistemas básicos de proteção iniciados")
+    # Sistemas de proteção 24/7 removidos para economizar recursos no Railway
 
     # Set initial status com retry
     try:
@@ -1126,40 +921,7 @@ async def on_resumed():
     except Exception as e:
         logger.error(f"Erro ao enviar alerta de reconexão: {e}")
 
-# Sistema de reconexão automática melhorado
-async def auto_reconnect_system():
-    """Sistema que monitora e força reconexão se necessário"""
-    disconnect_count = 0
-
-    while True:
-        try:
-            await asyncio.sleep(45)  # Verificar a cada 45 segundos
-
-            if not bot.is_ready():
-                disconnect_count += 1
-                logger.warning(f"⚠️ Bot não está ready! Desconexão #{disconnect_count}")
-
-                if disconnect_count >= 3:
-                    logger.error("🔄 Múltiplas desconexões detectadas! Forçando reconexão...")
-
-                    try:
-                        # Tentar fechar e reconectar
-                        await bot.close()
-                        await asyncio.sleep(5)
-
-                        # Reiniciar conexão
-                        logger.info("🔄 Tentando reconectar...")
-                        disconnect_count = 0
-
-                    except Exception as e:
-                        logger.error(f"Erro na reconexão forçada: {e}")
-
-            else:
-                disconnect_count = 0  # Reset contador se bot está OK
-
-        except Exception as e:
-            logger.error(f"Erro no sistema de reconexão: {e}")
-            await asyncio.sleep(30)
+# Sistema de reconexão automática removido para economizar recursos
 
 @bot.event
 async def on_guild_join(guild):
@@ -1708,59 +1470,9 @@ async def on_member_join(member):
         except:
             pass
 
-# Health monitor removido para economizar recursos
+# Health monitor removido para economizar recursos no Railway
 
-# Sistema de emergência - último recurso
-async def emergency_keeper():
-    """Sistema de emergência que atua quando tudo mais falha"""
-    emergency_count = 0
-
-    while True:
-        try:
-            # Verificar a cada 5 minutos
-            await asyncio.sleep(300)
-            emergency_count += 1
-
-            # Verificar se outros sistemas estão funcionando
-            try:
-                import aiohttp
-                systems_ok = 0
-
-                async with aiohttp.ClientSession() as session:
-                    # Testar endpoints críticos
-                    critical_endpoints = ['/ping', '/status', '/monitor']
-
-                    for endpoint in critical_endpoints:
-                        try:
-                            async with session.get(f'http://0.0.0.0:8080{endpoint}', timeout=3) as response:
-                                if response.status == 200:
-                                    systems_ok += 1
-                        except:
-                            continue
-
-                    # Se menos de 2 sistemas OK = EMERGÊNCIA
-                    if systems_ok < 2:
-                        logger.error(f"🆘 EMERGÊNCIA #{emergency_count}! Apenas {systems_ok}/3 sistemas OK")
-
-                        # Ações de emergência
-                        for i in range(5):
-                            try:
-                                async with session.get('http://0.0.0.0:8080/force-alive', timeout=2):
-                                    pass
-                                await asyncio.sleep(1)
-                            except:
-                                continue
-
-                        logger.info(f"🆘 Emergência #{emergency_count} - Pings forçados enviados")
-                    else:
-                        logger.info(f"🆘 Emergência #{emergency_count} - Sistemas OK ({systems_ok}/3)")
-
-            except Exception as e:
-                logger.error(f"Erro no sistema de emergência: {e}")
-
-        except Exception as e:
-            logger.error(f"❌ Erro crítico no emergency keeper: {e}")
-            await asyncio.sleep(120)
+# Sistema de emergência removido para economizar recursos
 
 # ============ SISTEMA DE TICKETS COMPLETO ============
 @bot.command(name='testetier', aliases=['rxticketier', 'tickettier'])
@@ -5205,9 +4917,10 @@ async def sistema_status(ctx):
 • Uptime: {format_time(uptime_seconds)}
 • Latência: {round(bot.latency * 1000, 2)}ms
 
-**🛡️ Sistemas de Proteção:**
-• ✅ Monitor de emergência (180s)
-• ✅ Sistema de reconexão automática
+**💡 Sistema Otimizado:**
+• Removidos sistemas de keep-alive 24/7
+• Sem anti-hibernação automática
+• Economia de recursos no Railway
 
 **📊 Estatísticas:**
 • Servidores: {len(bot.guilds)}
@@ -5215,13 +4928,10 @@ async def sistema_status(ctx):
 • Comandos executados: {global_stats['commands_used']:,}
 • Mensagens processadas: {global_stats['messages_processed']:,}
 
-**🌐 Keep-alive URLs:**
-• `/ping` - Ping básico
-• `/keepalive` - Keep-alive principal
-• `/monitor` - Monitoramento detalhado
-• `/force-alive` - Força ativação
-
-**💡 Dica:** Configure UptimeRobot para máxima proteção!""",
+**🔋 Economia de Recursos:**
+• Bot só consome quando ativo
+• Sem sistemas de monitoramento 24/7
+• Redução significativa no uso do Railway""",
         color=0x00ff00
     )
 
@@ -5242,10 +4952,10 @@ async def uptime(ctx):
 **💬 Comandos executados:** {global_stats['commands_used']:,}
 **📨 Mensagens processadas:** {global_stats['messages_processed']:,}
 
-**🔄 Sistemas ativos:**
-• ✅ Monitor de emergência
-• ✅ Sistema de reconexão
-• ✅ Backup automático (6h)""",
+**💡 Otimizado para Railway:**
+• Sem sistemas de keep-alive 24/7
+• Economia de recursos ativa
+• Backup automático (6h)""",
         color=0x00ff00
     )
 
@@ -5515,25 +5225,7 @@ async def on_command_error(ctx, error):
         except:
             pass
 
-# Sistema robusto de inicialização
-async def maintain_connection():
-    """Mantém a conexão do bot estável"""
-    while True:
-        try:
-            if not bot.is_ready():
-                logger.warning("🔄 Bot não está pronto, aguardando...")
-                await asyncio.sleep(30)
-                continue
-
-            # Verificar latência
-            if bot.latency > 5.0:
-                logger.warning(f"⚠️ Latência alta: {bot.latency * 1000:.2f}ms")
-
-            await asyncio.sleep(60)
-
-        except Exception as e:
-            logger.error(f"Erro no maintain_connection: {e}")
-            await asyncio.sleep(30)
+# Sistemas de manutenção de conexão removidos para economizar recursos
 
 async def start_bot():
     """Sistema de inicialização ULTRA robusto"""
@@ -5555,10 +5247,7 @@ async def start_bot():
                 await asyncio.sleep(10)
                 continue
 
-            # Iniciar tasks de manutenção apenas uma vez
-            if not hasattr(bot, '_maintenance_started'):
-                bot._maintenance_started = True
-                asyncio.create_task(maintain_connection())
+            # Tasks de manutenção removidas para economizar recursos
 
             # Iniciar o bot com timeout
             try:
@@ -5621,118 +5310,12 @@ async def start_bot():
         logger.error(f"Falha ao reiniciar o bot: {e}")
 
 
-def run_flask():
-    """Executa servidor Flask otimizado"""
-    try:
-        app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False, threaded=True)
-    except Exception as e:
-        logger.error(f"Erro no servidor Flask: {e}")
+# Funções de keep-alive removidas para economizar recursos no Railway
 
-def keep_alive():
-    """Sistema de keep-alive melhorado"""
-    flask_thread = Thread(target=run_flask, daemon=True)
-    flask_thread.start()
-    logger.info("🌐 Servidor keep-alive iniciado na porta 8080")
-
-async def auto_restart_system():
-    """Sistema de restart automático melhorado"""
-    restart_count = 0
-
-    while True:
-        try:
-            await asyncio.sleep(60)  # Verificar a cada minuto
-
-            # Verificar se bot está funcionando
-            if not bot.is_ready():
-                restart_count += 1
-                logger.warning(f"🔄 Bot não está ready! Tentativa de restart #{restart_count}")
-
-                # Tentar reconectar ao Discord
-                try:
-                    await bot.close()
-                    await asyncio.sleep(3)
-
-                    token = os.getenv('TOKEN')
-                    if token:
-                        logger.info(f"🚀 Tentando reconectar... (Restart #{restart_count})")
-                        await bot.start(token)
-                    else:
-                        logger.error("🚨 TOKEN não encontrado para restart!")
-
-                except Exception as e:
-                    logger.error(f"Erro no restart automático: {e}")
-                    await asyncio.sleep(10)
-
-        except Exception as e:
-            logger.error(f"Erro no sistema de restart: {e}")
-            await asyncio.sleep(30)
-
-def restart_bot():
-    """Sistema de restart sem exit - mantém processo vivo"""
-    restart_count = 0
-
-    while True:
-        try:
-            restart_count += 1
-            logger.info(f"🚀 Iniciando bot (Tentativa #{restart_count})")
-
-            # Verificar token
-            token = os.getenv('TOKEN')
-            if not token:
-                logger.error("🚨 TOKEN não encontrado!")
-                time.sleep(30)
-                continue
-
-            # Iniciar keep-alive
-            keep_alive()
-
-            # Aguardar Flask inicializar
-            time.sleep(3)
-
-            # Log detalhado
-            logger.info("🌐 Flask iniciado, conectando ao Discord...")
-
-            # Iniciar bot com sistema de restart interno
-            try:
-                async def run_with_restart():
-                    # Iniciar sistema de auto-restart
-                    asyncio.create_task(auto_restart_system())
-                    # Iniciar bot
-                    await start_bot()
-
-                asyncio.run(run_with_restart())
-
-            except KeyboardInterrupt:
-                logger.info("🛑 Bot interrompido pelo usuário")
-                return  # Sair da função, mas não do processo
-
-        except discord.HTTPException as e:
-            logger.error(f"🚨 Erro Discord HTTP: {e}")
-            logger.info(f"🔄 Reconectando em 30s... (Tentativa #{restart_count + 1})")
-            time.sleep(30)
-        except discord.ConnectionClosed as e:
-            logger.error(f"🚨 Conexão fechada: {e}")
-            logger.info(f"🔄 Reconectando em 5s... (Tentativa #{restart_count + 1})")
-            time.sleep(5)
-        except Exception as e:
-            logger.error(f"🚨 Erro: {e}")
-            logger.error(f"🔍 Traceback: {traceback.format_exc()}")
-            logger.info(f"🔄 Reiniciando em 15s... (Tentativa #{restart_count + 1})")
-            time.sleep(15)
-
-        # Log de restart
-        if restart_count < 100:  # Evitar spam de logs
-            logger.warning(f"🔄 Executando restart #{restart_count + 1} em 3s...")
-        time.sleep(3)
+# Sistemas de restart automático removidos para economizar recursos no Railway
 
 if __name__ == "__main__":
     try:
-        # Iniciar keep-alive primeiro
-        keep_alive()
-
-        # Aguardar Flask inicializar
-        time.sleep(2)
-
         # Verificar token
         token = os.getenv('TOKEN')
         if not token:
@@ -5742,7 +5325,7 @@ if __name__ == "__main__":
 
         logger.info("🚀 Iniciando RXbot...")
 
-        # Iniciar bot diretamente
+        # Iniciar bot diretamente sem keep-alive
         asyncio.run(start_bot())
 
     except KeyboardInterrupt:
