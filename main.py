@@ -6012,7 +6012,8 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"🚨 Erro fatal na inicialização: {e}")
         logger.error(f"🔍 Traceback: {traceback.format_exc()}")
-        sys.exit(1)def calculate_rank(xp):
+        sys.exit(1)
+        
     """Calcula o rank baseado no XP e retorna o nome do rank."""
     rank_id, rank_data = get_user_rank(xp)
     return rank_data['name']
