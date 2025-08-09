@@ -194,242 +194,7 @@ def keep_alive():
     t = Thread(target=run, daemon=True)
     t.start()
 
-# Sistema de auto-ping ULTRA AGRESSIVO para nunca hibernar
-async def auto_ping():
-    """Sistema de auto-ping otimizado para nunca hibernar"""
-    import aiohttp
-    consecutive_failures = 0
-    max_failures = 2  # Reduzido para resposta mais rápida
-    ping_count = 0
-
-    while True:
-        try:
-            # Ping mais frequente: 25 segundos
-            await asyncio.sleep(25)
-            ping_count += 1
-
-            success = False
-            # Usar timeout mais baixo e conexão mais rápida
-            timeout = aiohttp.ClientTimeout(total=5, connect=2)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                # Endpoints prioritários primeiro
-                priority_endpoints = ['/ping', '/keepalive', '/force-alive']
-
-                for endpoint in priority_endpoints:
-                    try:
-                        async with session.get(f'http://0.0.0.0:8080{endpoint}') as response:
-                            if response.status == 200:
-                                logger.info(f"✅ Auto-ping #{ping_count} {endpoint} OK")
-                                success = True
-                                consecutive_failures = 0
-                                break
-                    except Exception as e:
-                        logger.debug(f"Endpoint {endpoint} falhou: {e}")
-                        continue
-
-                # Se falhou, tentar endpoints secundários
-                if not success:
-                    secondary_endpoints = ['/status', '/health', '/monitor', '/heartbeat']
-                    for endpoint in secondary_endpoints:
-                        try:
-                            async with session.get(f'http://0.0.0.0:8080{endpoint}') as response:
-                                if response.status == 200:
-                                    logger.info(f"✅ Auto-ping #{ping_count} {endpoint} OK (secondary)")
-                                    success = True
-                                    consecutive_failures = 0
-                                    break
-                        except:
-                            continue
-
-                # Último recurso: localhost
-                if not success:
-                    try:
-                        async with session.get('http://127.0.0.1:8080/ping') as response:
-                            if response.status == 200:
-                                logger.info(f"✅ Auto-ping #{ping_count} localhost OK")
-                                success = True
-                                consecutive_failures = 0
-                    except:
-                        pass
-
-                if not success:
-                    consecutive_failures += 1
-                    logger.error(f"🚨 Auto-ping #{ping_count} FALHOU! ({consecutive_failures}/{max_failures})")
-
-                    # Recuperação mais agressiva
-                    if consecutive_failures >= max_failures:
-                        logger.error("💀 RECUPERAÇÃO CRÍTICA!")
-
-                        # Limpeza de memória
-                        import gc
-                        gc.collect()
-
-                        # Múltiplas tentativas de recuperação simultâneas
-                        recovery_tasks = []
-                        for i in range(3):
-                            task = session.get('http://0.0.0.0:8080/force-alive')
-                            recovery_tasks.append(task)
-
-                        try:
-                            results = await asyncio.gather(*recovery_tasks, return_exceptions=True)
-                            recovery_success = any(hasattr(r, 'status') and r.status == 200 for r in results)
-
-                            if recovery_success:
-                                logger.info("🆘 Recuperação simultânea OK!")
-                                success = True
-                                consecutive_failures = 0
-                        except:
-                            pass
-
-        except Exception as e:
-            logger.error(f"❌ Erro CRÍTICO no auto-ping: {e}")
-            # Forçar garbage collection em caso de erro
-            import gc
-            gc.collect()
-            await asyncio.sleep(3)
-
-async def external_keepalive():
-    """Sistema de keep-alive externo otimizado"""
-    import aiohttp
-    ping_count = 0
-
-    while True:
-        try:
-            # A cada 2 minutos (equilibrio ideal)
-            await asyncio.sleep(120)
-            ping_count += 1
-
-            async with aiohttp.ClientSession() as session:
-                endpoints_to_try = [
-                    'http://0.0.0.0:8080/force-alive',
-                    'http://0.0.0.0:8080/monitor',
-                    'http://0.0.0.0:8080/keepalive', 
-                    'http://0.0.0.0:8080/ping',
-                    'http://0.0.0.0:8080/status',
-                    'http://0.0.0.0:8080/heartbeat'
-                ]
-
-                success_count = 0
-                for endpoint in endpoints_to_try:
-                    try:
-                        async with session.get(endpoint, timeout=8) as response:
-                            if response.status == 200:
-                                success_count += 1
-                                logger.info(f"🌐 Keep-alive externo #{ping_count} OK via {endpoint}")
-
-                                # Simular atividade MAIS INTENSA
-                                await asyncio.sleep(0.3)
-
-                                # Fazer requests adicionais para simular tráfego real
-                                try:
-                                    await asyncio.gather(
-                                        session.get('http://0.0.0.0:8080/', timeout=2),
-                                        session.get('http://0.0.0.0:8080/status', timeout=2),
-                                        return_exceptions=True
-                                    )
-                                except:
-                                    pass
-
-                                if success_count >= 2:  # Se 2+ endpoints OK, parar
-                                    break
-                    except Exception as e:
-                        logger.debug(f"Endpoint externo {endpoint} falhou: {e}")
-                        continue
-
-                if success_count == 0:
-                    logger.error(f"🚨 Keep-alive externo #{ping_count} FALHOU TOTALMENTE!")
-
-                    # Sistema de recuperação AGRESSIVO
-                    recovery_attempts = 0
-                    while recovery_attempts < 5 and success_count == 0:
-                        recovery_attempts += 1
-                        logger.warning(f"🆘 Tentativa de recuperação #{recovery_attempts}/5")
-
-                        fallback_endpoints = [
-                            'http://127.0.0.1:8080/ping',
-                            'http://localhost:8080/ping',
-                            'http://0.0.0.0:8080/force-alive'
-                        ]
-
-                        for endpoint in fallback_endpoints:
-                            try:
-                                async with session.get(endpoint, timeout=3) as response:
-                                    if response.status == 200:
-                                        logger.info(f"🆘 Recuperação via {endpoint} SUCESSO!")
-                                        success_count = 1
-                                        break
-                            except:
-                                continue
-
-                        if success_count == 0:
-                            await asyncio.sleep(2)
-
-                    if success_count == 0:
-                        logger.error("💀 TODOS OS SISTEMAS DE RECUPERAÇÃO FALHARAM!")
-
-        except Exception as e:
-            logger.error(f"❌ Keep-alive externo crítico: {e}")
-            await asyncio.sleep(20)  # Espera menor para recuperação mais rápida
-
-async def heartbeat_system():
-    """Sistema de heartbeat otimizado para máxima disponibilidade"""
-    import aiohttp
-    heartbeat_count = 0
-
-    while True:
-        try:
-            # Heartbeat a cada 3 minutos (equilibrio perfeito)
-            await asyncio.sleep(180)
-            heartbeat_count += 1
-
-            # Simular atividade REAL do bot
-            if bot.is_ready():
-                # Atualizar status para simular atividade
-                try:
-                    activity_types = [
-                        discord.ActivityType.watching,
-                        discord.ActivityType.listening,
-                        discord.ActivityType.playing
-                    ]
-
-                    await bot.change_presence(
-                        status=discord.Status.online,
-                        activity=discord.Activity(
-                            type=random.choice(activity_types),
-                            name=f"Heartbeat #{heartbeat_count} | Online 24/7"
-                        )
-                    )
-                    logger.info(f"💓 Heartbeat #{heartbeat_count} + Status atualizado")
-
-                    # Fazer atividade adicional para simular uso real
-                    await asyncio.sleep(1)
-
-                except Exception as e:
-                    logger.debug(f"Erro no status heartbeat: {e}")
-
-            # Ping triplo via HTTP para garantir
-            ping_success = 0
-            try:
-                async with aiohttp.ClientSession() as session:
-                    endpoints = ['/health', '/heartbeat', '/ping']
-                    for endpoint in endpoints:
-                        try:
-                            async with session.get(f'http://0.0.0.0:8080{endpoint}', timeout=5) as response:
-                                if response.status == 200:
-                                    ping_success += 1
-                                    logger.debug(f"💓 HTTP heartbeat #{heartbeat_count} {endpoint} OK")
-                        except:
-                            continue
-
-                    if ping_success == 0:
-                        logger.warning(f"⚠️ Heartbeat #{heartbeat_count} HTTP falhou!")
-
-            except Exception as e:
-                logger.debug(f"Erro no HTTP heartbeat: {e}")
-
-        except Exception as e:
-            logger.warning(f"⚠️ Heartbeat system crítico: {e}")
-            await asyncio.sleep(60)  # Espera menor para recuperação mais rápida
+# Sistemas de auto-ping removidos para economizar recursos
 
 # Configuração do logging avançado
 logging.basicConfig(
@@ -694,82 +459,7 @@ def init_database():
             if conn:
                 conn.close()
 
-# Sistema EXTREMO anti-hibernação - Último recurso
-async def extreme_anti_hibernation():
-    """Sistema EXTREMO que impede hibernação usando múltiplas estratégias"""
-    count = 0
-
-    while True:
-        try:
-            await asyncio.sleep(45)  # A cada 45 segundos
-            count += 1
-
-            # Estratégia 1: Atividade de rede agressiva
-            try:
-                import aiohttp
-                async with aiohttp.ClientSession() as session:
-                    # Fazer múltiplos requests simultâneos
-                    tasks = []
-                    endpoints = ['/ping', '/keepalive', '/monitor', '/force-alive']
-
-                    for endpoint in endpoints:
-                        task = session.get(f'http://0.0.0.0:8080{endpoint}', timeout=2)
-                        tasks.append(task)
-
-                    # Executar todos em paralelo
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
-                    success_count = sum(1 for r in results if hasattr(r, 'status') and r.status == 200)
-
-                    logger.info(f"🔥 Anti-hibernação extrema #{count}: {success_count}/{len(endpoints)} OK")
-
-                    # Fechar responses
-                    for result in results:
-                        if hasattr(result, 'close'):
-                            await result.close()
-
-            except Exception as e:
-                logger.debug(f"Erro na atividade de rede: {e}")
-
-            # Estratégia 2: Atividade de CPU para simular processamento
-            try:
-                # Simular processamento leve
-                _ = sum(i * 2 for i in range(1000))
-
-                # Garbage collection forçado periodicamente
-                if count % 10 == 0:
-                    import gc
-                    gc.collect()
-                    logger.info(f"🧹 Limpeza de memória #{count // 10}")
-
-            except Exception as e:
-                logger.debug(f"Erro na atividade de CPU: {e}")
-
-            # Estratégia 3: Atualizar status do bot para simular atividade
-            try:
-                if bot.is_ready() and count % 6 == 0:  # A cada ~4.5 minutos
-                    activities = [
-                        f"🔥 Sistema anti-hibernação #{count}",
-                        f"💪 Uptime: {format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds()))}",
-                        f"🚀 {len(bot.guilds)} servidores | {len(set(bot.get_all_members()))} usuários",
-                        f"⚡ Ultra-proteção ativa #{count}",
-                        f"🛡️ Sistema imortal online"
-                    ]
-
-                    await bot.change_presence(
-                        status=discord.Status.online,
-                        activity=discord.Activity(
-                            type=discord.ActivityType.watching,
-                            name=random.choice(activities)
-                        )
-                    )
-                    logger.info(f"🎭 Status atualizado para atividade #{count}")
-
-            except Exception as e:
-                logger.debug(f"Erro na atualização de status: {e}")
-
-        except Exception as e:
-            logger.error(f"❌ Erro no sistema anti-hibernação extremo: {e}")
-            await asyncio.sleep(10)
+# Sistema EXTREMO anti-hibernação removido para economizar recursos
 
 # Monitor de sistema de emergência com auto-restart
 async def emergency_system_monitor():
@@ -1369,26 +1059,21 @@ async def on_ready():
         except Exception as e:
             logger.error(f"Erro ao iniciar background tasks: {e}")
 
-    # Iniciar TODOS os sistemas de proteção anti-hibernação apenas uma vez
+    # Iniciar sistemas básicos de proteção apenas uma vez
     if not hasattr(bot, '_protection_started'):
         bot._protection_started = True
 
-        # Criar tasks de proteção
+        # Criar tasks básicos de proteção (removidos sistemas que consomem muitos recursos)
         protection_tasks = [
-            auto_ping(),
-            external_keepalive(), 
-            heartbeat_system(),
-            health_monitor(),
             emergency_keeper(),
-            extreme_anti_hibernation(),
             emergency_system_monitor(),
-            auto_reconnect_system()  # Novo sistema de reconexão
+            auto_reconnect_system()
         ]
 
         for task in protection_tasks:
             asyncio.create_task(task)
 
-        logger.info("🛡️ Sistemas de proteção iniciados")
+        logger.info("🛡️ Sistemas básicos de proteção iniciados")
 
     # Set initial status com retry
     try:
@@ -1537,7 +1222,7 @@ async def on_reaction_add(reaction, user):
                     })()
 
                     await create_ticket_channel(ctx_mock, motivo, user)
-                    
+
                     # Editar mensagem original para mostrar que foi processado
                     embed = create_embed(
                         "✅ Ticket Criado!",
@@ -1561,7 +1246,7 @@ async def on_reaction_add(reaction, user):
                     })()
 
                     await create_ticket_channel(ctx_mock, motivo, user)
-                    
+
                     # Editar mensagem de confirmação
                     embed = create_embed(
                         "✅ Ticket Criado!",
@@ -1590,7 +1275,7 @@ async def on_reaction_add(reaction, user):
                     })()
 
                     await create_ticket_channel(ctx_mock, motivo, user)
-                    
+
                     # Editar mensagem de confirmação
                     embed = create_embed(
                         "✅ Ticket Tier Criado!",
@@ -1625,7 +1310,7 @@ async def on_reaction_add(reaction, user):
                         await message.delete()
                     except:
                         pass
-                    
+
                     # Limpar mensagens do canal
                     deleted = await channel.purge(limit=amount)
 
@@ -1663,7 +1348,7 @@ async def on_reaction_add(reaction, user):
                 try:
                     member_id = game_data['member_id']
                     reason = game_data['reason']
-                    
+
                     member = message.guild.get_member(member_id)
                     if not member:
                         embed = create_embed("❌ Erro", "Membro não encontrado!", color=0xff0000)
@@ -2023,66 +1708,7 @@ async def on_member_join(member):
         except:
             pass
 
-# Sistema de monitoramento de saúde para detectar problemas
-async def health_monitor():
-    """Monitor de saúde que detecta quando o bot está em risco"""
-    last_activity = datetime.datetime.now()
-    consecutive_issues = 0
-
-    while True:
-        try:
-            await asyncio.sleep(45)  # Verificar a cada 45 segundos
-
-            current_time = datetime.datetime.now()
-            time_since_activity = (current_time - last_activity).total_seconds()
-
-            # Verificar se bot está respondendo
-            if bot.is_ready():
-                # Verificar latência
-                if bot.latency > 10.0:  # 10+ segundos é crítico
-                    consecutive_issues += 1
-                    logger.warning(f"🩺 Latência crítica: {bot.latency * 1000:.2f}ms ({consecutive_issues}/3)")
-                else:
-                    consecutive_issues = 0
-                    last_activity = current_time
-
-                # Se muitos problemas consecutivos
-                if consecutive_issues >= 3:
-                    logger.error("🚨 SAÚDE CRÍTICA! Iniciando recuperação de emergência...")
-
-                    # Forçar limpeza de memória
-                    import gc
-                    gc.collect()
-
-                    # Resetar contador
-                    consecutive_issues = 0
-
-                    # Notificar canal de alerta
-                    try:
-                        channel = bot.get_channel(CHANNEL_ID_ALERTA)
-                        if channel:
-                            embed = create_embed(
-                                "🚨 Sistema de Saúde - Alerta Crítico",
-                                f"Problemas detectados no bot!\n"
-                                f"**Latência:** {bot.latency * 1000:.2f}ms\n"
-                                f"**Ação:** Recuperação automática iniciada\n"
-                                f"**Status:** Tentando estabilizar...",
-                                color=0xff0000
-                            )
-                            await channel.send(embed=embed)
-                    except:
-                        pass
-            else:
-                consecutive_issues += 1
-                logger.error(f"🩺 Bot não está ready! ({consecutive_issues}/5)")
-
-                if consecutive_issues >= 5:
-                    logger.error("💀 BOT CRÍTICO! Não está ready há muito tempo!")
-                    consecutive_issues = 0
-
-        except Exception as e:
-            logger.error(f"❌ Erro no health monitor: {e}")
-            await asyncio.sleep(30)
+# Health monitor removido para economizar recursos
 
 # Sistema de emergência - último recurso
 async def emergency_keeper():
@@ -5580,11 +5206,8 @@ async def sistema_status(ctx):
 • Latência: {round(bot.latency * 1000, 2)}ms
 
 **🛡️ Sistemas de Proteção:**
-• ✅ Auto-ping (30s)
-• ✅ Keep-alive externo (120s)  
-• ✅ Heartbeat (180s)
 • ✅ Monitor de emergência (180s)
-• ✅ Sistema anti-hibernação (45s)
+• ✅ Sistema de reconexão automática
 
 **📊 Estatísticas:**
 • Servidores: {len(bot.guilds)}
@@ -5620,9 +5243,8 @@ async def uptime(ctx):
 **📨 Mensagens processadas:** {global_stats['messages_processed']:,}
 
 **🔄 Sistemas ativos:**
-• ✅ Auto-ping (60s)
-• ✅ Keep-alive externo (4min)
-• ✅ Heartbeat (3min)
+• ✅ Monitor de emergência
+• ✅ Sistema de reconexão
 • ✅ Backup automático (6h)""",
         color=0x00ff00
     )
