@@ -1173,6 +1173,20 @@ async def on_reaction_add(reaction, user):
                     closer_id = game_data['closer']
                     closer = message.guild.get_member(closer_id)
 
+                    # Buscar informações do ticket para logs
+                    ticket_creator = None
+                    try:
+                        with db_lock:
+                            conn = get_db_connection()
+                            cursor = conn.cursor()
+                            cursor.execute('SELECT creator_id FROM tickets WHERE channel_id = ?', (message.channel.id,))
+                            result = cursor.fetchone()
+                            if result:
+                                ticket_creator = message.guild.get_member(result[0])
+                            conn.close()
+                    except Exception as e:
+                        logger.error(f"Erro ao buscar criador do ticket: {e}")
+
                     # Atualizar banco de dados
                     try:
                         with db_lock:
@@ -1190,36 +1204,80 @@ async def on_reaction_add(reaction, user):
 
                     # Enviar mensagem de fechamento
                     final_embed = create_embed(
-                        "🔒 Ticket Fechado",
+                        "🔒 Ticket Fechado com Sucesso",
+                        f"**📋 Detalhes do Fechamento:**\n"
                         f"**Fechado por:** {closer.mention if closer else 'Usuário desconhecido'}\n"
-                        f"**Data:** <t:{int(datetime.datetime.now().timestamp())}:F>\n\n"
-                        f"Este canal será deletado em 5 segundos...",
+                        f"**Criado por:** {ticket_creator.mention if ticket_creator else 'Usuário desconhecido'}\n"
+                        f"**Data/Hora:** <t:{int(datetime.datetime.now().timestamp())}:F>\n"
+                        f"**Canal:** {message.channel.name}\n\n"
+                        f"🗑️ **Este canal será deletado em 5 segundos...**\n"
+                        f"💾 Dados salvos no banco de dados para histórico.",
                         color=0xff6b6b
                     )
 
                     await message.edit(embed=final_embed)
-                    await asyncio.sleep(5)
+                    
+                    # Log do fechamento
+                    logger.info(f"Ticket fechado: {message.channel.name} por {closer.name if closer else 'Unknown'}")
+                    
+                    # Notificar em canal de logs se existir
+                    try:
+                        log_channel = discord.utils.get(message.guild.channels, name="logs-tickets")
+                        if log_channel:
+                            log_embed = create_embed(
+                                "🔒 Ticket Fechado",
+                                f"**Canal:** {message.channel.name}\n"
+                                f"**Fechado por:** {closer.mention if closer else 'Desconhecido'}\n"
+                                f"**Criado por:** {ticket_creator.mention if ticket_creator else 'Desconhecido'}\n"
+                                f"**Data:** <t:{int(datetime.datetime.now().timestamp())}:F>",
+                                color=0xff6b6b
+                            )
+                            await log_channel.send(embed=log_embed)
+                    except:
+                        pass
 
-                    # Deletar canal
-                    await message.channel.delete()
+                    # Aguardar e deletar canal
+                    await asyncio.sleep(5)
+                    await message.channel.delete(reason=f"Ticket fechado por {closer.name if closer else 'Unknown'}")
+                    
+                    # Limpar dados
                     if message.id in active_games:
                         del active_games[message.id]
 
+                except discord.NotFound:
+                    # Canal já foi deletado
+                    if message.id in active_games:
+                        del active_games[message.id]
+                    pass
                 except Exception as e:
                     logger.error(f"Erro ao fechar ticket: {e}")
-                    error_embed = create_embed(
-                        "❌ Erro",
-                        "Erro ao fechar ticket. Contate um administrador.",
-                        color=0xff0000
-                    )
-                    await message.channel.send(embed=error_embed)
+                    try:
+                        error_embed = create_embed(
+                            "❌ Erro ao Fechar Ticket",
+                            f"Ocorreu um erro: {str(e)[:200]}\n\nContate um administrador.",
+                            color=0xff0000
+                        )
+                        await message.channel.send(embed=error_embed)
+                    except:
+                        pass
                     if message.id in active_games:
                         del active_games[message.id]
 
             elif str(reaction.emoji) == "❌":
-                embed = create_embed("❌ Fechamento Cancelado", "Ticket não foi fechado.", color=0xffaa00)
-                await message.edit(embed=embed)
-                del active_games[message.id]
+                try:
+                    cancel_embed = create_embed(
+                        "❌ Fechamento Cancelado", 
+                        f"O fechamento do ticket foi cancelado por {user.mention}.\n"
+                        f"O ticket permanece **aberto** e funcional.",
+                        color=0xffaa00
+                    )
+                    await message.edit(embed=cancel_embed)
+                    if message.id in active_games:
+                        del active_games[message.id]
+                except Exception as e:
+                    logger.error(f"Erro ao cancelar fechamento: {e}")
+                    if message.id in active_games:
+                        del active_games[message.id]
 
         elif game_data['type'] == 'trade_invitation':
             # Apenas o usuário convidado pode aceitar/recusar
@@ -1261,7 +1319,7 @@ async def on_reaction_add(reaction, user):
                 await message.edit(embed=embed)
                 del active_games[message.id]
 
-    # Sistema de fechar tickets - CORRIGIDO
+    # Sistema de fechar tickets - CORRIGIDO E MELHORADO
     if str(reaction.emoji) == "🔒" and hasattr(message.channel, 'name') and message.channel.name.startswith('ticket-'):
         # Verificar se usuário tem permissão OU é o criador do ticket
         has_permission = False
@@ -1273,9 +1331,9 @@ async def on_reaction_add(reaction, user):
             if member:
                 has_permission = (member.guild_permissions.manage_channels or 
                                 member.guild_permissions.administrator or
-                                any(role.name.lower() in ['admin', 'mod', 'staff', 'moderador'] for role in member.roles))
-        except:
-            pass
+                                any(role.name.lower() in ['admin', 'mod', 'staff', 'moderador', 'administrador'] for role in member.roles))
+        except Exception as e:
+            logger.error(f"Erro ao verificar permissões: {e}")
 
         try:
             # Verificar se é o criador do ticket
@@ -1291,6 +1349,12 @@ async def on_reaction_add(reaction, user):
             logger.error(f"Erro ao verificar criador do ticket: {e}")
 
         if not (has_permission or is_creator):
+            # Remover a reação do usuário não autorizado
+            try:
+                await reaction.remove(user)
+            except:
+                pass
+            
             # Enviar mensagem de erro temporária
             try:
                 error_embed = create_embed(
@@ -1310,21 +1374,51 @@ async def on_reaction_add(reaction, user):
             "🔒 Fechar Ticket?",
             f"**{user.mention}** deseja fechar este ticket?\n\n"
             f"**⚠️ Esta ação é irreversível!**\n"
-            f"Reaja com ✅ para confirmar ou ❌ para cancelar.",
+            f"O canal será **DELETADO** permanentemente!\n\n"
+            f"Reaja com ✅ para confirmar ou ❌ para cancelar.\n"
+            f"**Você tem 30 segundos para decidir.**",
             color=0xff6b6b
         )
 
-        confirm_msg = await message.channel.send(embed=confirm_embed)
-        await confirm_msg.add_reaction("✅")
-        await confirm_msg.add_reaction("❌")
+        try:
+            confirm_msg = await message.channel.send(embed=confirm_embed)
+            await confirm_msg.add_reaction("✅")
+            await confirm_msg.add_reaction("❌")
 
-        # Armazenar para processar confirmação
-        active_games[confirm_msg.id] = {
-            'type': 'close_ticket_confirmation',
-            'user': user.id,
-            'channel': message.channel.id,
-            'closer': user.id
-        }
+            # Armazenar para processar confirmação
+            active_games[confirm_msg.id] = {
+                'type': 'close_ticket_confirmation',
+                'user': user.id,
+                'channel': message.channel.id,
+                'closer': user.id,
+                'created_at': datetime.datetime.now().timestamp()
+            }
+            
+            # Auto-cancelar após 30 segundos
+            await asyncio.sleep(30)
+            if confirm_msg.id in active_games:
+                try:
+                    timeout_embed = create_embed(
+                        "⏰ Tempo Esgotado",
+                        "Confirmação de fechamento expirou. O ticket permanece aberto.",
+                        color=0xffaa00
+                    )
+                    await confirm_msg.edit(embed=timeout_embed)
+                    del active_games[confirm_msg.id]
+                except:
+                    pass
+                    
+        except Exception as e:
+            logger.error(f"Erro ao criar confirmação de fechamento: {e}")
+            error_embed = create_embed(
+                "❌ Erro",
+                "Erro ao processar fechamento do ticket. Tente novamente.",
+                color=0xff0000
+            )
+            try:
+                await message.channel.send(embed=error_embed, delete_after=10)
+            except:
+                pass
 
     # Sistema de chuva de moedas
     if message.id in active_games:
@@ -1749,6 +1843,337 @@ async def create_ticket_channel(ctx, motivo, user):
             await ctx.channel.send(embed=confirm_embed, delete_after=10)
     except:
         pass
+
+# ============ COMANDOS FALTANDO ADICIONADOS ============
+
+@bot.command(name='perfil', aliases=['profile'])
+async def perfil(ctx, user: discord.Member = None):
+    """Ver perfil completo do usuário"""
+    global_stats['commands_used'] += 1
+    target = user or ctx.author
+    
+    try:
+        user_data = get_user_data(target.id)
+        if not user_data:
+            update_user_data(target.id)
+            user_data = get_user_data(target.id)
+
+        coins, xp, level, rep, bank = user_data[1], user_data[2], user_data[3], user_data[4], user_data[5]
+        total_money = coins + bank
+        
+        # Obter rank
+        rank_id, rank_data = get_user_rank(xp)
+        
+        # Obter título personalizado se existir
+        custom_title = ""
+        if user_data and len(user_data) > 11:
+            settings_data = user_data[11]
+            settings = json.loads(settings_data) if settings_data else {}
+            if settings.get('custom_title'):
+                custom_title = f" | {settings['custom_title']}"
+
+        # Status emoji
+        status_emoji = {
+            discord.Status.online: "🟢",
+            discord.Status.idle: "🟡", 
+            discord.Status.dnd: "🔴",
+            discord.Status.offline: "⚫"
+        }
+
+        embed = create_embed(
+            f"{rank_data['emoji']} Perfil de {target.display_name}{custom_title}",
+            f"**👤 Informações Básicas:**\n"
+            f"• **Nome:** {target.name}#{target.discriminator}\n"
+            f"• **ID:** {target.id}\n"
+            f"• **Status:** {status_emoji.get(target.status, '❓')} {target.status.name.title()}\n"
+            f"• **Conta criada:** <t:{int(target.created_at.timestamp())}:R>\n"
+            f"• **Entrou no servidor:** <t:{int(target.joined_at.timestamp())}:R>\n\n"
+            f"**🏆 Ranking:**\n"
+            f"• **Rank:** {rank_data['emoji']} {rank_data['name']} (#{rank_id})\n"
+            f"• **Level:** {level}\n"
+            f"• **XP:** {xp:,}\n"
+            f"• **Reputação:** {rep}\n\n"
+            f"**💰 Economia:**\n"
+            f"• **Carteira:** {coins:,} moedas\n"
+            f"• **Banco:** {bank:,} moedas\n"
+            f"• **Total:** {total_money:,} moedas",
+            color=rank_data['color']
+        )
+
+        embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
+        embed.set_footer(text=f"Use RXinventario para ver itens | Posição no ranking: #{await get_user_position(target.id, ctx.guild.id)}")
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        logger.error(f"Erro no comando perfil: {e}")
+        embed = create_embed("❌ Erro", "Erro ao carregar perfil. Tente novamente.", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='level', aliases=['lvl'])
+async def level_info(ctx, user: discord.Member = None):
+    """Ver informações detalhadas de level e XP"""
+    global_stats['commands_used'] += 1
+    target = user or ctx.author
+    
+    try:
+        user_data = get_user_data(target.id)
+        if not user_data:
+            update_user_data(target.id)
+            xp, level = 0, 1
+        else:
+            xp, level = user_data[2], user_data[3]
+
+        current_rank_id, current_rank = get_user_rank(xp)
+        
+        # Calcular XP para próximo level
+        next_level_xp = (level ** 2) * 100
+        current_level_xp = ((level - 1) ** 2) * 100
+        xp_for_next = next_level_xp - xp
+        
+        # Progresso para próximo rank
+        next_rank_id = current_rank_id + 1 if current_rank_id < 12 else 12
+        next_rank = RANK_SYSTEM.get(next_rank_id, RANK_SYSTEM[12])
+        
+        if current_rank_id < 12:
+            rank_xp_needed = next_rank["xp"] - xp
+            rank_progress = ((xp - current_rank["xp"]) / (next_rank["xp"] - current_rank["xp"])) * 100
+        else:
+            rank_xp_needed = 0
+            rank_progress = 100
+
+        embed = create_embed(
+            f"📊 Level de {target.display_name}",
+            f"**⭐ Level Atual:** {level}\n"
+            f"**💫 XP Total:** {xp:,}\n"
+            f"**🎯 XP para próximo level:** {xp_for_next:,}\n\n"
+            f"**🏆 Rank Atual:** {current_rank['emoji']} {current_rank['name']}\n"
+            f"**📈 Progresso do rank:** {rank_progress:.1f}%\n"
+            f"**🎪 XP para próximo rank:** {rank_xp_needed:,}\n\n"
+            f"**📋 Estatísticas:**\n"
+            f"• Mensagens para próximo level: ~{xp_for_next // XP_PER_MESSAGE:,}\n"
+            f"• Mensagens para próximo rank: ~{rank_xp_needed // XP_PER_MESSAGE:,}\n"
+            f"• XP por mensagem: {XP_PER_MESSAGE}",
+            color=current_rank['color']
+        )
+        
+        embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        logger.error(f"Erro no comando level: {e}")
+        embed = create_embed("❌ Erro", "Erro ao carregar informações de level.", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='top', aliases=['ranking'])
+async def top_users(ctx):
+    """Ranking geral do servidor"""
+    global_stats['commands_used'] += 1
+    
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Top XP
+            cursor.execute('SELECT user_id, xp, level FROM users ORDER BY xp DESC LIMIT 10')
+            top_xp = cursor.fetchall()
+            
+            # Top Coins
+            cursor.execute('SELECT user_id, coins, bank FROM users ORDER BY (coins + bank) DESC LIMIT 10')
+            top_coins = cursor.fetchall()
+            
+            conn.close()
+
+        embed = create_embed(
+            "🏆 Rankings do Servidor",
+            "Top usuários em diferentes categorias:",
+            color=0xffd700
+        )
+
+        # Top XP
+        xp_text = ""
+        for i, (user_id, xp, level) in enumerate(top_xp[:5]):
+            user = ctx.guild.get_member(user_id)
+            if user:
+                rank_id, rank_data = get_user_rank(xp)
+                medal = ["🥇", "🥈", "🥉", "4º", "5º"][i]
+                xp_text += f"{medal} {user.display_name} - {rank_data['emoji']} Lv.{level} ({xp:,} XP)\n"
+
+        if xp_text:
+            embed.add_field(name="⭐ Top XP/Level", value=xp_text, inline=True)
+
+        # Top Coins
+        coins_text = ""
+        for i, (user_id, coins, bank) in enumerate(top_coins[:5]):
+            user = ctx.guild.get_member(user_id)
+            if user:
+                total = coins + bank
+                medal = ["🥇", "🥈", "🥉", "4º", "5º"][i]
+                coins_text += f"{medal} {user.display_name} - {total:,} moedas\n"
+
+        if coins_text:
+            embed.add_field(name="💰 Top Economia", value=coins_text, inline=True)
+
+        embed.set_footer(text=f"Sua posição: #{await get_user_position(ctx.author.id, ctx.guild.id)} | Use RXleaderboard para ver mais")
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        logger.error(f"Erro no comando top: {e}")
+        embed = create_embed("❌ Erro", "Erro ao carregar rankings.", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='serverpic', aliases=['servericon'])
+async def server_picture(ctx):
+    """Mostra o ícone do servidor em alta resolução"""
+    global_stats['commands_used'] += 1
+    guild = ctx.guild
+
+    if not guild.icon:
+        embed = create_embed("❌ Sem ícone", "Este servidor não possui ícone!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    embed = create_embed(
+        f"🖼️ Ícone do {guild.name}",
+        f"[Clique aqui para ver em alta resolução]({guild.icon.url}?size=1024)",
+        color=0x7289da
+    )
+    embed.set_image(url=f"{guild.icon.url}?size=512")
+    await ctx.send(embed=embed)
+
+@bot.command(name='membercount', aliases=['members'])
+async def member_count(ctx):
+    """Contagem detalhada de membros"""
+    global_stats['commands_used'] += 1
+    guild = ctx.guild
+
+    total = guild.member_count
+    humans = len([m for m in guild.members if not m.bot])
+    bots = len([m for m in guild.members if m.bot])
+    
+    online = len([m for m in guild.members if m.status == discord.Status.online])
+    idle = len([m for m in guild.members if m.status == discord.Status.idle])
+    dnd = len([m for m in guild.members if m.status == discord.Status.dnd])
+    offline = len([m for m in guild.members if m.status == discord.Status.offline])
+
+    embed = create_embed(
+        f"👥 Membros do {guild.name}",
+        f"**📊 Total:** {total:,} membros\n\n"
+        f"**👤 Por tipo:**\n"
+        f"• Humanos: {humans:,}\n"
+        f"• Bots: {bots:,}\n\n"
+        f"**🟢 Por status:**\n"
+        f"• Online: {online:,}\n"
+        f"• Ausente: {idle:,}\n"
+        f"• Ocupado: {dnd:,}\n"
+        f"• Offline: {offline:,}",
+        color=0x7289da
+    )
+    
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name='roles', aliases=['cargos'])
+async def list_roles(ctx):
+    """Lista todos os cargos do servidor"""
+    global_stats['commands_used'] += 1
+    guild = ctx.guild
+    
+    roles = sorted(guild.roles, key=lambda r: r.position, reverse=True)
+    
+    # Dividir em páginas se necessário
+    roles_text = ""
+    for role in roles[:20]:  # Limite de 20 cargos
+        if role.name != "@everyone":
+            member_count = len(role.members)
+            roles_text += f"**{role.name}** - {member_count} membros\n"
+    
+    embed = create_embed(
+        f"🎭 Cargos do {guild.name}",
+        f"**Total:** {len(guild.roles)} cargos\n\n{roles_text}",
+        color=0x7289da
+    )
+    
+    if len(guild.roles) > 20:
+        embed.set_footer(text=f"Mostrando apenas os primeiros 20 cargos de {len(guild.roles)}")
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name='channels', aliases=['canais'])
+async def list_channels(ctx):
+    """Lista todos os canais do servidor"""
+    global_stats['commands_used'] += 1
+    guild = ctx.guild
+    
+    text_channels = len(guild.text_channels)
+    voice_channels = len(guild.voice_channels)
+    categories = len(guild.categories)
+    total = len(guild.channels)
+    
+    embed = create_embed(
+        f"📁 Canais do {guild.name}",
+        f"**📊 Resumo:**\n"
+        f"• Total: {total} canais\n"
+        f"• 💬 Texto: {text_channels}\n"
+        f"• 🔊 Voz: {voice_channels}\n"
+        f"• 📁 Categorias: {categories}\n\n"
+        f"**💬 Canais de texto:**\n" + 
+        "\n".join([f"• {channel.mention}" for channel in guild.text_channels[:10]]) +
+        (f"\n... e mais {text_channels - 10}" if text_channels > 10 else ""),
+        color=0x7289da
+    )
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name='version', aliases=['versao'])
+async def bot_version(ctx):
+    """Informações da versão do bot"""
+    global_stats['commands_used'] += 1
+    
+    embed = create_embed(
+        "🤖 RXbot - Informações de Versão",
+        f"""**🔖 Versão:** 2.1.0 (Estável Otimizada)
+**📅 Última atualização:** Janeiro 2025
+**🐍 Python:** {platform.python_version()}
+**📦 Discord.py:** {discord.__version__}
+**💻 Plataforma:** {platform.system()} {platform.release()}
+
+**🆕 Novidades da versão:**
+• ✅ Sistema de tickets com feedback corrigido
+• ✅ Sistema de fechamento de tickets melhorado
+• ✅ Comando RXinventario corrigido
+• ✅ Comandos faltando adicionados
+• ✅ Economia de recursos no Railway
+• ✅ Sistema de keep-alive otimizado
+
+**📊 Estatísticas:**
+• Uptime: {format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds()))}
+• Comandos: 300+ disponíveis
+• Sistemas: Tickets, Economia, Ranks, IA""",
+        color=0x00ff00
+    )
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name='id')
+async def get_id(ctx, user: discord.Member = None):
+    """Mostra o ID do usuário"""
+    global_stats['commands_used'] += 1
+    target = user or ctx.author
+    
+    embed = create_embed(
+        f"🆔 ID de {target.display_name}",
+        f"**ID do usuário:** `{target.id}`\n"
+        f"**Nome:** {target.name}#{target.discriminator}\n"
+        f"**Menção:** {target.mention}",
+        color=0x7289da
+    )
+    
+    embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
+    await ctx.send(embed=embed)
 
 # ============ COMANDOS DE TESTE ============
 @bot.command(name='diagnostico', aliases=['diag', 'health'])
@@ -3717,48 +4142,75 @@ async def comprar_item(ctx, item_id: int = None):
 @bot.command(name='inventario', aliases=['inventory', 'inv'])
 async def inventario(ctx, user: discord.Member = None):
     """Ver inventário de itens"""
+    global_stats['commands_used'] += 1
     target = user or ctx.author
-    user_data = get_user_data(target.id)
+    
+    try:
+        user_data = get_user_data(target.id)
 
-    if not user_data:
-        embed = create_embed("📦 Inventário vazio", f"{target.display_name} ainda não tem itens!", color=0xffaa00)
-        await ctx.send(embed=embed)
-        return
+        if not user_data:
+            update_user_data(target.id)
+            embed = create_embed("📦 Inventário vazio", f"{target.display_name} ainda não tem itens!", color=0xffaa00)
+            await ctx.send(embed=embed)
+            return
 
-    inventory_data = user_data[10]
-    inventory = json.loads(inventory_data) if inventory_data else {}
+        inventory_data = user_data[10] if len(user_data) > 10 else "{}"
+        inventory = json.loads(inventory_data) if inventory_data else {}
 
-    if not inventory:
-        embed = create_embed("📦 Inventário vazio", f"{target.display_name} ainda não tem itens!", color=0xffaa00)
-        await ctx.send(embed=embed)
-        return
+        if not inventory:
+            embed = create_embed("📦 Inventário vazio", f"{target.display_name} ainda não tem itens!", color=0xffaa00)
+            await ctx.send(embed=embed)
+            return
 
-    embed = create_embed(
-        f"🎒 Inventário de {target.display_name}",
-        "Seus itens comprados na loja:",
-        color=0x7289da
-    )
+        embed = create_embed(
+            f"🎒 Inventário de {target.display_name}",
+            "Seus itens comprados na loja:",
+            color=0x7289da
+        )
 
-    total_valor = 0
-    for item_id, quantidade in inventory.items():
-        if int(item_id) in LOJA_ITENS:
-            item = LOJA_ITENS[int(item_id)]
-            valor_total = item['preco'] * quantidade
-            total_valor += valor_total
+        total_valor = 0
+        items_added = 0
+        
+        for item_id, quantidade in inventory.items():
+            try:
+                item_id_int = int(item_id)
+                if item_id_int in LOJA_ITENS and items_added < 25:  # Limite de 25 campos no embed
+                    item = LOJA_ITENS[item_id_int]
+                    valor_total = item['preco'] * quantidade
+                    total_valor += valor_total
 
+                    embed.add_field(
+                        name=f"{item['emoji']} {item['nome']} (ID: {item_id})",
+                        value=f"**Quantidade:** {quantidade}\n**Valor:** {valor_total:,} moedas\n**Use:** `RXusar {item_id}`",
+                        inline=True
+                    )
+                    items_added += 1
+            except (ValueError, KeyError) as e:
+                logger.error(f"Erro ao processar item {item_id}: {e}")
+                continue
+
+        if items_added == 0:
             embed.add_field(
-                name=f"{item['emoji']} {item['nome']}",
-                value=f"**Quantidade:** {quantidade}\n**Valor:** {valor_total:,} moedas",
-                inline=True
+                name="❓ Itens não reconhecidos",
+                value="Você tem itens no inventário, mas eles não são válidos.",
+                inline=False
             )
 
-    embed.add_field(
-        name="💎 Valor Total do Inventário",
-        value=f"{total_valor:,} moedas",
-        inline=False
-    )
+        embed.add_field(
+            name="💎 Valor Total do Inventário",
+            value=f"{total_valor:,} moedas",
+            inline=False
+        )
+        
+        embed.set_footer(text=f"Use RXloja para ver itens disponíveis | Use RXusar <id> para usar itens")
+        embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
 
-    await ctx.send(embed=embed)
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        logger.error(f"Erro no comando inventario: {e}")
+        embed = create_embed("❌ Erro", "Erro ao carregar inventário. Tente novamente.", color=0xff0000)
+        await ctx.send(embed=embed)
 
 @bot.command(name='daritem', aliases=['giveitem', 'transferitem'])
 async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1):
@@ -4303,6 +4755,384 @@ async def set_custom_title(ctx, *, titulo=None):
     except Exception as e:
         logger.error(f"Erro ao definir título: {e}")
         embed = create_embed("❌ Erro", "Erro ao definir título!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+# ============ MAIS COMANDOS FALTANDO ============
+
+@bot.command(name='base64', aliases=['b64'])
+async def base64_encode(ctx, *, texto=None):
+    """Converter texto para base64"""
+    if not texto:
+        embed = create_embed("❌ Texto necessário", "Use: `RXbase64 Seu texto aqui`", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+    
+    try:
+        encoded = base64.b64encode(texto.encode('utf-8')).decode('utf-8')
+        embed = create_embed(
+            "🔐 Codificação Base64",
+            f"**Texto original:** {texto}\n**Base64:** `{encoded}`",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
+    except Exception as e:
+        embed = create_embed("❌ Erro", f"Erro ao codificar: {e}", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='hash', aliases=['md5'])
+async def generate_hash(ctx, *, texto=None):
+    """Gerar hash MD5 de um texto"""
+    if not texto:
+        embed = create_embed("❌ Texto necessário", "Use: `RXhash Seu texto aqui`", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+    
+    try:
+        md5_hash = hashlib.md5(texto.encode('utf-8')).hexdigest()
+        sha256_hash = hashlib.sha256(texto.encode('utf-8')).hexdigest()
+        
+        embed = create_embed(
+            "🔐 Hash do Texto",
+            f"**Texto:** {texto}\n**MD5:** `{md5_hash}`\n**SHA256:** `{sha256_hash[:32]}...`",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
+    except Exception as e:
+        embed = create_embed("❌ Erro", f"Erro ao gerar hash: {e}", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='bin', aliases=['binario'])
+async def text_to_binary(ctx, *, texto=None):
+    """Converter texto para binário"""
+    if not texto:
+        embed = create_embed("❌ Texto necessário", "Use: `RXbin Seu texto aqui`", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+    
+    try:
+        binary = ' '.join(format(ord(char), '08b') for char in texto)
+        if len(binary) > 1900:
+            binary = binary[:1900] + "..."
+        
+        embed = create_embed(
+            "🔢 Conversão para Binário",
+            f"**Texto:** {texto}\n**Binário:** `{binary}`",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
+    except Exception as e:
+        embed = create_embed("❌ Erro", f"Erro na conversão: {e}", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='hex', aliases=['hexadecimal'])
+async def text_to_hex(ctx, *, texto=None):
+    """Converter texto para hexadecimal"""
+    if not texto:
+        embed = create_embed("❌ Texto necessário", "Use: `RXhex Seu texto aqui`", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+    
+    try:
+        hex_text = texto.encode('utf-8').hex()
+        embed = create_embed(
+            "🔢 Conversão para Hexadecimal",
+            f"**Texto:** {texto}\n**Hexadecimal:** `{hex_text}`",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
+    except Exception as e:
+        embed = create_embed("❌ Erro", f"Erro na conversão: {e}", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='reverse', aliases=['inverter'])
+async def reverse_text(ctx, *, texto=None):
+    """Inverter texto"""
+    if not texto:
+        embed = create_embed("❌ Texto necessário", "Use: `RXreverse Seu texto aqui`", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+    
+    reversed_text = texto[::-1]
+    embed = create_embed(
+        "🔄 Texto Invertido",
+        f"**Original:** {texto}\n**Invertido:** {reversed_text}",
+        color=0x00ff00
+    )
+    await ctx.send(embed=embed)
+
+@bot.command(name='uppercase', aliases=['maiuscula'])
+async def text_uppercase(ctx, *, texto=None):
+    """Converter texto para maiúsculas"""
+    if not texto:
+        embed = create_embed("❌ Texto necessário", "Use: `RXuppercase Seu texto aqui`", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+    
+    upper_text = texto.upper()
+    embed = create_embed(
+        "🔤 TEXTO EM MAIÚSCULAS",
+        f"**Original:** {texto}\n**Maiúsculas:** {upper_text}",
+        color=0x00ff00
+    )
+    await ctx.send(embed=embed)
+
+@bot.command(name='lowercase', aliases=['minuscula'])
+async def text_lowercase(ctx, *, texto=None):
+    """Converter texto para minúsculas"""
+    if not texto:
+        embed = create_embed("❌ Texto necessário", "Use: `RXlowercase Seu texto aqui`", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+    
+    lower_text = texto.lower()
+    embed = create_embed(
+        "🔤 texto em minúsculas",
+        f"**Original:** {texto}\n**Minúsculas:** {lower_text}",
+        color=0x00ff00
+    )
+    await ctx.send(embed=embed)
+
+@bot.command(name='capitalize', aliases=['capitalizar'])
+async def text_capitalize(ctx, *, texto=None):
+    """Capitalizar primeira letra"""
+    if not texto:
+        embed = create_embed("❌ Texto necessário", "Use: `RXcapitalize seu texto aqui`", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+    
+    capitalized_text = texto.capitalize()
+    embed = create_embed(
+        "🔤 Texto Capitalizado",
+        f"**Original:** {texto}\n**Capitalizado:** {capitalized_text}",
+        color=0x00ff00
+    )
+    await ctx.send(embed=embed)
+
+@bot.command(name='password', aliases=['senha'])
+async def generate_password(ctx, tamanho: int = 12):
+    """Gerar senha segura"""
+    if tamanho < 4 or tamanho > 50:
+        embed = create_embed("❌ Tamanho inválido", "Use entre 4 e 50 caracteres", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+    
+    try:
+        characters = string.ascii_letters + string.digits + "!@#$%^&*"
+        password = ''.join(secrets.choice(characters) for _ in range(tamanho))
+        
+        embed = create_embed(
+            "🔐 Senha Gerada",
+            f"**Tamanho:** {tamanho} caracteres\n**Senha:** `{password}`\n\n"
+            f"⚠️ **Guarde em local seguro!**",
+            color=0x00ff00
+        )
+        
+        # Tentar enviar por DM também
+        try:
+            await ctx.author.send(embed=embed)
+            public_embed = create_embed(
+                "✅ Senha enviada!",
+                f"Sua senha de {tamanho} caracteres foi enviada por DM para segurança!",
+                color=0x00ff00
+            )
+            await ctx.send(embed=public_embed, delete_after=10)
+        except:
+            await ctx.send(embed=embed, delete_after=30)
+            
+    except Exception as e:
+        embed = create_embed("❌ Erro", f"Erro ao gerar senha: {e}", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='qr')
+async def generate_qr(ctx, *, texto=None):
+    """Gerar QR Code (placeholder)"""
+    if not texto:
+        embed = create_embed("❌ Texto necessário", "Use: `RXqr Seu texto aqui`", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+    
+    # Usar serviço online para QR code
+    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=400x400&data={quote(texto)}"
+    
+    embed = create_embed(
+        "📱 QR Code Gerado",
+        f"**Texto:** {texto}\n[Clique aqui para ver o QR Code]({qr_url})",
+        color=0x00ff00
+    )
+    embed.set_image(url=qr_url)
+    await ctx.send(embed=embed)
+
+@bot.command(name='createtime', aliases=['tempocriacaotime'])
+async def account_creation_time(ctx, user: discord.Member = None):
+    """Data de criação da conta"""
+    target = user or ctx.author
+    
+    created_timestamp = int(target.created_at.timestamp())
+    
+    embed = create_embed(
+        f"📅 Criação da conta de {target.display_name}",
+        f"**Conta criada em:** <t:{created_timestamp}:F>\n"
+        f"**Há:** <t:{created_timestamp}:R>\n"
+        f"**Timestamp:** {created_timestamp}",
+        color=0x7289da
+    )
+    
+    embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
+    await ctx.send(embed=embed)
+
+@bot.command(name='warn', aliases=['advertir'])
+@commands.has_permissions(manage_messages=True)
+async def warn_user(ctx, user: discord.Member, *, motivo="Sem motivo especificado"):
+    """Dar advertência a um usuário"""
+    if user == ctx.author:
+        embed = create_embed("❌ Impossível", "Você não pode se advertir!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+    
+    if user.top_role >= ctx.author.top_role:
+        embed = create_embed("❌ Sem permissão", "Você não pode advertir este usuário!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+    
+    try:
+        # Buscar warns atuais
+        user_data = get_user_data(user.id)
+        if not user_data:
+            update_user_data(user.id)
+            current_warns = 0
+        else:
+            current_warns = user_data[15] if len(user_data) > 15 else 0
+        
+        new_warns = current_warns + 1
+        
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Atualizar warns
+            cursor.execute('UPDATE users SET warnings = ? WHERE user_id = ?', (new_warns, user.id))
+            
+            # Registrar no log de moderação
+            cursor.execute('''
+                INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (ctx.guild.id, user.id, ctx.author.id, 'warn', motivo))
+            
+            conn.commit()
+            conn.close()
+        
+        embed = create_embed(
+            "⚠️ Advertência Aplicada",
+            f"**Usuário:** {user.mention}\n"
+            f"**Motivo:** {motivo}\n"
+            f"**Moderador:** {ctx.author.mention}\n"
+            f"**Total de warns:** {new_warns}",
+            color=0xff6600
+        )
+        await ctx.send(embed=embed)
+        
+        # Notificar usuário
+        try:
+            dm_embed = create_embed(
+                "⚠️ Você recebeu uma advertência",
+                f"**Servidor:** {ctx.guild.name}\n"
+                f"**Motivo:** {motivo}\n"
+                f"**Moderador:** {ctx.author.name}\n"
+                f"**Total de advertências:** {new_warns}",
+                color=0xff6600
+            )
+            await user.send(embed=dm_embed)
+        except:
+            pass
+            
+    except Exception as e:
+        logger.error(f"Erro ao aplicar warn: {e}")
+        embed = create_embed("❌ Erro", "Erro ao aplicar advertência!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='warns', aliases=['warnings'])
+async def check_warns(ctx, user: discord.Member = None):
+    """Ver advertências de um usuário"""
+    target = user or ctx.author
+    
+    try:
+        user_data = get_user_data(target.id)
+        if not user_data:
+            warns = 0
+        else:
+            warns = user_data[15] if len(user_data) > 15 else 0
+        
+        embed = create_embed(
+            f"⚠️ Advertências de {target.display_name}",
+            f"**Total de advertências:** {warns}\n"
+            f"**Status:** {'🔴 Muitas advertências' if warns >= 5 else '🟡 Algumas advertências' if warns >= 3 else '🟢 Poucas advertências'}",
+            color=0xff0000 if warns >= 5 else 0xff6600 if warns >= 3 else 0x00ff00
+        )
+        
+        embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        logger.error(f"Erro ao verificar warns: {e}")
+        embed = create_embed("❌ Erro", "Erro ao verificar advertências!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='kick', aliases=['expulsar'])
+@commands.has_permissions(kick_members=True)
+async def kick_member(ctx, member: discord.Member, *, reason="Sem motivo especificado"):
+    """Expulsar um membro"""
+    if member == ctx.author:
+        embed = create_embed("❌ Impossível", "Você não pode se expulsar!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    if member.top_role >= ctx.author.top_role:
+        embed = create_embed("❌ Sem permissão", "Você não pode expulsar este membro!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    try:
+        # Notificar antes de expulsar
+        try:
+            dm_embed = create_embed(
+                "👢 Você foi expulso",
+                f"**Servidor:** {ctx.guild.name}\n"
+                f"**Motivo:** {reason}\n"
+                f"**Moderador:** {ctx.author.name}",
+                color=0xff6600
+            )
+            await member.send(embed=dm_embed)
+        except:
+            pass
+
+        await member.kick(reason=reason)
+
+        embed = create_embed(
+            "👢 Membro Expulso!",
+            f"**Usuário:** {member.name}#{member.discriminator}\n"
+            f"**Motivo:** {reason}\n"
+            f"**Moderador:** {ctx.author.mention}",
+            color=0xff6600
+        )
+        await ctx.send(embed=embed)
+
+        # Log da moderação
+        try:
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (ctx.guild.id, member.id, ctx.author.id, 'kick', reason))
+                conn.commit()
+                conn.close()
+        except Exception as e:
+            logger.error(f"Erro ao salvar log de moderação: {e}")
+
+    except Exception as e:
+        logger.error(f"Erro ao expulsar membro: {e}")
+        embed = create_embed("❌ Erro", f"Erro ao expulsar membro: {str(e)[:100]}", color=0xff0000)
         await ctx.send(embed=embed)
 
 # ============ COMANDOS DE ADMINISTRAÇÃO AVANÇADOS ============
