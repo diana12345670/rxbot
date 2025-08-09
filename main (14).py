@@ -5185,8 +5185,16 @@ async def start_bot():
 
     # Último recurso: forçar restart do processo
     import sys
-    logger.error("💀 Forçando exit do processo...")
-    sys.exit(1)
+    logger.error("💀 Erro crítico detectado! Iniciando tentativa de restart...")
+
+    try:
+        await bot.close()
+        await asyncio.sleep(5)
+        logger.info("🔄 Reiniciando conexão do bot...")
+        asyncio.create_task(bot.start(TOKEN))
+    except Exception as e:
+        logger.error(f"Falha ao reiniciar o bot: {e}")
+
 
 def run_flask():
     """Executa servidor Flask otimizado"""
