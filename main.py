@@ -1,4 +1,5 @@
 CHANNEL_ID_ALERTA = 1402658677923774615
+CHANNEL_ID_TESTE_TIER = 1400162532055846932
 import discord
 from discord.ext import commands, tasks
 import asyncio
@@ -18,7 +19,6 @@ from dataclasses import dataclass
 from collections import defaultdict, deque
 import threading
 import subprocess
-import psutil
 import platform
 import sys
 import gc
@@ -28,23 +28,69 @@ import uuid
 import secrets
 import string
 import csv
-import xml.etree.ElementTree as ET
-import yaml
 from datetime import timedelta
 import calendar
-import locale
-import pytz
 from urllib.parse import quote, unquote
 import base64
-import zlib
-import gzip
 import tempfile
 import shutil
-import zipfile
-import tarfile
-import mimetypes
-import email.utils
 import hmac
+
+# Imports opcionais que podem não estar disponíveis
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+try:
+    import xml.etree.ElementTree as ET
+except ImportError:
+    ET = None
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+try:
+    import locale
+except ImportError:
+    locale = None
+
+try:
+    import pytz
+except ImportError:
+    pytz = None
+
+try:
+    import zlib
+except ImportError:
+    zlib = None
+
+try:
+    import gzip
+except ImportError:
+    gzip = None
+
+try:
+    import zipfile
+except ImportError:
+    zipfile = None
+
+try:
+    import tarfile
+except ImportError:
+    tarfile = None
+
+try:
+    import mimetypes
+except ImportError:
+    mimetypes = None
+
+try:
+    import email.utils
+except ImportError:
+    pass
 from flask import Flask
 from threading import Thread
 
@@ -56,9 +102,11 @@ def home():
 
 @app.route('/status')
 def status():
+    if not bot.is_ready():
+        return {"status": "carregando..."}
     """Endpoint detalhado para monitoramento"""
     uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
-    
+
     status_data = {
         "status": "online",
         "bot_name": "RXbot",
@@ -71,7 +119,7 @@ def status():
         "messages_processed": global_stats['messages_processed'],
         "timestamp": datetime.datetime.now().isoformat()
     }
-    
+
     return status_data
 
 @app.route('/ping')
@@ -84,12 +132,304 @@ def health():
     """Health check endpoint"""
     return {"healthy": True, "timestamp": datetime.datetime.now().isoformat()}
 
+@app.route('/monitor')
+def monitor():
+    """Endpoint específico para UptimeRobot com mais detalhes"""
+    try:
+        if not bot.is_ready():
+            return {"status": "starting", "ready": False}, 503
+
+        uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
+
+        return {
+            "status": "online",
+            "ready": True,
+            "uptime_seconds": uptime_seconds,
+            "latency_ms": round(bot.latency * 1000, 2),
+            "guilds": len(bot.guilds),
+            "users": len(set(bot.get_all_members())),
+            "timestamp": datetime.datetime.now().isoformat(),
+            "version": "2.0.0",
+            "keep_alive": "active"
+        }
+    except Exception as e:
+        logger.error(f"Erro no endpoint monitor: {e}")
+        return {"status": "error", "error": str(e)}, 500
+
+@app.route('/keepalive')
+def keepalive():
+    """Endpoint específico para manter ativo"""
+    return {
+        "status": "alive",
+        "timestamp": datetime.datetime.now().isoformat(),
+        "bot_ready": bot.is_ready() if 'bot' in globals() else False,
+        "uptime": format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())),
+        "auto_ping": "active"
+    }
+
+@app.route('/force-alive')
+def force_alive():
+    """Endpoint para forçar que o bot permaneça ativo"""
+    return {
+        "forced_alive": True,
+        "timestamp": datetime.datetime.now().isoformat(),
+        "message": "Keep-alive forçado com sucesso!",
+        "bot_status": "online" if bot.is_ready() else "starting"
+    }
+
+@app.route('/heartbeat')
+def heartbeat():
+    """Endpoint de heartbeat para monitoramento externo"""
+    return {
+        "heartbeat": "alive",
+        "timestamp": datetime.datetime.now().isoformat(),
+        "bot_online": bot.is_ready(),
+        "guild_count": len(bot.guilds) if bot.is_ready() else 0
+    }
+
 def run():
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=8080, threaded=True)
 
 def keep_alive():
-    t = Thread(target=run)
+    t = Thread(target=run, daemon=True)
     t.start()
+
+# Sistema de auto-ping ULTRA AGRESSIVO para nunca hibernar
+async def auto_ping():
+    """Sistema de auto-ping otimizado para nunca hibernar"""
+    import aiohttp
+    consecutive_failures = 0
+    max_failures = 2  # Reduzido para resposta mais rápida
+    ping_count = 0
+
+    while True:
+        try:
+            # Ping mais frequente: 25 segundos
+            await asyncio.sleep(25)
+            ping_count += 1
+
+            success = False
+            # Usar timeout mais baixo e conexão mais rápida
+            timeout = aiohttp.ClientTimeout(total=5, connect=2)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                # Endpoints prioritários primeiro
+                priority_endpoints = ['/ping', '/keepalive', '/force-alive']
+
+                for endpoint in priority_endpoints:
+                    try:
+                        async with session.get(f'http://0.0.0.0:8080{endpoint}') as response:
+                            if response.status == 200:
+                                logger.info(f"✅ Auto-ping #{ping_count} {endpoint} OK")
+                                success = True
+                                consecutive_failures = 0
+                                break
+                    except Exception as e:
+                        logger.debug(f"Endpoint {endpoint} falhou: {e}")
+                        continue
+
+                # Se falhou, tentar endpoints secundários
+                if not success:
+                    secondary_endpoints = ['/status', '/health', '/monitor', '/heartbeat']
+                    for endpoint in secondary_endpoints:
+                        try:
+                            async with session.get(f'http://0.0.0.0:8080{endpoint}') as response:
+                                if response.status == 200:
+                                    logger.info(f"✅ Auto-ping #{ping_count} {endpoint} OK (secondary)")
+                                    success = True
+                                    consecutive_failures = 0
+                                    break
+                        except:
+                            continue
+
+                # Último recurso: localhost
+                if not success:
+                    try:
+                        async with session.get('http://127.0.0.1:8080/ping') as response:
+                            if response.status == 200:
+                                logger.info(f"✅ Auto-ping #{ping_count} localhost OK")
+                                success = True
+                                consecutive_failures = 0
+                    except:
+                        pass
+
+                if not success:
+                    consecutive_failures += 1
+                    logger.error(f"🚨 Auto-ping #{ping_count} FALHOU! ({consecutive_failures}/{max_failures})")
+
+                    # Recuperação mais agressiva
+                    if consecutive_failures >= max_failures:
+                        logger.error("💀 RECUPERAÇÃO CRÍTICA!")
+
+                        # Limpeza de memória
+                        import gc
+                        gc.collect()
+
+                        # Múltiplas tentativas de recuperação simultâneas
+                        recovery_tasks = []
+                        for i in range(3):
+                            task = session.get('http://0.0.0.0:8080/force-alive')
+                            recovery_tasks.append(task)
+
+                        try:
+                            results = await asyncio.gather(*recovery_tasks, return_exceptions=True)
+                            recovery_success = any(hasattr(r, 'status') and r.status == 200 for r in results)
+
+                            if recovery_success:
+                                logger.info("🆘 Recuperação simultânea OK!")
+                                success = True
+                                consecutive_failures = 0
+                        except:
+                            pass
+
+        except Exception as e:
+            logger.error(f"❌ Erro CRÍTICO no auto-ping: {e}")
+            # Forçar garbage collection em caso de erro
+            import gc
+            gc.collect()
+            await asyncio.sleep(3)
+
+async def external_keepalive():
+    """Sistema de keep-alive externo otimizado"""
+    import aiohttp
+    ping_count = 0
+
+    while True:
+        try:
+            # A cada 2 minutos (equilibrio ideal)
+            await asyncio.sleep(120)
+            ping_count += 1
+
+            async with aiohttp.ClientSession() as session:
+                endpoints_to_try = [
+                    'http://0.0.0.0:8080/force-alive',
+                    'http://0.0.0.0:8080/monitor',
+                    'http://0.0.0.0:8080/keepalive', 
+                    'http://0.0.0.0:8080/ping',
+                    'http://0.0.0.0:8080/status',
+                    'http://0.0.0.0:8080/heartbeat'
+                ]
+
+                success_count = 0
+                for endpoint in endpoints_to_try:
+                    try:
+                        async with session.get(endpoint, timeout=8) as response:
+                            if response.status == 200:
+                                success_count += 1
+                                logger.info(f"🌐 Keep-alive externo #{ping_count} OK via {endpoint}")
+
+                                # Simular atividade MAIS INTENSA
+                                await asyncio.sleep(0.3)
+
+                                # Fazer requests adicionais para simular tráfego real
+                                try:
+                                    await asyncio.gather(
+                                        session.get('http://0.0.0.0:8080/', timeout=2),
+                                        session.get('http://0.0.0.0:8080/status', timeout=2),
+                                        return_exceptions=True
+                                    )
+                                except:
+                                    pass
+
+                                if success_count >= 2:  # Se 2+ endpoints OK, parar
+                                    break
+                    except Exception as e:
+                        logger.debug(f"Endpoint externo {endpoint} falhou: {e}")
+                        continue
+
+                if success_count == 0:
+                    logger.error(f"🚨 Keep-alive externo #{ping_count} FALHOU TOTALMENTE!")
+
+                    # Sistema de recuperação AGRESSIVO
+                    recovery_attempts = 0
+                    while recovery_attempts < 5 and success_count == 0:
+                        recovery_attempts += 1
+                        logger.warning(f"🆘 Tentativa de recuperação #{recovery_attempts}/5")
+
+                        fallback_endpoints = [
+                            'http://127.0.0.1:8080/ping',
+                            'http://localhost:8080/ping',
+                            'http://0.0.0.0:8080/force-alive'
+                        ]
+
+                        for endpoint in fallback_endpoints:
+                            try:
+                                async with session.get(endpoint, timeout=3) as response:
+                                    if response.status == 200:
+                                        logger.info(f"🆘 Recuperação via {endpoint} SUCESSO!")
+                                        success_count = 1
+                                        break
+                            except:
+                                continue
+
+                        if success_count == 0:
+                            await asyncio.sleep(2)
+
+                    if success_count == 0:
+                        logger.error("💀 TODOS OS SISTEMAS DE RECUPERAÇÃO FALHARAM!")
+
+        except Exception as e:
+            logger.error(f"❌ Keep-alive externo crítico: {e}")
+            await asyncio.sleep(20)  # Espera menor para recuperação mais rápida
+
+async def heartbeat_system():
+    """Sistema de heartbeat otimizado para máxima disponibilidade"""
+    import aiohttp
+    heartbeat_count = 0
+
+    while True:
+        try:
+            # Heartbeat a cada 3 minutos (equilibrio perfeito)
+            await asyncio.sleep(180)
+            heartbeat_count += 1
+
+            # Simular atividade REAL do bot
+            if bot.is_ready():
+                # Atualizar status para simular atividade
+                try:
+                    activity_types = [
+                        discord.ActivityType.watching,
+                        discord.ActivityType.listening,
+                        discord.ActivityType.playing
+                    ]
+
+                    await bot.change_presence(
+                        status=discord.Status.online,
+                        activity=discord.Activity(
+                            type=random.choice(activity_types),
+                            name=f"Heartbeat #{heartbeat_count} | Online 24/7"
+                        )
+                    )
+                    logger.info(f"💓 Heartbeat #{heartbeat_count} + Status atualizado")
+
+                    # Fazer atividade adicional para simular uso real
+                    await asyncio.sleep(1)
+
+                except Exception as e:
+                    logger.debug(f"Erro no status heartbeat: {e}")
+
+            # Ping triplo via HTTP para garantir
+            ping_success = 0
+            try:
+                async with aiohttp.ClientSession() as session:
+                    endpoints = ['/health', '/heartbeat', '/ping']
+                    for endpoint in endpoints:
+                        try:
+                            async with session.get(f'http://0.0.0.0:8080{endpoint}', timeout=5) as response:
+                                if response.status == 200:
+                                    ping_success += 1
+                                    logger.debug(f"💓 HTTP heartbeat #{heartbeat_count} {endpoint} OK")
+                        except:
+                            continue
+
+                    if ping_success == 0:
+                        logger.warning(f"⚠️ Heartbeat #{heartbeat_count} HTTP falhou!")
+
+            except Exception as e:
+                logger.debug(f"Erro no HTTP heartbeat: {e}")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Heartbeat system crítico: {e}")
+            await asyncio.sleep(60)  # Espera menor para recuperação mais rápida
 
 # Configuração do logging avançado
 logging.basicConfig(
@@ -245,6 +585,39 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''')
 
+            # Sistema de Clans
+            cursor.execute('''CREATE TABLE IF NOT EXISTS clans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER,
+                name TEXT,
+                tag TEXT,
+                leader_id INTEGER,
+                description TEXT,
+                members TEXT DEFAULT '[]',
+                level INTEGER DEFAULT 1,
+                xp INTEGER DEFAULT 0,
+                wins INTEGER DEFAULT 0,
+                losses INTEGER DEFAULT 0,
+                treasury INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+
+            # Desafios entre Clans
+            cursor.execute('''CREATE TABLE IF NOT EXISTS clan_challenges (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER,
+                challenger_clan_id INTEGER,
+                challenged_clan_id INTEGER,
+                challenger_user_id INTEGER,
+                challenge_type TEXT,
+                bet_amount INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'pending',
+                start_time TIMESTAMP,
+                end_time TIMESTAMP,
+                winner_clan_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+
             # Reminders
             cursor.execute('''CREATE TABLE IF NOT EXISTS reminders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -263,13 +636,12 @@ def init_database():
                 channel_id INTEGER,
                 creator_id INTEGER,
                 title TEXT,
-                description TEXT,
                 prize TEXT,
                 winners_count INTEGER DEFAULT 1,
                 end_time TIMESTAMP,
+                message_id INTEGER,
                 participants TEXT DEFAULT '[]',
                 status TEXT DEFAULT 'active',
-                message_id INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''')
 
@@ -284,6 +656,35 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''')
 
+            # Tabela de eventos de clan
+            cursor.execute('''CREATE TABLE IF NOT EXISTS clan_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER,
+                creator_id INTEGER,
+                clan1 TEXT,
+                clan2 TEXT,
+                event_type TEXT,
+                bet_amount INTEGER,
+                end_time TIMESTAMP,
+                message_id INTEGER,
+                participants TEXT DEFAULT '[]',
+                bets TEXT DEFAULT '{}',
+                status TEXT DEFAULT 'active',
+                winner_clan TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+
+            # Tabela de feedback de tickets
+            cursor.execute('''CREATE TABLE IF NOT EXISTS ticket_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_channel_id INTEGER,
+                user_id INTEGER,
+                feedback_text TEXT,
+                notas TEXT,
+                media_nota INTEGER,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+
             conn.commit()
             logger.info("✅ Database initialized successfully!")
 
@@ -292,6 +693,171 @@ def init_database():
         finally:
             if conn:
                 conn.close()
+
+# Sistema EXTREMO anti-hibernação - Último recurso
+async def extreme_anti_hibernation():
+    """Sistema EXTREMO que impede hibernação usando múltiplas estratégias"""
+    count = 0
+
+    while True:
+        try:
+            await asyncio.sleep(45)  # A cada 45 segundos
+            count += 1
+
+            # Estratégia 1: Atividade de rede agressiva
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    # Fazer múltiplos requests simultâneos
+                    tasks = []
+                    endpoints = ['/ping', '/keepalive', '/monitor', '/force-alive']
+
+                    for endpoint in endpoints:
+                        task = session.get(f'http://0.0.0.0:8080{endpoint}', timeout=2)
+                        tasks.append(task)
+
+                    # Executar todos em paralelo
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    success_count = sum(1 for r in results if hasattr(r, 'status') and r.status == 200)
+
+                    logger.info(f"🔥 Anti-hibernação extrema #{count}: {success_count}/{len(endpoints)} OK")
+
+                    # Fechar responses
+                    for result in results:
+                        if hasattr(result, 'close'):
+                            await result.close()
+
+            except Exception as e:
+                logger.debug(f"Erro na atividade de rede: {e}")
+
+            # Estratégia 2: Atividade de CPU para simular processamento
+            try:
+                # Simular processamento leve
+                _ = sum(i * 2 for i in range(1000))
+
+                # Garbage collection forçado periodicamente
+                if count % 10 == 0:
+                    import gc
+                    gc.collect()
+                    logger.info(f"🧹 Limpeza de memória #{count // 10}")
+
+            except Exception as e:
+                logger.debug(f"Erro na atividade de CPU: {e}")
+
+            # Estratégia 3: Atualizar status do bot para simular atividade
+            try:
+                if bot.is_ready() and count % 6 == 0:  # A cada ~4.5 minutos
+                    activities = [
+                        f"🔥 Sistema anti-hibernação #{count}",
+                        f"💪 Uptime: {format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds()))}",
+                        f"🚀 {len(bot.guilds)} servidores | {len(set(bot.get_all_members()))} usuários",
+                        f"⚡ Ultra-proteção ativa #{count}",
+                        f"🛡️ Sistema imortal online"
+                    ]
+
+                    await bot.change_presence(
+                        status=discord.Status.online,
+                        activity=discord.Activity(
+                            type=discord.ActivityType.watching,
+                            name=random.choice(activities)
+                        )
+                    )
+                    logger.info(f"🎭 Status atualizado para atividade #{count}")
+
+            except Exception as e:
+                logger.debug(f"Erro na atualização de status: {e}")
+
+        except Exception as e:
+            logger.error(f"❌ Erro no sistema anti-hibernação extremo: {e}")
+            await asyncio.sleep(10)
+
+# Monitor de sistema de emergência com auto-restart
+async def emergency_system_monitor():
+    """Monitor de emergência que pode reiniciar sistemas críticos"""
+    monitor_count = 0
+    critical_failures = 0
+
+    while True:
+        try:
+            await asyncio.sleep(180)  # A cada 3 minutos
+            monitor_count += 1
+
+            logger.info(f"🔍 Monitor de emergência #{monitor_count}")
+
+            # Verificar se Flask está respondendo
+            flask_ok = False
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.get('http://0.0.0.0:8080/ping', timeout=5) as response:
+                        if response.status == 200:
+                            flask_ok = True
+            except:
+                pass
+
+            # Verificar se bot está conectado
+            bot_ok = bot.is_ready()
+
+            # Verificar latência
+            latency_ok = bot.latency < 10.0 if bot_ok else False
+
+            # Avaliar estado geral
+            systems_ok = sum([flask_ok, bot_ok, latency_ok])
+
+            if systems_ok >= 2:
+                logger.info(f"✅ Monitor #{monitor_count}: {systems_ok}/3 sistemas OK")
+                critical_failures = 0
+            else:
+                critical_failures += 1
+                logger.error(f"🚨 Monitor #{monitor_count}: APENAS {systems_ok}/3 sistemas OK! (Falha #{critical_failures})")
+
+                # Se muitas falhas consecutivas, ações drásticas
+                if critical_failures >= 3:
+                    logger.error("💀 EMERGÊNCIA CRÍTICA! Executando recuperação total...")
+
+                    try:
+                        # Força garbage collection agressivo
+                        import gc
+                        gc.collect()
+
+                        # Tentar "acordar" o sistema com requests externos
+                        import requests
+                        for i in range(5):
+                            try:
+                                requests.get('http://0.0.0.0:8080/force-alive', timeout=3)
+                                await asyncio.sleep(1)
+                            except:
+                                pass
+
+                        # Notificar canal de alerta se possível
+                        if bot.is_ready():
+                            try:
+                                channel = bot.get_channel(CHANNEL_ID_ALERTA)
+                                if channel:
+                                    embed = create_embed(
+                                        "🚨 EMERGÊNCIA CRÍTICA DETECTADA",
+                                        f"Sistema de emergência acionado!\n"
+                                        f"**Monitor:** #{monitor_count}\n"
+                                        f"**Falhas consecutivas:** {critical_failures}\n"
+                                        f"**Flask OK:** {'✅' if flask_ok else '❌'}\n"
+                                        f"**Bot OK:** {'✅' if bot_ok else '❌'}\n"
+                                        f"**Latência OK:** {'✅' if latency_ok else '❌'}\n"
+                                        f"**Recuperação:** Iniciada automaticamente",
+                                        color=0xff0000
+                                    )
+                                    await channel.send(embed=embed)
+                            except:
+                                pass
+
+                        logger.info("🆘 Recuperação de emergência executada!")
+                        critical_failures = 0
+
+                    except Exception as e:
+                        logger.error(f"Erro na recuperação de emergência: {e}")
+
+        except Exception as e:
+            logger.error(f"❌ Erro no monitor de emergência: {e}")
+            await asyncio.sleep(30)
 
 # Initialize database
 init_database()
@@ -330,6 +896,32 @@ CRIME_COOLDOWN = 14400
 XP_PER_MESSAGE = 5
 XP_MULTIPLIER = 1.2
 
+# Sistema de Ranks - XP necessário para cada rank
+RANK_SYSTEM = {
+    1: {"name": "Novato", "xp": 0, "emoji": "🌱", "color": 0x808080},
+    2: {"name": "Iniciante", "xp": 500, "emoji": "🔰", "color": 0x00ff00},
+    3: {"name": "Aprendiz", "xp": 1500, "emoji": "📚", "color": 0x0099ff},
+    4: {"name": "Experiente", "xp": 3500, "emoji": "⭐", "color": 0xffaa00},
+    5: {"name": "Veterano", "xp": 7000, "emoji": "🎖️", "color": 0xff6600},
+    6: {"name": "Elite", "xp": 15000, "emoji": "💎", "color": 0x00ffff},
+    7: {"name": "Mestre", "xp": 30000, "emoji": "👑", "color": 0xffd700},
+    8: {"name": "Grão-Mestre", "xp": 60000, "emoji": "🏆", "color": 0xff0080},
+    9: {"name": "Lenda", "xp": 120000, "emoji": "🌟", "color": 0x8000ff},
+    10: {"name": "Divino", "xp": 250000, "emoji": "✨", "color": 0xff00ff},
+    11: {"name": "Transcendente", "xp": 500000, "emoji": "🌠", "color": 0x00ff80},
+    12: {"name": "Imortal", "xp": 1000000, "emoji": "🔥", "color": 0xff4000}
+}
+
+def get_user_rank(xp):
+    """Determina o rank baseado no XP"""
+    current_rank = 1
+    for rank_id, rank_data in RANK_SYSTEM.items():
+        if xp >= rank_data["xp"]:
+            current_rank = rank_id
+        else:
+            break
+    return current_rank, RANK_SYSTEM[current_rank]
+
 # Palavras que geram warn automático
 AUTO_WARN_WORDS = [
     'spam', 'flood', 'hack', 'cheat', 'trapaça',
@@ -351,101 +943,7 @@ class AdvancedAI:
             'sorteio': ['sorteio', 'giveaway', 'concurso', 'prêmio', 'ganhar'],
             'tecnologia': ['programação', 'código', 'python', 'javascript', 'html', 'css'],
             'games': ['minecraft', 'fortnite', 'lol', 'valorant', 'csgo', 'free fire'],
-            'música': ['música', 'cantando', 'banda', 'artista', 'som', 'playlist'],
-            'escola': ['escola', 'estudar', 'prova', 'trabalho', 'faculdade', 'universidade'],
-            'trabalho': ['trabalho', 'emprego', 'carreira', 'profissão', 'salário'],
-            'relacionamento': ['amor', 'namorado', 'namorada', 'crush', 'paquera', 'relacionamento'],
-            'saúde': ['saúde', 'exercício', 'academia', 'dieta', 'médico', 'remédio'],
-            'esporte': ['futebol', 'basquete', 'vôlei', 'natação', 'corrida', 'esporte'],
-            'comida': ['comida', 'receita', 'cozinhar', 'restaurante', 'pizza', 'hambúrguer'],
-            'filme': ['filme', 'cinema', 'série', 'netflix', 'anime', 'desenho'],
-            'anime': ['anime', 'manga', 'otaku', 'naruto', 'one piece', 'dragon ball'],
-            'meme': ['meme', 'engraçado', 'piada', 'humor', 'rir', 'zoeira'],
-            'clima': ['tempo', 'clima', 'chuva', 'sol', 'frio', 'calor'],
-            'viagem': ['viagem', 'viajar', 'férias', 'turismo', 'praia', 'cidade'],
-            'dinheiro': ['dinheiro', 'economia', 'investir', 'poupança', 'gasto'],
-            'pet': ['pet', 'cachorro', 'gato', 'animal', 'bicho'],
-            'arte': ['arte', 'desenho', 'pintura', 'criatividade', 'artista'],
-            'livro': ['livro', 'ler', 'literatura', 'história', 'romance'],
-            'ciência': ['ciência', 'física', 'química', 'biologia', 'matemática'],
-            'espaço': ['espaço', 'planeta', 'estrela', 'universo', 'nasa'],
-            'história': ['história', 'passado', 'guerra', 'antigo', 'época'],
-            'política': ['política', 'governo', 'eleição', 'presidente', 'democracia'],
-            'religião': ['deus', 'igreja', 'fé', 'religião', 'oração'],
-            'filosofia': ['filosofia', 'pensamento', 'vida', 'existência', 'reflexão'],
-            'psicologia': ['psicologia', 'mente', 'comportamento', 'emoção', 'sentimento'],
-            'internet': ['internet', 'rede social', 'instagram', 'tiktok', 'youtube'],
-            'moda': ['moda', 'roupa', 'estilo', 'look', 'fashion'],
-            'beleza': ['beleza', 'cabelo', 'maquiagem', 'pele', 'cuidado'],
-            'natureza': ['natureza', 'árvore', 'floresta', 'mar', 'rio'],
-            'ecologia': ['ecologia', 'meio ambiente', 'reciclagem', 'sustentabilidade'],
-            'carros': ['carro', 'moto', 'veículo', 'dirigir', 'velocidade'],
-            'casa': ['casa', 'quarto', 'decoração', 'móveis', 'limpeza'],
-            'família': ['família', 'pai', 'mãe', 'irmão', 'irmã', 'parente'],
-            'amizade': ['amigo', 'amizade', 'melhor amigo', 'companheiro'],
-            'festa': ['festa', 'aniversário', 'celebração', 'comemoração'],
-            'hobbies': ['hobby', 'passatempo', 'coleção', 'artesanato'],
-            'profissões': ['médico', 'professor', 'engenheiro', 'advogado', 'programador'],
-            'instrumentos': ['violão', 'piano', 'guitarra', 'bateria', 'instrumento'],
-            'cores': ['cor', 'azul', 'vermelho', 'verde', 'amarelo', 'roxo'],
-            'números': ['número', 'matemática', 'conta', 'calcular', 'estatística'],
-            'tempo': ['tempo', 'hora', 'minuto', 'segundo', 'relógio'],
-            'idiomas': ['idioma', 'inglês', 'espanhol', 'francês', 'alemão'],
-            'países': ['país', 'brasil', 'eua', 'japão', 'frança', 'alemanha'],
-            'cidades': ['cidade', 'são paulo', 'rio de janeiro', 'nova york'],
-            'transporte': ['ônibus', 'metrô', 'avião', 'trem', 'uber'],
-            'compras': ['comprar', 'loja', 'shopping', 'preço', 'desconto'],
-            'social': ['sociedade', 'comunidade', 'pessoas', 'grupo', 'equipe'],
-            'personalidade': ['personalidade', 'caráter', 'jeito', 'modo', 'forma'],
-            'objetivos': ['objetivo', 'meta', 'sonho', 'plano', 'futuro'],
-            'problemas': ['problema', 'dificuldade', 'desafio', 'obstáculo'],
-            'soluções': ['solução', 'resolver', 'consertar', 'arrumar', 'corrigir'],
-            'aprendizado': ['aprender', 'ensinar', 'conhecimento', 'sabedoria'],
-            'criatividade': ['criativo', 'inovação', 'ideia', 'imaginação'],
-            'sucesso': ['sucesso', 'vitória', 'conquista', 'alcançar', 'atingir'],
-            'fracasso': ['fracasso', 'derrota', 'falhar', 'perder', 'erro'],
-            'motivação': ['motivação', 'inspiração', 'força', 'energia', 'vontade'],
-            'paz': ['paz', 'tranquilo', 'calmo', 'sereno', 'relaxar'],
-            'estresse': ['estresse', 'pressão', 'ansiedade', 'nervoso', 'tenso'],
-            'felicidade': ['feliz', 'alegria', 'contentamento', 'satisfação'],
-            'tristeza': ['triste', 'melancolia', 'depressão', 'choro'],
-            'raiva': ['raiva', 'ódio', 'irritação', 'bravo', 'furioso'],
-            'medo': ['medo', 'susto', 'terror', 'pânico', 'assombração'],
-            'coragem': ['coragem', 'bravura', 'ousadia', 'valentia'],
-            'confiança': ['confiança', 'segurança', 'certeza', 'convicção'],
-            'dúvida': ['dúvida', 'incerteza', 'questão', 'pergunta'],
-            'curiosidade': ['curioso', 'interessante', 'investigar', 'descobrir'],
-            'aventura': ['aventura', 'explorar', 'descobrir', 'jornada'],
-            'rotina': ['rotina', 'dia a dia', 'costume', 'hábito'],
-            'mudança': ['mudança', 'transformação', 'diferente', 'novo'],
-            'tradição': ['tradição', 'costume', 'cultura', 'herança'],
-            'inovação': ['inovação', 'novo', 'moderno', 'tecnologia'],
-            'passado': ['passado', 'antes', 'história', 'lembrança'],
-            'presente': ['presente', 'agora', 'atual', 'hoje'],
-            'futuro': ['futuro', 'amanhã', 'depois', 'próximo'],
-            'memória': ['memória', 'lembrar', 'esquecer', 'recordar'],
-            'imaginação': ['imaginação', 'fantasia', 'sonhar', 'criar'],
-            'realidade': ['realidade', 'verdade', 'fato', 'real'],
-            'virtual': ['virtual', 'digital', 'online', 'internet'],
-            'físico': ['físico', 'corpo', 'material', 'concreto'],
-            'mental': ['mental', 'mente', 'psicológico', 'cerebral'],
-            'espiritual': ['espiritual', 'alma', 'espírito', 'transcendente'],
-            'social': ['social', 'sociedade', 'comunidade', 'público'],
-            'individual': ['individual', 'pessoal', 'próprio', 'único'],
-            'coletivo': ['coletivo', 'grupo', 'todos', 'junto'],
-            'competição': ['competição', 'concorrer', 'rival', 'disputa'],
-            'cooperação': ['cooperação', 'colaborar', 'ajudar', 'unir'],
-            'liderança': ['líder', 'liderança', 'comando', 'dirigir'],
-            'humildade': ['humilde', 'modesto', 'simples', 'discreto'],
-            'orgulho': ['orgulho', 'altivo', 'soberbo', 'vaidoso'],
-            'generosidade': ['generoso', 'bondade', 'caridade', 'dar'],
-            'egoísmo': ['egoísta', 'interesseiro', 'ganancioso'],
-            'honestidade': ['honesto', 'sincero', 'verdadeiro', 'íntegro'],
-            'mentira': ['mentira', 'falso', 'enganar', 'iludir'],
-            'justiça': ['justiça', 'justo', 'correto', 'direito'],
-            'injustiça': ['injustiça', 'injusto', 'errado', 'parcial'],
-            'liberdade': ['liberdade', 'livre', 'independente', 'solto'],
-            'prisão': ['prisão', 'preso', 'cárcere', 'cadeia']
+            'música': ['música', 'cantando', 'banda', 'artista', 'som', 'playlist']
         }
 
         self.responses = {
@@ -480,192 +978,8 @@ class AdvancedAI:
                 "Por nada! Pode contar comigo sempre! ✨",
                 "Fico contente que gostou! 😄",
                 "É sempre um prazer ajudar! 🌟"
-            ],
-            'negativo': [
-                "Entendo sua frustração. Vamos resolver isso juntos! 🤝",
-                "Lamento que esteja com problemas. Como posso ajudar?",
-                "Vamos encontrar uma solução! 💡",
-                "Não se preocupe, vou te ajudar a resolver! 🛠️",
-                "Compreendo sua situação. Vou fazer o possível para ajudar!",
-                "Entendo que algo não está funcionando bem. Vamos consertar!"
-            ],
-            'comando': [
-                "Para usar comandos, você pode usar `RXajuda` para ver a lista completa!",
-                "Aqui estão os comandos disponíveis: use `RXajuda diversao` para jogos!",
-                "Comandos úteis que você pode usar: `RXping`, `RXsaldo`, `RXjokenpo`!",
-                "Para executar comandos, digite RX seguido do comando, como `RXticket`!",
-                "Tenho mais de 200 comandos! Use `RXajuda` para explorar!",
-                "Comandos são minha especialidade! `RXajuda` mostra tudo!"
-            ],
-            'diversão': [
-                "Vamos nos divertir! 🎮 Use `RXjokenpo`, `RXquiz` ou `RXforca`!",
-                "Hora da diversão! 🎪 Temos vários jogos: `RXdado`, `RXmoeda`!",
-                "Ótima ideia! Vamos brincar! 🎊 Digite `RXajuda diversao`!",
-                "Perfeito! Diversão é sempre boa! 🎯 Use `RXmeme` para rir!",
-                "Adorei! Tenho mais de 40 comandos de diversão! 🎈",
-                "Vamos animar esse servidor! 🎭 `RXpiada` para começar!"
-            ],
-            'eventos': [
-                "Sobre eventos! 📅 Use `RXeventos` para ver eventos ativos!",
-                "Os administradores podem criar eventos com `RXcriarevento`!",
-                "Para participar de um evento, use `RXparticipar <id>`!",
-                "Eventos são uma ótima forma de interagir! Use `RXajuda eventos`!",
-                "Eventos deixam o servidor mais animado! 🎪",
-                "Que tal participar dos próximos eventos? 🎊"
-            ],
-            'sorteio': [
-                "Sorteios são emocionantes! 🎁 Admins podem criar com `RXcriarsorteio`!",
-                "Para ver sorteios ativos, use `RXsorteios`! 🍀",
-                "Participe dos sorteios para ganhar prêmios incríveis! 🏆",
-                "Os sorteios tornam o servidor mais divertido! 🎪",
-                "Boa sorte nos próximos sorteios! 🤞",
-                "Que tal tentar a sorte? Veja `RXsorteios`! ✨"
-            ],
-            'tecnologia': [
-                "Tecnologia é fascinante! 💻 Sobre o que quer saber?",
-                "Programação é arte! 🎨 Em que linguagem está trabalhando?",
-                "O mundo tech está sempre evoluindo! 🚀 Que interessante!",
-                "Desenvolvimento é minha paixão! 👨‍💻 Como posso ajudar?",
-                "A tecnologia nos conecta! 🌐 Vamos conversar sobre isso!",
-                "Inovação tecnológica é o futuro! ⚡ Me conte mais!"
-            ],
-            'games': [
-                "Games são incríveis! 🎮 Qual seu jogo favorito?",
-                "Mundo gamer é diversão garantida! 🕹️ Vamos jogar algo aqui?",
-                "Que jogo interessante! 🎯 Use `RXajuda diversao` para jogos!",
-                "Gaming é vida! 🎪 Temos vários jogos no bot!",
-                "Adoro conversar sobre games! 🏆 Me conte mais!",
-                "E-sports estão crescendo muito! 📈 Que empolgante!"
             ]
         }
-
-        # Tópicos expandidos para conversação natural
-        self.topics = [
-            "Que tal jogarmos algo? Tenho vários jogos!",
-            "Como está seu dia hoje?",
-            "Qual seu hobby favorito?",
-            "Gosta de música? Qual estilo prefere?",
-            "Já assistiu algum anime bom recentemente?",
-            "Qual sua comida favorita?",
-            "Pretende fazer algo especial no fim de semana?",
-            "Como está o clima aí na sua cidade?",
-            "Tem algum pet? Adoro animais!",
-            "Qual o último filme que assistiu?",
-            "Gosta de ler? Que tipo de livro prefere?",
-            "Pratica algum esporte?",
-            "Qual sua matéria favorita na escola?",
-            "Tem algum sonho ou objetivo que quer alcançar?",
-            "O que te faz mais feliz?",
-            "Qual seu lugar favorito para relaxar?",
-            "Gosta de viajar? Qual destino dos sonhos?",
-            "Tem algum talento especial?",
-            "Qual sua cor favorita e por quê?",
-            "Prefere dia ou noite?",
-            "Qual estação do ano prefere?",
-            "Gosta de cozinhar?",
-            "Tem alguma coleção?",
-            "Qual sua música favorita no momento?",
-            "Prefere praia ou montanha?",
-            "Gosta de desenhar ou fazer arte?",
-            "Qual seu jogo de tabuleiro favorito?",
-            "Tem algum medo bobo?",
-            "Qual sua memória mais feliz?",
-            "O que te inspira?",
-            "Gosta de tecnologia?",
-            "Qual rede social usa mais?",
-            "Tem algum ídolo ou pessoa que admira?",
-            "Qual seu doce favorito?",
-            "Prefere acordar cedo ou dormir tarde?",
-            "Gosta de festas ou prefere lugares quietos?",
-            "Qual seu super-herói favorito?",
-            "Acredita em aliens?",
-            "Gosta de horror ou prefere comédia?",
-            "Qual sua pizza favorita?",
-            "Tem alguma superstição?",
-            "Gosta de chuva?",
-            "Qual seu emoji mais usado?",
-            "Tem algum apelido engraçado?",
-            "Gosta de surpresas?",
-            "Qual seu número da sorte?",
-            "Prefere gatos ou cachorros?",
-            "Gosta de acordar com sol ou com chuva?",
-            "Qual seu programa de TV favorito?",
-            "Tem alguma fobia específica?",
-            "Gosta de aventuras ou rotina?",
-            "Qual seu sabor de sorvete favorito?",
-            "Acredita em fantasmas?",
-            "Gosta de puzzles ou jogos de lógica?",
-            "Qual sua bebida favorita?",
-            "Tem algum ritual matinal?",
-            "Gosta de fotografar?",
-            "Qual seu meio de transporte preferido?",
-            "Tem alguma meta para este ano?",
-            "Gosta de surpresas de aniversário?",
-            "Qual seu tipo de chocolate preferido?",
-            "Acredita em sonhos premonitorios?",
-            "Gosta de karaokê?",
-            "Qual sua palavra favorita?",
-            "Tem algum bordão ou frase que usa muito?",
-            "Gosta de jogos de cartas?",
-            "Qual seu tipo de clima favorito?",
-            "Tem alguma tradição familiar especial?",
-            "Gosta de improvisar ou prefere planos?",
-            "Qual seu perfume ou cheiro favorito?",
-            "Acredita em astrologia?",
-            "Gosta de dançar?",
-            "Qual seu tipo de música para relaxar?",
-            "Tem algum lugar que te traz paz?",
-            "Gosta de criar teorias sobre filmes/séries?",
-            "Qual seu tipo de celebração favorita?",
-            "Acredita que cores afetam o humor?",
-            "Gosta de improvisar presentes?",
-            "Qual seu tipo de memória preferido para guardar?",
-            "Tem algum ritual de concentração?",
-            "Gosta de histórias com plot twists?",
-            "Qual seu tipo de silêncio favorito?",
-            "Acredita que música tem poder de cura?",
-            "Gosta de criar ou de consumir conteúdo?",
-            "Qual seu tipo de conexão com outras pessoas?",
-            "Tem algum lugar dos sonhos para morar?",
-            "Gosta de mistérios não resolvidos?",
-            "Qual seu tipo de aprendizado preferido?",
-            "Acredita que cada pessoa tem uma missão?",
-            "Gosta de reinventar tradições?",
-            "Qual seu tipo de energia natural preferida?",
-            "Tem alguma teoria sobre o universo?",
-            "Gosta de conectar pontos entre ideias diferentes?",
-            "Qual seu tipo de infinitude favorito para imaginar?",
-            "Já pensou sobre o que te faz único no universo?",
-            "Se pudesse viver em qualquer época, qual escolheria?",
-            "Qual descoberta científica te impressiona mais?",
-            "Tem alguma pergunta filosófica que sempre te intriga?",
-            "Se pudesse ter uma conversa com alguém do passado, quem seria?",
-            "Qual invenção mudou mais sua forma de viver?",
-            "Tem alguma tradição que criou para si mesmo?",
-            "Se pudesse aprender qualquer habilidade instantaneamente, qual seria?",
-            "Qual mistério da vida mais te fascina?",
-            "Tem alguma experiência que mudou sua perspectiva?",
-            "Se pudesse viajar para qualquer lugar do universo, onde iria?",
-            "Qual conceito abstrato consegue te emocionar?",
-            "Tem alguma memória sensorial muito forte?",
-            "Se pudesse resolver um problema mundial, qual escolheria?",
-            "Qual aspecto da natureza humana te impressiona mais?",
-            "Tem algum ritual que te conecta com algo maior?",
-            "Se pudesse ter uma superpoder, qual seria?",
-            "Qual forma de arte consegue te transportar?",
-            "Tem alguma crença pessoal que guia suas decisões?",
-            "Se pudesse desvendar qualquer código do universo, qual seria?",
-            "Qual força da natureza te inspira mais?",
-            "Tem alguma forma de meditação ou reflexão?",
-            "Se pudesse explorar qualquer dimensão da realidade, qual seria?",
-            "Qual aspecto da consciência te impressiona mais?",
-            "Tem alguma experiência com sincronicidades?",
-            "Se pudesse dialogar com qualquer forma de vida, qual escolheria?",
-            "Qual conceito de tempo ressoa mais com você?",
-            "Tem alguma forma de se conectar com o momento presente?",
-            "Se pudesse desvendar qualquer código do universo, qual seria?",
-            "Qual força invisível acredita que mais nos influencia?"
-        ]
 
     def analyze_message(self, message_content):
         """Analisa a mensagem e detecta o contexto"""
@@ -683,52 +997,169 @@ class AdvancedAI:
         contexts = self.analyze_message(message_content)
         primary_context = contexts[0]
 
-        # Verificar se são só emojis ou mensagem muito curta
-        if len(message_content.strip()) <= 3 or message_content.strip() in ['😂', '😭', '😍', '🤔', '👍', '👎', '❤️', '🔥', '💯']:
+        if len(message_content.strip()) <= 3:
             return random.choice([
                 "Entendi! 😄 Como posso ajudar?",
                 "Haha! 😊 Em que posso ser útil?",
                 "Legal! 🎉 Vamos conversar?",
-                "Interessante! 🤔 Me conte mais!",
-                "Show! 🚀 O que quer fazer?",
-                "Perfeito! ✨ Como posso ajudar hoje?"
+                "Interessante! 🤔 Me conte mais!"
             ])
 
-        # Se não houver contexto específico, usar tópicos aleatórios
-        if primary_context == 'geral':
-            return f"{random.choice(self.topics)}\n\n💡 Use `RXajuda` para ver todos os comandos!"
-
-        # Resposta baseada no contexto
         if primary_context in self.responses:
-            base_response = random.choice(self.responses[primary_context])
-        else:
-            base_response = f"{random.choice(self.topics)}\n\nUse `RXajuda` para ver todos os comandos disponíveis!"
+            return random.choice(self.responses[primary_context])
 
-        # Adiciona informações contextuais baseado nos contextos detectados
-        extras = []
-
-        if 'comando' in contexts:
-            extras.append("📚 Use `RXajuda` para ver todos os comandos!")
-
-        if 'diversão' in contexts or 'games' in contexts:
-            extras.append("🎮 Temos mais de 40 jogos: `RXjokenpo`, `RXquiz`, `RXforca`!")
-
-        if 'eventos' in contexts:
-            extras.append("📅 Para eventos: `RXeventos` ou `RXcriarevento`!")
-
-        if 'sorteio' in contexts:
-            extras.append("🎁 Para sorteios: `RXsorteios` ou `RXcriarsorteio` (admins)!")
-
-        if 'ajuda' in contexts:
-            extras.append("🆘 Para suporte: `RXticket <motivo>` ou `RXajuda`!")
-
-        # Adicionar extras se houver
-        if extras:
-            base_response += f"\n\n{random.choice(extras)}"
-
-        return base_response
+        return "Interessante! Como posso te ajudar hoje? Use `RXajuda` para ver todos os comandos!"
 
 ai_system = AdvancedAI()
+
+# Background tasks
+@tasks.loop(minutes=5)
+async def update_status():
+    """Atualiza status do bot periodicamente"""
+    try:
+        if bot.is_ready():
+            statuses = [
+                f"👥 {len(bot.guilds)} servidores",
+                f"💬 {len(set(bot.get_all_members()))} usuários",
+                f"⏱️ {format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds()))} online",
+                "💫 RXping para começar!",
+                "🤖 RXajuda para comandos"
+            ]
+            await bot.change_presence(
+                status=discord.Status.online,
+                activity=discord.Activity(
+                    type=discord.ActivityType.watching,
+                    name=random.choice(statuses)
+                )
+            )
+    except Exception as e:
+        logger.error(f"Erro no update_status: {e}")
+
+@tasks.loop(hours=6)
+async def backup_database():
+    """Backup automático do banco de dados"""
+    try:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"backup_rxbot_{timestamp}.db"
+
+        with db_lock:
+            conn = get_db_connection()
+            backup_conn = sqlite3.connect(backup_name)
+            conn.backup(backup_conn)
+            conn.close()
+            backup_conn.close()
+
+        logger.info(f"✅ Backup criado: {backup_name}")
+    except Exception as e:
+        logger.error(f"Erro no backup: {e}")
+
+@tasks.loop(minutes=1)
+async def check_reminders():
+    """Verifica lembretes"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            now = datetime.datetime.now()
+            cursor.execute('SELECT * FROM reminders WHERE remind_time <= ?', (now,))
+            reminders = cursor.fetchall()
+
+            for reminder in reminders:
+                reminder_id, user_id, guild_id, channel_id, text, remind_time, created_at = reminder
+
+                try:
+                    channel = bot.get_channel(channel_id)
+                    user = bot.get_user(user_id)
+
+                    if channel and user:
+                        embed = create_embed(
+                            "⏰ Lembrete!",
+                            f"**{user.mention}** você pediu para eu lembrar:\n\n{text}",
+                            color=0xffaa00
+                        )
+                        await channel.send(embed=embed)
+
+                    cursor.execute('DELETE FROM reminders WHERE id = ?', (reminder_id,))
+                except Exception as e:
+                    logger.error(f"Erro ao enviar lembrete {reminder_id}: {e}")
+
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        logger.error(f"Erro check_reminders: {e}")
+
+@tasks.loop(minutes=1)
+async def check_giveaways():
+    """Verifica sorteios que terminaram"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            now = datetime.datetime.now()
+            cursor.execute('''
+                SELECT * FROM giveaways 
+                WHERE status = 'active' AND end_time <= ?
+            ''', (now,))
+
+            finished_giveaways = cursor.fetchall()
+
+            for giveaway in finished_giveaways:
+                giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, participants_json, status, created_at = giveaway
+
+                try:
+                    channel = bot.get_channel(channel_id)
+                    if not channel:
+                        continue
+
+                    message = await channel.fetch_message(message_id)
+                    if not message:
+                        continue
+
+                    # Obter participantes das reações
+                    participants = []
+                    for reaction in message.reactions:
+                        if str(reaction.emoji) == "🎉":
+                            async for user in reaction.users():
+                                if not user.bot:
+                                    participants.append(user.id)
+
+                    if len(participants) < winners_count:
+                        winners = participants
+                    else:
+                        winners = random.sample(participants, winners_count)
+
+                    # Anunciar vencedores
+                    if winners:
+                        winner_mentions = [f"<@{winner_id}>" for winner_id in winners]
+                        embed = create_embed(
+                            f"🎉 Sorteio Finalizado: {title}",
+                            f"**Prêmio:** {prize}\n"
+                            f"**Vencedor(es):** {', '.join(winner_mentions)}\n"
+                            f"**Participantes:** {len(participants)}",
+                            color=0xffd700
+                        )
+                    else:
+                        embed = create_embed(
+                            f"😢 Sorteio Cancelado: {title}",
+                            f"**Prêmio:** {prize}\n"
+                            f"**Motivo:** Nenhum participante válido",
+                            color=0xff6b6b
+                        )
+
+                    await channel.send(embed=embed)
+
+                    # Marcar como finalizado
+                    cursor.execute('UPDATE giveaways SET status = ? WHERE id = ?', ('finished', giveaway_id))
+
+                except Exception as e:
+                    logger.error(f"Erro ao finalizar sorteio {giveaway_id}: {e}")
+
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        logger.error(f"Erro check_giveaways: {e}")
 
 # Utility functions with proper database handling
 def get_user_data(user_id):
@@ -775,12 +1206,12 @@ def update_user_data(user_id, **kwargs):
             conn.close()
 
 def add_xp(user_id, amount):
-    """Add XP with level calculation"""
+    """Add XP with level and rank calculation"""
     try:
         data = get_user_data(user_id)
         if not data:
             update_user_data(user_id, xp=amount, level=1)
-            return False, 1
+            return False, 1, False, 1
 
         current_xp = data[2]
         current_level = data[3]
@@ -790,11 +1221,16 @@ def add_xp(user_id, amount):
         new_level = int(math.sqrt(new_xp / 100)) + 1
         leveled_up = new_level > current_level
 
+        # Calculate rank progression
+        old_rank_id, old_rank = get_user_rank(current_xp)
+        new_rank_id, new_rank = get_user_rank(new_xp)
+        rank_up = new_rank_id > old_rank_id
+
         update_user_data(user_id, xp=new_xp, level=new_level)
-        return leveled_up, new_level
+        return leveled_up, new_level, rank_up, new_rank_id
     except Exception as e:
         logger.error(f"Error adding XP: {e}")
-        return False, 1
+        return False, 1, False, 1
 
 def format_time(seconds):
     """Format seconds to readable time"""
@@ -823,11 +1259,6 @@ def create_embed(title, description=None, color=0x7289DA, **kwargs):
             embed.set_image(url=value)
         elif key == 'footer':
             embed.set_footer(text=value)
-        elif key == 'author':
-            embed.set_author(name=value.get('name'), icon_url=value.get('icon_url'))
-        elif key == 'fields':
-            for field in value:
-                embed.add_field(name=field['name'], value=field['value'], inline=field.get('inline', True))
 
     return embed
 
@@ -835,7 +1266,6 @@ def create_embed(title, description=None, color=0x7289DA, **kwargs):
 def check_auto_violations(message_content):
     """Verifica se a mensagem contém violações automáticas"""
     content_lower = message_content.lower()
-
     violations = []
 
     # Verificar palavras proibidas
@@ -847,64 +1277,204 @@ def check_auto_violations(message_content):
     if len(message_content) > 20 and message_content.isupper():
         violations.append("Spam de maiúsculas")
 
-    # Verificar muitos emojis
-    emoji_count = sum(1 for char in message_content if char in '😀😃😄😁😆😅😂🤣😊😇🙂🙃😉😌😍🥰😘😗😙😚😋😛😝😜🤪🤨🧐🤓😎🤩🥳😏😒😞😔😟😕🙁☹️😣😖😫😩🥺😢😭😤😠😡🤬🤯😳🥵🥶😱😨😰😥😓🤗🤔🤭🤫🤥😶😐😑😬🙄😯😦😧😮😲🥱😴🤤😪😵🤐🥴🤢🤮🤧😷🤒🤕🤑🤠😈👿👹👺🤡💩👻💀☠️👽👾🤖🎃😺😸😹😻😼😽🙀😿😾')
-    if emoji_count > 10:
-        violations.append("Spam de emojis")
-
     return violations
 
 # Event handlers
+@bot.event
+async def on_message(message):
+    """Processar mensagens para XP, IA e moderação"""
+    if message.author.bot:
+        return
+
+    global_stats['messages_processed'] += 1
+
+    # Sistema de XP
+    try:
+        leveled_up, new_level, rank_up, new_rank_id = add_xp(message.author.id, XP_PER_MESSAGE)
+
+        if leveled_up:
+            embed = create_embed(
+                f"🎉 Level Up!",
+                f"{message.author.mention} subiu para o **Level {new_level}**!",
+                color=0xffd700
+            )
+            await message.channel.send(embed=embed, delete_after=10)
+
+        if rank_up:
+            rank_data = RANK_SYSTEM[new_rank_id]
+            embed = create_embed(
+                f"⭐ Rank Up!",
+                f"{message.author.mention} alcançou o rank **{rank_data['emoji']} {rank_data['name']}**!",
+                color=rank_data['color']
+            )
+            await message.channel.send(embed=embed, delete_after=15)
+    except Exception as e:
+        logger.error(f"Erro no sistema XP: {e}")
+
+    # Sistema de IA (responder quando mencionado)
+    if bot.user.mentioned_in(message) and not message.mention_everyone:
+        try:
+            content = message.content.replace(f'<@{bot.user.id}>', '').strip()
+            if content:
+                response = ai_system.generate_response(content)
+                await message.reply(response)
+        except Exception as e:
+            logger.error(f"Erro no sistema IA: {e}")
+
+    # Processar comandos
+    await bot.process_commands(message)
+
 @bot.event
 async def on_ready():
     logger.info(f"🤖 RXbot está online! Conectado como {bot.user}")
     logger.info(f"📊 Conectado em {len(bot.guilds)} servidores")
     logger.info(f"👥 Servindo {len(set(bot.get_all_members()))} usuários únicos")
+
     try:
         channel = bot.get_channel(CHANNEL_ID_ALERTA)
         if channel:
-            await channel.send("⚠️ O bot foi reiniciado automaticamente e já está online!")
+            embed = create_embed(
+                "🚀 RXbot Online!",
+                f"Bot reiniciado e totalmente operacional!\n\n"
+                f"**📊 Estatísticas:**\n"
+                f"• Servidores: {len(bot.guilds)}\n"
+                f"• Usuários: {len(set(bot.get_all_members()))}\n"
+                f"• Latência: {round(bot.latency * 1000, 2)}ms\n"
+                f"• Versão: 2.1.0 (Estável)\n\n"
+                f"**🛡️ Sistemas ativos:**\n"
+                f"• ✅ Auto-ping\n"
+                f"• ✅ Keep-alive\n"
+                f"• ✅ Monitor de saúde\n"
+                f"• ✅ Sistema anti-crash\n\n"
+                f"**Data:** <t:{int(datetime.datetime.now().timestamp())}:F>",
+                color=0x00ff00
+            )
+            await channel.send(embed=embed)
     except Exception as e:
         logger.error(f"Erro ao enviar alerta de reinício: {e}")
-
-    @bot.event
-    async def on_disconnect():
-        try:
-            channel = bot.get_channel(CHANNEL_ID_ALERTA)
-            if channel:
-                await channel.send("❌ O bot foi **desconectado** do Discord!")
-        except Exception as e:
-            logger.error(f"Erro ao enviar alerta de desconexão: {e}")
-
-    @bot.event
-    async def on_resumed():
-        try:
-            channel = bot.get_channel(CHANNEL_ID_ALERTA)
-            if channel:
-                await channel.send("🔄 O bot **reconectou** ao Discord!")
-        except Exception as e:
-            logger.error(f"Erro ao enviar alerta de reconexão: {e}")
 
     # Update global stats
     global_stats['total_users'] = len(set(bot.get_all_members()))
     global_stats['total_channels'] = len(list(bot.get_all_channels()))
 
-    # Start background tasks
-    update_status.start()
-    backup_database.start()
-    check_reminders.start()
-    check_giveaways.start()
+    # Start background tasks apenas uma vez
+    if not hasattr(bot, '_tasks_started'):
+        bot._tasks_started = True
+        try:
+            update_status.start()
+            backup_database.start()
+            check_reminders.start()
+            check_giveaways.start()
+            logger.info("✅ Background tasks iniciados")
+        except Exception as e:
+            logger.error(f"Erro ao iniciar background tasks: {e}")
 
-    # Set initial status
-    await bot.change_presence(
-        status=discord.Status.online,
-        activity=discord.Activity(
-            type=discord.ActivityType.watching,
-            name=f"{len(bot.guilds)} servidores | RXping para começar!"
+    # Iniciar TODOS os sistemas de proteção anti-hibernação apenas uma vez
+    if not hasattr(bot, '_protection_started'):
+        bot._protection_started = True
+
+        # Criar tasks de proteção
+        protection_tasks = [
+            auto_ping(),
+            external_keepalive(), 
+            heartbeat_system(),
+            health_monitor(),
+            emergency_keeper(),
+            extreme_anti_hibernation(),
+            emergency_system_monitor(),
+            auto_reconnect_system()  # Novo sistema de reconexão
+        ]
+
+        for task in protection_tasks:
+            asyncio.create_task(task)
+
+        logger.info("🛡️ Sistemas de proteção iniciados")
+
+    # Set initial status com retry
+    try:
+        await bot.change_presence(
+            status=discord.Status.online,
+            activity=discord.Activity(
+                type=discord.ActivityType.watching,
+                name=f"🚀 {len(bot.guilds)} servidores | RXping para começar!"
+            )
         )
-    )
+        logger.info("✅ Status inicial configurado")
+    except Exception as e:
+        logger.error(f"Erro ao configurar status: {e}")
 
     print("🔥 RXbot está online! Pronto para comandar!")
+
+    # Executar limpeza de memória inicial
+    try:
+        import gc
+        gc.collect()
+        logger.info("🧹 Limpeza de memória inicial concluída")
+    except:
+        pass
+
+@bot.event
+async def on_disconnect():
+    logger.error("🚨 BOT DESCONECTADO DO DISCORD!")
+    try:
+        # Tentar notificar antes de perder conexão totalmente
+        channel = bot.get_channel(CHANNEL_ID_ALERTA)
+        if channel:
+            await channel.send("❌ O bot foi **desconectado** do Discord! Tentando reconectar automaticamente...")
+    except Exception as e:
+        logger.error(f"Erro ao enviar alerta de desconexão: {e}")
+
+@bot.event
+async def on_resumed():
+    logger.info("🔄 BOT RECONECTADO AO DISCORD!")
+    try:
+        channel = bot.get_channel(CHANNEL_ID_ALERTA)
+        if channel:
+            embed = create_embed(
+                "🔄 Reconexão Automática",
+                f"Bot reconectou ao Discord com sucesso!\n"
+                f"**Tempo:** <t:{int(datetime.datetime.now().timestamp())}:F>\n"
+                f"**Status:** ✅ Totalmente operacional",
+                color=0x00ff00
+            )
+            await channel.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Erro ao enviar alerta de reconexão: {e}")
+
+# Sistema de reconexão automática melhorado
+async def auto_reconnect_system():
+    """Sistema que monitora e força reconexão se necessário"""
+    disconnect_count = 0
+
+    while True:
+        try:
+            await asyncio.sleep(45)  # Verificar a cada 45 segundos
+
+            if not bot.is_ready():
+                disconnect_count += 1
+                logger.warning(f"⚠️ Bot não está ready! Desconexão #{disconnect_count}")
+
+                if disconnect_count >= 3:
+                    logger.error("🔄 Múltiplas desconexões detectadas! Forçando reconexão...")
+
+                    try:
+                        # Tentar fechar e reconectar
+                        await bot.close()
+                        await asyncio.sleep(5)
+
+                        # Reiniciar conexão
+                        logger.info("🔄 Tentando reconectar...")
+                        disconnect_count = 0
+
+                    except Exception as e:
+                        logger.error(f"Erro na reconexão forçada: {e}")
+
+            else:
+                disconnect_count = 0  # Reset contador se bot está OK
+
+        except Exception as e:
+            logger.error(f"Erro no sistema de reconexão: {e}")
+            await asyncio.sleep(30)
 
 @bot.event
 async def on_guild_join(guild):
@@ -923,320 +1493,2420 @@ async def on_guild_join(guild):
         logger.error(f"Error joining guild: {e}")
 
 @bot.event
-async def on_message(message):
-    if message.author.bot:
+async def on_reaction_add(reaction, user):
+    """Gerenciar reações para tickets e outros sistemas"""
+    if user.bot:
         return
 
-    global_stats['messages_processed'] += 1
+    message = reaction.message
 
-    # Verificar violações automáticas
-    violations = check_auto_violations(message.content)
-    if violations and message.guild:
+    # Sistema de tickets
+    if message.id in active_games:
+        game_data = active_games[message.id]
+
+        # Verificar se é o usuário correto para este tipo de interação
+        if game_data.get('type') in ['ticket_creation', 'ticket_confirmation', 'ticket_tier_confirmation', 'clear_confirmation', 'ban_confirmation']:
+            if game_data.get('user') != user.id:
+                # Remover reação de usuário não autorizado
+                try:
+                    await reaction.remove(user)
+                except:
+                    pass
+                return
+
+        if game_data['type'] == 'ticket_creation':
+            emoji_to_motivo = {
+                "🐛": "Bug/Erro no bot",
+                "💰": "Problema com economia", 
+                "⚖️": "Denúncia/Moderação",
+                "💡": "Sugestão/Ideia",
+                "❓": "Dúvida geral",
+                "🛠️": "Suporte técnico",
+                "👑": "RXticket só para tier"
+            }
+
+            if str(reaction.emoji) in emoji_to_motivo:
+                motivo = emoji_to_motivo[str(reaction.emoji)]
+
+                # Criar ticket
+                try:
+                    ctx_mock = type('MockCtx', (), {
+                        'guild': message.guild,
+                        'channel': message.channel,
+                        'send': message.channel.send
+                    })()
+
+                    await create_ticket_channel(ctx_mock, motivo, user)
+                    
+                    # Editar mensagem original para mostrar que foi processado
+                    embed = create_embed(
+                        "✅ Ticket Criado!",
+                        f"Seu ticket foi criado com sucesso!\n**Motivo:** {motivo}",
+                        color=0x00ff00
+                    )
+                    await message.edit(embed=embed)
+                    del active_games[message.id]
+                except Exception as e:
+                    logger.error(f"Erro ao criar ticket: {e}")
+
+        elif game_data['type'] == 'ticket_confirmation':
+            if str(reaction.emoji) == "✅":
+                motivo = game_data['motivo']
+
+                try:
+                    ctx_mock = type('MockCtx', (), {
+                        'guild': message.guild,
+                        'channel': message.channel,
+                        'send': message.channel.send
+                    })()
+
+                    await create_ticket_channel(ctx_mock, motivo, user)
+                    
+                    # Editar mensagem de confirmação
+                    embed = create_embed(
+                        "✅ Ticket Criado!",
+                        f"Seu ticket foi criado com sucesso!\n**Motivo:** {motivo}",
+                        color=0x00ff00
+                    )
+                    await message.edit(embed=embed)
+                    del active_games[message.id]
+                except Exception as e:
+                    logger.error(f"Erro ao criar ticket: {e}")
+
+            elif str(reaction.emoji) == "❌":
+                embed = create_embed("❌ Ticket Cancelado", "Criação de ticket cancelada pelo usuário.", color=0xff6b6b)
+                await message.edit(embed=embed)
+                del active_games[message.id]
+
+        elif game_data['type'] == 'ticket_tier_confirmation':
+            if str(reaction.emoji) == "✅":
+                motivo = game_data['motivo']
+
+                try:
+                    ctx_mock = type('MockCtx', (), {
+                        'guild': message.guild,
+                        'channel': message.channel,
+                        'send': message.channel.send
+                    })()
+
+                    await create_ticket_channel(ctx_mock, motivo, user)
+                    
+                    # Editar mensagem de confirmação
+                    embed = create_embed(
+                        "✅ Ticket Tier Criado!",
+                        f"Seu ticket tier foi criado com sucesso!\n**Motivo:** {motivo}",
+                        color=0xffd700
+                    )
+                    await message.edit(embed=embed)
+                    del active_games[message.id]
+                except Exception as e:
+                    logger.error(f"Erro ao criar ticket tier: {e}")
+
+            elif str(reaction.emoji) == "❌":
+                embed = create_embed("❌ Ticket Tier Cancelado", "Criação de ticket tier cancelada pelo usuário.", color=0xff6b6b)
+                await message.edit(embed=embed)
+                del active_games[message.id]
+
+        elif game_data['type'] == 'clear_confirmation':
+            if str(reaction.emoji) == "✅":
+                amount = game_data['amount']
+                channel_id = game_data['channel']
+                channel = message.guild.get_channel(channel_id)
+
+                if not channel:
+                    embed = create_embed("❌ Erro", "Canal não encontrado!", color=0xff0000)
+                    await message.edit(embed=embed)
+                    del active_games[message.id]
+                    return
+
+                try:
+                    # Deletar a mensagem de confirmação primeiro
+                    try:
+                        await message.delete()
+                    except:
+                        pass
+                    
+                    # Limpar mensagens do canal
+                    deleted = await channel.purge(limit=amount)
+
+                    confirm_embed = create_embed(
+                        "🧹 Limpeza Concluída",
+                        f"**{len(deleted)} mensagens foram deletadas com sucesso!**",
+                        color=0x00ff00
+                    )
+                    await channel.send(embed=confirm_embed, delete_after=5)
+                    del active_games[message.id]
+                except Exception as e:
+                    logger.error(f"Erro na limpeza: {e}")
+                    embed = create_embed("❌ Erro na Limpeza", f"Erro: {str(e)[:100]}", color=0xff0000)
+                    try:
+                        await channel.send(embed=embed, delete_after=10)
+                    except:
+                        pass
+                    if message.id in active_games:
+                        del active_games[message.id]
+
+            elif str(reaction.emoji) == "❌":
+                embed = create_embed("❌ Limpeza Cancelada", "Operação cancelada pelo usuário.", color=0xff6b6b)
+                await message.edit(embed=embed)
+                del active_games[message.id]
+
+        elif game_data['type'] == 'ban_confirmation':
+            if user.id != game_data['user']:
+                try:
+                    await reaction.remove(user)
+                except:
+                    pass
+                return
+
+            if str(reaction.emoji) == "✅":
+                try:
+                    member_id = game_data['member_id']
+                    reason = game_data['reason']
+                    
+                    member = message.guild.get_member(member_id)
+                    if not member:
+                        embed = create_embed("❌ Erro", "Membro não encontrado!", color=0xff0000)
+                        await message.edit(embed=embed)
+                        del active_games[message.id]
+                        return
+
+                    # Executar ban
+                    await member.ban(reason=reason)
+
+                    # Confirmar ban
+                    embed = create_embed(
+                        "🔨 Membro Banido!",
+                        f"**Usuário:** {member.name}#{member.discriminator}\n"
+                        f"**Motivo:** {reason}\n"
+                        f"**Moderador:** {user.mention}",
+                        color=0xff0000
+                    )
+                    await message.edit(embed=embed)
+                    del active_games[message.id]
+
+                    # Log da moderação
+                    try:
+                        with db_lock:
+                            conn = get_db_connection()
+                            cursor = conn.cursor()
+                            cursor.execute('''
+                                INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
+                                VALUES (?, ?, ?, ?, ?)
+                            ''', (message.guild.id, member_id, user.id, 'ban', reason))
+                            conn.commit()
+                            conn.close()
+                    except Exception as e:
+                        logger.error(f"Erro ao salvar log de moderação: {e}")
+
+                except Exception as e:
+                    logger.error(f"Erro ao banir membro: {e}")
+                    embed = create_embed("❌ Erro", f"Erro ao banir membro: {str(e)[:100]}", color=0xff0000)
+                    await message.edit(embed=embed)
+                    if message.id in active_games:
+                        del active_games[message.id]
+
+            elif str(reaction.emoji) == "❌":
+                embed = create_embed("❌ Ban Cancelado", "Operação de ban cancelada.", color=0xffaa00)
+                await message.edit(embed=embed)
+                del active_games[message.id]
+
+        elif game_data['type'] == 'close_ticket_confirmation':
+            # Verificar se é o usuário que iniciou o fechamento
+            if user.id != game_data['closer']:
+                try:
+                    await reaction.remove(user)
+                except:
+                    pass
+                return
+
+            if str(reaction.emoji) == "✅":
+                try:
+                    # Fechar ticket
+                    closer_id = game_data['closer']
+                    closer = message.guild.get_member(closer_id)
+
+                    # Atualizar banco de dados
+                    try:
+                        with db_lock:
+                            conn = get_db_connection()
+                            cursor = conn.cursor()
+                            cursor.execute('''
+                                UPDATE tickets 
+                                SET status = 'closed', closed_by = ?
+                                WHERE channel_id = ?
+                            ''', (closer_id, message.channel.id))
+                            conn.commit()
+                            conn.close()
+                    except Exception as e:
+                        logger.error(f"Erro ao atualizar ticket no banco: {e}")
+
+                    # Enviar mensagem de fechamento
+                    final_embed = create_embed(
+                        "🔒 Ticket Fechado",
+                        f"**Fechado por:** {closer.mention if closer else 'Usuário desconhecido'}\n"
+                        f"**Data:** <t:{int(datetime.datetime.now().timestamp())}:F>\n\n"
+                        f"Este canal será deletado em 5 segundos...",
+                        color=0xff6b6b
+                    )
+
+                    await message.edit(embed=final_embed)
+                    await asyncio.sleep(5)
+
+                    # Deletar canal
+                    await message.channel.delete()
+                    if message.id in active_games:
+                        del active_games[message.id]
+
+                except Exception as e:
+                    logger.error(f"Erro ao fechar ticket: {e}")
+                    error_embed = create_embed(
+                        "❌ Erro",
+                        "Erro ao fechar ticket. Contate um administrador.",
+                        color=0xff0000
+                    )
+                    await message.channel.send(embed=error_embed)
+                    if message.id in active_games:
+                        del active_games[message.id]
+
+            elif str(reaction.emoji) == "❌":
+                embed = create_embed("❌ Fechamento Cancelado", "Ticket não foi fechado.", color=0xffaa00)
+                await message.edit(embed=embed)
+                del active_games[message.id]
+
+        elif game_data['type'] == 'trade_invitation':
+            # Apenas o usuário convidado pode aceitar/recusar
+            if user.id != game_data['target']:
+                try:
+                    await reaction.remove(user)
+                except:
+                    pass
+                return
+
+            if str(reaction.emoji) == "✅":
+                embed = create_embed(
+                    "✅ Troca Aceita!",
+                    f"**{user.mention}** aceitou negociar!\n\n"
+                    f"🔄 **Próximo passo:**\n"
+                    f"Ambos devem usar:\n"
+                    f"`RXoffer <item_id> <quantidade>` para oferecer itens\n"
+                    f"`RXconfirmtrade` quando estiverem prontos\n\n"
+                    f"**⏰ Tempo limite:** 10 minutos",
+                    color=0x00ff00
+                )
+                await message.edit(embed=embed)
+
+                # Atualizar dados da troca
+                game_data['step'] = 'offering'
+                game_data['offers'] = {
+                    str(game_data['initiator']): {},
+                    str(game_data['target']): {}
+                }
+                game_data['confirmations'] = []
+                game_data['start_time'] = datetime.datetime.now().timestamp()
+
+            elif str(reaction.emoji) == "❌":
+                embed = create_embed(
+                    "❌ Troca Recusada",
+                    f"**{user.mention}** recusou a troca.",
+                    color=0xff0000
+                )
+                await message.edit(embed=embed)
+                del active_games[message.id]
+
+    # Sistema de fechar tickets - CORRIGIDO
+    if str(reaction.emoji) == "🔒" and hasattr(message.channel, 'name') and message.channel.name.startswith('ticket-'):
+        # Verificar se usuário tem permissão OU é o criador do ticket
+        has_permission = False
+        is_creator = False
+
+        # Verificar permissões de forma mais segura
         try:
-            # Aplicar warn automático
-            user_data = get_user_data(message.author.id)
-            if not user_data:
-                update_user_data(message.author.id)
-                user_data = get_user_data(message.author.id)
+            member = message.guild.get_member(user.id)
+            if member:
+                has_permission = (member.guild_permissions.manage_channels or 
+                                member.guild_permissions.administrator or
+                                any(role.name.lower() in ['admin', 'mod', 'staff', 'moderador'] for role in member.roles))
+        except:
+            pass
 
-            warnings = user_data[15] + 1
-            update_user_data(message.author.id, warnings=warnings)
-
-            # Log da moderação
+        try:
+            # Verificar se é o criador do ticket
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (message.guild.id, message.author.id, bot.user.id, 'auto_warn', f"Violação automática: {', '.join(violations)}"))
-                conn.commit()
+                cursor.execute('SELECT creator_id FROM tickets WHERE channel_id = ?', (message.channel.id,))
+                result = cursor.fetchone()
+                if result and result[0] == user.id:
+                    is_creator = True
                 conn.close()
-
-            # Deletar mensagem
-            try:
-                await message.delete()
-            except:
-                pass
-
-            # Notificar usuário
-            embed = create_embed(
-                "⚠️ Warning Automático",
-                f"{message.author.mention} recebeu um warning automático!\n"
-                f"**Motivo:** {', '.join(violations)}\n"
-                f"**Warnings:** {warnings}/5\n"
-                f"**Mensagem deletada automaticamente**",
-                color=0xff6b6b
-            )
-
-            warning_msg = await message.channel.send(embed=embed)
-            await asyncio.sleep(10)
-            try:
-                await warning_msg.delete()
-            except:
-                pass
-
-            # Aplicar punições se necessário
-            if warnings >= 5:
-                try:
-                    await message.author.ban(reason=f"5+ Warnings automáticos")
-                except:
-                    pass
-            elif warnings >= 3:
-                try:
-                    timeout_until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)
-                    await message.author.timeout(timeout_until, reason=f"3+ Warnings automáticos")
-                except:
-                    pass
-
         except Exception as e:
-            logger.error(f"Error in auto-moderation: {e}")
+            logger.error(f"Erro ao verificar criador do ticket: {e}")
 
-    # Add XP for message (with error handling)
-    if not message.content.startswith(tuple(bot.command_prefix)):
-        try:
-            leveled_up, new_level = add_xp(message.author.id, XP_PER_MESSAGE)
-            if leveled_up and new_level % 5 == 0:
-                embed = create_embed(
-                    "🎉 Level Up!",
-                    f"{message.author.mention} subiu para o nível **{new_level}**! 🚀",
-                    color=0xffd700
-                )
-                await message.channel.send(embed=embed, delete_after=10)
-        except Exception as e:
-            logger.error(f"Error adding XP: {e}")
-
-    # Anti-spam system
-    user_id = message.author.id
-    guild_id = message.guild.id if message.guild else None
-
-    if guild_id:
-        spam_tracker[f"{guild_id}_{user_id}"].append(time.time())
-        recent_messages = [t for t in spam_tracker[f"{guild_id}_{user_id}"] if time.time() - t < 10]
-        spam_tracker[f"{guild_id}_{user_id}"] = deque(recent_messages, maxlen=10)
-
-        if len(recent_messages) >= 5:
+        if not (has_permission or is_creator):
+            # Enviar mensagem de erro temporária
             try:
-                timeout_until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=5)
-                await message.author.timeout(timeout_until, reason="Spam detectado")
-                embed = create_embed(
-                    "🚫 Anti-Spam",
-                    f"{message.author.mention} foi mutado por 5 minutos por spam.",
+                error_embed = create_embed(
+                    "❌ Sem permissão",
+                    "Apenas staff ou o criador do ticket podem fechá-lo!",
                     color=0xff0000
                 )
-                await message.channel.send(embed=embed, delete_after=10)
+                temp_msg = await message.channel.send(embed=error_embed)
+                await asyncio.sleep(5)
+                await temp_msg.delete()
             except:
                 pass
+            return
 
-    # AI conversation system
-    if bot.user.mentioned_in(message) and not message.author.bot:
-        conversation_memory[message.author.id].append({
-            'content': message.content,
-            'timestamp': time.time(),
-            'sentiment': 'neutral'
-        })
-
-        user_data = get_user_data(message.author.id)
-        ai_response = ai_system.generate_response(message.content, user_data)
-
-        embed = create_embed(
-            "🤖 RXbot IA Avançada",
-            ai_response,
-            color=0x7289da
+        # Confirmar fechamento
+        confirm_embed = create_embed(
+            "🔒 Fechar Ticket?",
+            f"**{user.mention}** deseja fechar este ticket?\n\n"
+            f"**⚠️ Esta ação é irreversível!**\n"
+            f"Reaja com ✅ para confirmar ou ❌ para cancelar.",
+            color=0xff6b6b
         )
-        embed.set_footer(text=f"Conversando com {message.author.display_name} • 200+ tópicos disponíveis")
-        await message.channel.send(embed=embed)
 
-    await bot.process_commands(message)
+        confirm_msg = await message.channel.send(embed=confirm_embed)
+        await confirm_msg.add_reaction("✅")
+        await confirm_msg.add_reaction("❌")
 
-# Background tasks
-@tasks.loop(minutes=5)
-async def update_status():
-    statuses = [
-        f"👥 {len(set(bot.get_all_members()))} usuários",
-        f"🏠 {len(bot.guilds)} servidores",
-        f"💬 {global_stats['messages_processed']} mensagens",
-        "🚀 RXping para começar!",
-        "💰 Sistema de economia ativo",
-        "🎮 200+ comandos disponíveis",
-        "🛡️ Moderação automática ligada",
-        "🎪 Eventos e diversão!",
-        "🎁 Sistema de sorteios ativo",
-        "🤖 IA com 200+ tópicos"
-    ]
+        # Armazenar para processar confirmação
+        active_games[confirm_msg.id] = {
+            'type': 'close_ticket_confirmation',
+            'user': user.id,
+            'channel': message.channel.id,
+            'closer': user.id
+        }
 
-    status = random.choice(statuses)
-    activity_type = random.choice([
-        discord.ActivityType.watching,
-        discord.ActivityType.listening,
-        discord.ActivityType.playing
-    ])
+    # Sistema de chuva de moedas
+    if message.id in active_games:
+        game_data = active_games[message.id]
 
-    await bot.change_presence(
-        status=discord.Status.online,
-        activity=discord.Activity(type=activity_type, name=status)
+        if game_data['type'] == 'coin_rain' and str(reaction.emoji) == "💰":
+            if user.id not in game_data['participants'] and len(game_data['participants']) < game_data['max_participants']:
+                game_data['participants'].append(user.id)
+
+                # Se chegou no limite, distribuir prêmios
+                if len(game_data['participants']) >= game_data['max_participants']:
+                    total_coins = game_data['total_coins']
+                    coins_per_user = total_coins // game_data['max_participants']
+
+                    winners = []
+                    try:
+                        with db_lock:
+                            conn = get_db_connection()
+                            cursor = conn.cursor()
+                            for participant_id in game_data['participants']:
+                                user_data = get_user_data(participant_id)
+                                if user_data:
+                                    new_coins = user_data[1] + coins_per_user
+                                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, participant_id))
+                                    participant = bot.get_user(participant_id)
+                                    if participant:
+                                        winners.append(participant.mention)
+                            conn.commit()
+                            conn.close()
+                    except Exception as e:
+                        logger.error(f"Erro na distribuição da chuva de moedas: {e}")
+
+
+                    # Anunciar vencedores
+                    embed = create_embed(
+                        "💰 Chuva de Moedas Finalizada!",
+                        f"🎉 **Vencedores:**\n{', '.join(winners)}\n\n"
+                        f"💰 **Prêmio individual:** {coins_per_user:,} moedas\n"
+                        f"🏆 **Total distribuído:** {total_coins:,} moedas",
+                        color=0xffd700
+                    )
+                    await message.edit(embed=embed)
+
+                    del active_games[message.id]
+
+@bot.event
+async def on_member_join(member):
+    """Enviar mensagem de boas-vindas personalizada quando alguém entrar no servidor"""
+    if member.bot:
+        return
+
+    try:
+        # Canal específico para boas-vindas
+        welcome_channel_id = 1398027575028220013  # <#1398027575028220013>
+        welcome_channel = bot.get_channel(welcome_channel_id)
+
+        if not welcome_channel:
+            logger.error(f"Canal de boas-vindas {welcome_channel_id} não encontrado!")
+            return
+
+        # Buscar dados do usuário para personalizar ainda mais
+        user_data = get_user_data(member.id)
+        if not user_data:
+            update_user_data(member.id)
+
+        # Mensagens de boas-vindas variadas
+        welcome_messages = [
+            f"🎉 **Bem-vindo(a) ao nosso servidor, {member.mention}!**\n\n"
+            f"✨ Esperamos que se divirta muito aqui!\n"
+            f"🎮 Use `RXping` para começar a explorar os comandos\n"
+            f"💫 Ganhe XP enviando mensagens e suba de rank!\n\n"
+            f"*{member.guild.name} agora tem {member.guild.member_count} membros!*",
+
+            f"🚀 **{member.mention} chegou para arrasar!**\n\n"
+            f"🎊 Que bom te ver por aqui!\n"
+            f"🎯 Explore nossos +250 comandos com `RXajuda`\n"
+            f"💰 Comece sua jornada econômica com `RXdaily`\n\n"
+            f"*Membro #{member.guild.member_count} do {member.guild.name}!*",
+
+            f"🌟 **Olá {member.mention}! Seja muito bem-vindo(a)!**\n\n"
+            f"🎨 Pronto para uma experiência incrível?\n"
+            f"🤖 Converse comigo mencionando @RXbot\n"
+            f"🏆 Participe dos rankings e ganhe reputação!\n\n"
+            f"*Agradecemos por escolher o {member.guild.name}!*",
+
+            f"🎪 **Chegou mais um aventureiro! {member.mention}**\n\n"
+            f"🎭 Bem-vindo à nossa comunidade!\n"
+            f"🎲 Jogue, se divirta e faça novos amigos\n"
+            f"🎁 Participe dos sorteios e ganhe prêmios\n\n"
+            f"*{member.guild.name} está ainda melhor com você aqui!*"
+        ]
+
+        # Escolher mensagem aleatória
+        welcome_message = random.choice(welcome_messages)
+
+        # Criar embed personalizado
+        embed = create_embed(
+            f"🎉 Bem-vindo(a) ao {member.guild.name}!",
+            welcome_message,
+            color=0x00ff00
+        )
+
+        # Adicionar avatar do membro
+        embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+
+        # Adicionar informações adicionais
+        embed.add_field(
+            name="Primeiros Passos",
+            value="• `RXping` - Testar o bot\n"
+                  "• `RXajuda` - Ver todos os comandos\n"
+                  "• `RXdaily` - Ganhar moedas diárias\n"
+                  "• `RXrank` - Ver seu progresso",
+            inline=True
+        )
+
+        embed.add_field(
+            name="Informações",
+            value=f"• **Membro:** #{member.guild.member_count}\n"
+                  f"• **Conta criada:** <t:{int(member.created_at.timestamp())}:R>\n"
+                  f"• **Servidor:** {member.guild.name}\n"
+                  f"• **Data:** <t:{int(datetime.datetime.now().timestamp())}:F>",
+            inline=True
+        )
+
+        embed.set_footer(text=f"ID: {member.id} | Desejamos uma ótima experiência!")
+
+        # Enviar mensagem de boas-vindas
+        await welcome_channel.send(embed=embed)
+
+        # Log do evento
+        logger.info(f"👋 Boas-vindas enviadas para {member.name} em {member.guild.name}")
+
+        # Dar XP inicial para novos membros
+        add_xp(member.id, 25)  # XP bônus para novos membros
+
+    except Exception as e:
+        logger.error(f"Erro ao enviar boas-vindas para {member.name}: {e}")
+
+        # Tentar enviar mensagem simples se o embed falhar
+        try:
+            if welcome_channel:
+                await welcome_channel.send(f"🎉 Bem-vindo(a) {member.mention} ao {member.guild.name}! 🎉")
+        except:
+            pass
+
+# Sistema de monitoramento de saúde para detectar problemas
+async def health_monitor():
+    """Monitor de saúde que detecta quando o bot está em risco"""
+    last_activity = datetime.datetime.now()
+    consecutive_issues = 0
+
+    while True:
+        try:
+            await asyncio.sleep(45)  # Verificar a cada 45 segundos
+
+            current_time = datetime.datetime.now()
+            time_since_activity = (current_time - last_activity).total_seconds()
+
+            # Verificar se bot está respondendo
+            if bot.is_ready():
+                # Verificar latência
+                if bot.latency > 10.0:  # 10+ segundos é crítico
+                    consecutive_issues += 1
+                    logger.warning(f"🩺 Latência crítica: {bot.latency * 1000:.2f}ms ({consecutive_issues}/3)")
+                else:
+                    consecutive_issues = 0
+                    last_activity = current_time
+
+                # Se muitos problemas consecutivos
+                if consecutive_issues >= 3:
+                    logger.error("🚨 SAÚDE CRÍTICA! Iniciando recuperação de emergência...")
+
+                    # Forçar limpeza de memória
+                    import gc
+                    gc.collect()
+
+                    # Resetar contador
+                    consecutive_issues = 0
+
+                    # Notificar canal de alerta
+                    try:
+                        channel = bot.get_channel(CHANNEL_ID_ALERTA)
+                        if channel:
+                            embed = create_embed(
+                                "🚨 Sistema de Saúde - Alerta Crítico",
+                                f"Problemas detectados no bot!\n"
+                                f"**Latência:** {bot.latency * 1000:.2f}ms\n"
+                                f"**Ação:** Recuperação automática iniciada\n"
+                                f"**Status:** Tentando estabilizar...",
+                                color=0xff0000
+                            )
+                            await channel.send(embed=embed)
+                    except:
+                        pass
+            else:
+                consecutive_issues += 1
+                logger.error(f"🩺 Bot não está ready! ({consecutive_issues}/5)")
+
+                if consecutive_issues >= 5:
+                    logger.error("💀 BOT CRÍTICO! Não está ready há muito tempo!")
+                    consecutive_issues = 0
+
+        except Exception as e:
+            logger.error(f"❌ Erro no health monitor: {e}")
+            await asyncio.sleep(30)
+
+# Sistema de emergência - último recurso
+async def emergency_keeper():
+    """Sistema de emergência que atua quando tudo mais falha"""
+    emergency_count = 0
+
+    while True:
+        try:
+            # Verificar a cada 5 minutos
+            await asyncio.sleep(300)
+            emergency_count += 1
+
+            # Verificar se outros sistemas estão funcionando
+            try:
+                import aiohttp
+                systems_ok = 0
+
+                async with aiohttp.ClientSession() as session:
+                    # Testar endpoints críticos
+                    critical_endpoints = ['/ping', '/status', '/monitor']
+
+                    for endpoint in critical_endpoints:
+                        try:
+                            async with session.get(f'http://0.0.0.0:8080{endpoint}', timeout=3) as response:
+                                if response.status == 200:
+                                    systems_ok += 1
+                        except:
+                            continue
+
+                    # Se menos de 2 sistemas OK = EMERGÊNCIA
+                    if systems_ok < 2:
+                        logger.error(f"🆘 EMERGÊNCIA #{emergency_count}! Apenas {systems_ok}/3 sistemas OK")
+
+                        # Ações de emergência
+                        for i in range(5):
+                            try:
+                                async with session.get('http://0.0.0.0:8080/force-alive', timeout=2):
+                                    pass
+                                await asyncio.sleep(1)
+                            except:
+                                continue
+
+                        logger.info(f"🆘 Emergência #{emergency_count} - Pings forçados enviados")
+                    else:
+                        logger.info(f"🆘 Emergência #{emergency_count} - Sistemas OK ({systems_ok}/3)")
+
+            except Exception as e:
+                logger.error(f"Erro no sistema de emergência: {e}")
+
+        except Exception as e:
+            logger.error(f"❌ Erro crítico no emergency keeper: {e}")
+            await asyncio.sleep(120)
+
+# ============ SISTEMA DE TICKETS COMPLETO ============
+@bot.command(name='testetier', aliases=['rxticketier', 'tickettier'])
+async def create_tier_ticket(ctx):
+    """Criar ticket específico para tier"""
+    motivo = "RXticket só para tier"
+
+    # Sistema de confirmação para ticket tier
+    embed = create_embed(
+        "🎟️ Confirmação - Ticket Tier",
+        f"""**👑 TICKET ESPECÍFICO PARA TIER**
+
+**📋 Detalhes do ticket:**
+**Motivo:** {motivo}
+**Solicitante:** {ctx.author.mention}
+**Tipo:** Suporte especializado tier
+
+**ℹ️ O que vai acontecer:**
+• Canal privado será criado automaticamente
+• Apenas você e a staff tier poderão ver
+• Atendimento prioritário garantido
+• Suporte especializado para questões tier
+
+**⚠️ Importante:**
+• Este ticket é para assuntos relacionados a tier
+• Descreva claramente sua questão
+• Aguarde a resposta da equipe especializada
+
+**Deseja realmente criar este ticket tier?**""",
+        color=0xffd700
     )
 
-@tasks.loop(hours=6)
-async def backup_database():
-    try:
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        shutil.copy('rxbot.db', f'backup_rxbot_{timestamp}.db')
-        logger.info(f"✅ Database backup created: backup_rxbot_{timestamp}.db")
+    msg = await ctx.send(embed=embed)
+    await msg.add_reaction("✅")
+    await msg.add_reaction("❌")
 
-        # Clean old backups (keep only last 5)
-        backup_files = [f for f in os.listdir('.') if f.startswith('backup_rxbot_')]
-        backup_files.sort(reverse=True)
-        for old_backup in backup_files[5:]:
+    # Armazenar para processar confirmação
+    active_games[msg.id] = {
+        'type': 'ticket_tier_confirmation',
+        'user': ctx.author.id,
+        'channel': ctx.channel.id,
+        'motivo': motivo
+    }
+
+@bot.command(name='ticket', aliases=['rxticket'])
+async def create_ticket(ctx, *, motivo=None):
+    """Criar ticket de suporte com emoji"""
+    if not motivo:
+        embed = create_embed(
+            "🎟️ Sistema de Tickets",
+            """**Como criar um ticket:**
+`RXticket <motivo>`
+
+**Exemplos:**
+• `RXticket Problema com economia`
+• `RXticket Bug no bot`
+• `RXticket Sugestão de melhoria`
+• `RXticket Denúncia de usuário`
+
+**Ou use o sistema simplificado:**
+Digite apenas `RXticket` e escolha uma opção! ⬇️""",
+            color=0x7289da
+        )
+
+        # Sistema simplificado com emojis
+        embed.add_field(
+            name="🎯 Criação Rápida",
+            value="Reaja com o emoji correspondente:\n"
+                  "🐛 - Bug/Erro no bot\n"
+                  "💰 - Problema com economia\n"
+                  "⚖️ - Denúncia/Moderação\n"
+                  "💡 - Sugestão/Ideia\n"
+                  "❓ - Dúvida geral\n"
+                  "🛠️ - Suporte técnico\n"
+                  "👑 - RXticket só para tier",
+            inline=False
+        )
+
+        msg = await ctx.send(embed=embed)
+
+        # Adicionar reações
+        reactions = ["🐛", "💰", "⚖️", "💡", "❓", "🛠️", "👑"]
+        for reaction in reactions:
+            await msg.add_reaction(reaction)
+
+        # Armazenar para processar depois
+        active_games[msg.id] = {
+            'type': 'ticket_creation',
+            'user': ctx.author.id,
+            'channel': ctx.channel.id
+        }
+        return
+
+    # Sistema de confirmação para ticket com motivo específico
+    embed = create_embed(
+        "🎟️ Confirmação de Ticket",
+        f"""**📋 Você está prestes a criar um ticket:**
+
+**Motivo:** {motivo}
+**Solicitante:** {ctx.author.mention}
+
+**ℹ️ O que vai acontecer:**
+• Um canal privado será criado
+• Apenas você e a staff poderão ver
+• A equipe será notificada automaticamente
+• Você receberá suporte personalizado
+
+**⚠️ Importante:**
+• Descreva seu problema claramente
+• Seja respeitoso com a equipe
+• Aguarde a resposta da staff
+
+**Deseja realmente criar este ticket?**""",
+        color=0xffaa00
+    )
+
+    msg = await ctx.send(embed=embed)
+    await msg.add_reaction("✅")
+    await msg.add_reaction("❌")
+
+    # Armazenar para processar confirmação
+    active_games[msg.id] = {
+        'type': 'ticket_confirmation',
+        'user': ctx.author.id,
+        'channel': ctx.channel.id,
+        'motivo': motivo
+    }
+
+async def create_ticket_channel(ctx, motivo, user):
+    """Create ticket channel"""
+    # Obter guild de forma mais robusta
+    guild = None
+
+    # Tentar múltiplas formas de obter o guild
+    if hasattr(ctx, 'guild') and ctx.guild:
+        guild = ctx.guild
+    elif hasattr(ctx, 'channel') and ctx.channel and hasattr(ctx.channel, 'guild'):
+        guild = ctx.channel.guild
+    else:
+        # Fallback: buscar guild onde o usuário está presente
+        for g in bot.guilds:
             try:
-                os.remove(old_backup)
+                member = g.get_member(user.id)
+                if member:
+                    guild = g
+                    break
             except:
-                pass
+                continue
+
+    # Verificar se guild existe e é válido
+    if not guild or not hasattr(guild, 'categories'):
+        logger.error(f"Guild inválido ou None: {guild}")
+        try:
+            # Tentar obter guild do contexto da mensagem original se possível
+            if hasattr(ctx, 'channel') and hasattr(ctx.channel, 'guild'):
+                guild = ctx.channel.guild
+
+            # Se ainda não temos guild válido, erro crítico
+            if not guild or not hasattr(guild, 'categories'):
+                embed = create_embed("❌ Erro Crítico", "Erro interno: servidor não encontrado ou inválido", color=0xff0000)
+                if hasattr(ctx, 'send'):
+                    await ctx.send(embed=embed)
+                elif hasattr(ctx, 'channel'):
+                    await ctx.channel.send(embed=embed)
+                return
+        except Exception as e:
+            logger.error(f"Erro crítico na validação de guild: {e}")
+            return
+
+    # Verificar se usuário tem ticket prioritário
+    user_data = get_user_data(user.id)
+    priority = False
+    if user_data:
+        try:
+            settings = json.loads(user_data[11]) if user_data[11] else {}
+            if settings.get('priority_tickets', 0) > 0:
+                priority = True
+                settings['priority_tickets'] = settings['priority_tickets'] - 1
+                update_user_data(user.id, settings=settings)
+        except:
+            pass
+
+    # Criar categoria se não existir
+    category = discord.utils.get(guild.categories, name="📋 Tickets")
+    if not category:
+        try:
+            category = await guild.create_category("📋 Tickets")
+        except Exception as e:
+            logger.error(f"Erro ao criar categoria de tickets: {e}")
+            category = None
+
+    # Criar canal do ticket
+    ticket_name = f"ticket-{user.name}-{random.randint(1000, 9999)}"
+
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+        guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+    }
+
+    # Adicionar staff aos overwrites
+    for role in guild.roles:
+        if any(perm_name in role.name.lower() for perm_name in ['admin', 'mod', 'staff']) or role.permissions.administrator:
+            overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+    try:
+        ticket_channel = await guild.create_text_channel(
+            ticket_name,
+            category=category,
+            overwrites=overwrites
+        )
+    except Exception as e:
+        embed = create_embed("❌ Erro", f"Não foi possível criar o ticket: {str(e)}", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    # Salvar ticket no banco
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO tickets (guild_id, creator_id, channel_id, reason)
+                VALUES (?, ?, ?, ?)
+            ''', (guild.id, user.id, ticket_channel.id, motivo))
+            ticket_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        logger.error(f"Error saving ticket: {e}")
+        ticket_id = "ERRO"
+
+    # Embed inicial do ticket
+    priority_text = "🎫 PRIORITÁRIO " if priority else ""
+    embed = create_embed(
+        f"🎟️ {priority_text}Ticket #{ticket_id}",
+        f"""**Criado por:** {user.mention}
+**Motivo:** {motivo}
+**Status:** 🟢 Aberto
+**Criado em:** <t:{int(datetime.datetime.now().timestamp())}:F>
+
+📋 **Informações:**
+• Este ticket foi criado automaticamente
+• A staff será notificada em breve
+• Para fechar o ticket, reaja com 🔒
+
+{"🎫 **Este ticket tem prioridade!**" if priority else ""}
+
+⚠️ **Regras do ticket:**
+• Seja respeitoso e educado
+• Descreva seu problema claramente
+• Aguarde a resposta da staff
+• Não spam ou flood""",
+        color=0xffd700 if priority else 0x7289da
+    )
+
+    msg = await ticket_channel.send(f"{user.mention}", embed=embed)
+    await msg.add_reaction("🔒")  # Para fechar
+
+    # Notificar que ticket foi criado
+    confirm_embed = create_embed(
+        "✅ Ticket Criado!",
+        f"{priority_text}Seu ticket foi criado em {ticket_channel.mention}!\n"
+        f"**ID:** #{ticket_id}\n"
+        f"A staff será notificada automaticamente.",
+        color=0x00ff00
+    )
+
+    # Tentar enviar no canal original
+    try:
+        if hasattr(ctx, 'send'):
+            await ctx.send(embed=confirm_embed, delete_after=10)
+        elif hasattr(ctx, 'channel'):
+            await ctx.channel.send(embed=confirm_embed, delete_after=10)
+    except:
+        pass
+
+# ============ COMANDOS DE TESTE ============
+@bot.command(name='diagnostico', aliases=['diag', 'health'])
+@commands.has_permissions(administrator=True)
+async def diagnostico_completo(ctx):
+    """[ADMIN] Diagnóstico completo do sistema"""
+    embed = create_embed(
+        "🔍 Iniciando Diagnóstico Completo",
+        "Verificando todos os sistemas...",
+        color=0xffaa00
+    )
+    msg = await ctx.send(embed=embed)
+
+    resultados = []
+
+    # 1. Teste Database
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) FROM users')
+            user_count = cursor.fetchone()[0]
+            cursor.execute('SELECT COUNT(*) FROM tickets')
+            ticket_count = cursor.fetchone()[0]
+            cursor.execute('SELECT COUNT(*) FROM giveaways')
+            giveaway_count = cursor.fetchone()[0]
+            conn.close()
+        resultados.append(f"✅ **Database:** {user_count} users, {ticket_count} tickets, {giveaway_count} sorteios")
+    except Exception as e:
+        resultados.append(f"❌ **Database:** {str(e)[:50]}...")
+
+    # 2. Teste Keep-alive
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get('http://0.0.0.0:8080/ping', timeout=5) as response:
+                if response.status == 200:
+                    resultados.append("✅ **Keep-alive:** Porta 8080 ativa")
+                else:
+                    resultados.append(f"⚠️ **Keep-alive:** Status {response.status}")
+    except Exception as e:
+        resultados.append(f"❌ **Keep-alive:** {str(e)[:50]}...")
+
+    # 3. Teste Memória
+    try:
+        import psutil
+        memory = psutil.virtual_memory()
+        cpu = psutil.cpu_percent()
+        resultados.append(f"✅ **Sistema:** RAM {memory.percent}%, CPU {cpu}%")
+    except Exception as e:
+        resultados.append(f"⚠️ **Sistema:** Dados não disponíveis")
+
+    # 4. Teste Conexão Discord
+    latency = round(bot.latency * 1000, 2)
+    if latency < 200:
+        resultados.append(f"✅ **Discord:** {latency}ms - Excelente")
+    else:
+        resultados.append(f"⚠️ **Discord:** {latency}ms - Lenta")
+
+    # 5. Teste Background Tasks
+    running_tasks = []
+    if update_status.is_running():
+        running_tasks.append("Status")
+    if backup_database.is_running():
+        running_tasks.append("Backup")
+    if check_reminders.is_running():
+        running_tasks.append("Reminders")
+    if check_giveaways.is_running():
+        running_tasks.append("Giveaways")
+
+    if len(running_tasks) >= 3:
+        resultados.append(f"✅ **Tasks:** {len(running_tasks)}/4 ativos")
+    else:
+        resultados.append(f"⚠️ **Tasks:** {len(running_tasks)}/4 ativos")
+
+    # 6. Teste Arquivos Críticos
+    import os
+    arquivos_criticos = ['rxbot.db', 'main.py']
+    arquivos_ok = 0
+    for arquivo in arquivos_criticos:
+        if os.path.exists(arquivo):
+            arquivos_ok += 1
+
+    if arquivos_ok == len(arquivos_criticos):
+        resultados.append("✅ **Arquivos:** Todos presentes")
+    else:
+        resultados.append(f"⚠️ **Arquivos:** {arquivos_ok}/{len(arquivos_criticos)} encontrados")
+
+    # Análise final
+    sucessos = len([r for r in resultados if r.startswith("✅")])
+    avisos = len([r for r in resultados if r.startswith("⚠️")])
+    erros = len([r for r in resultados if r.startswith("❌")])
+
+    if erros == 0 and avisos <= 1:
+        status = "🎉 SISTEMA PERFEITO!"
+        cor = 0x00ff00
+    elif erros <= 1:
+        status = "⚠️ Sistema funcional com avisos"
+        cor = 0xffaa00
+    else:
+        status = "❌ Sistema com problemas"
+        cor = 0xff0000
+
+    embed_final = create_embed(
+        "🏥 Diagnóstico Completo - Resultado",
+        f"""**{status}**
+
+**📊 Resumo:**
+• ✅ OK: {sucessos}
+• ⚠️ Avisos: {avisos}
+• ❌ Erros: {erros}
+
+**📋 Detalhes:**
+""" + "\n".join(resultados) + f"""
+
+**📈 Performance:**
+• Uptime: {format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds()))}
+• Comandos: {global_stats['commands_used']:,}
+• Mensagens: {global_stats['messages_processed']:,}
+
+**🔧 Recomendações:**
+• Monitore regularmente com este comando
+• Mantenha backups atualizados
+• Configure UptimeRobot para monitoramento externo""",
+        color=cor
+    )
+
+    await msg.edit(embed=embed_final)
+
+@bot.command(name='testeCompleto', aliases=['testecompleto2', 'testefull'])
+@commands.has_permissions(administrator=True)
+async def teste_completo(ctx):
+    """[ADMIN] Teste completo de todos os sistemas do bot"""
+    embed = create_embed(
+        "🔧 Iniciando Teste Completo do Sistema",
+        "Verificando todos os componentes...",
+        color=0xffaa00
+    )
+    msg = await ctx.send(embed=embed)
+
+    resultados = []
+
+    # 1. Teste Database
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) FROM users')
+            user_count = cursor.fetchone()[0]
+            conn.close()
+        resultados.append("✅ **Database:** Funcionando - " + str(user_count) + " usuários")
+    except Exception as e:
+        resultados.append("❌ **Database:** Erro - " + str(e))
+
+    # 2. Teste Keep-alive
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get('http://0.0.0.0:8080/ping', timeout=5) as response:
+                if response.status == 200:
+                    resultados.append("✅ **Keep-alive:** Ativo - Porta 8080")
+                else:
+                    resultados.append("⚠️ **Keep-alive:** Problema - Status " + str(response.status))
+    except Exception as e:
+        resultados.append("❌ **Keep-alive:** Erro - " + str(e))
+
+    # 3. Teste Guild e Permissions
+    try:
+        guild = ctx.guild
+        if guild and hasattr(guild, 'categories'):
+            resultados.append(f"✅ **Guild:** Válido - {guild.name}")
+        else:
+            resultados.append("❌ **Guild:** Inválido ou sem categorias")
+    except Exception as e:
+        resultados.append("❌ **Guild:** Erro - " + str(e))
+
+    # 4. Teste Sistema de Tickets
+    try:
+        # Verificar se pode criar categoria de tickets
+        category = discord.utils.get(ctx.guild.categories, name="📋 Tickets")
+        if category:
+            resultados.append("✅ **Tickets:** Categoria existe")
+        else:
+            resultados.append("⚠️ **Tickets:** Categoria não existe (será criada automaticamente)")
+    except Exception as e:
+        resultados.append("❌ **Tickets:** Erro - " + str(e))
+
+    # 5. Teste XP System
+    try:
+        user_data = get_user_data(ctx.author.id)
+        if user_data:
+            resultados.append("✅ **Sistema XP:** Funcionando - User encontrado")
+        else:
+            resultados.append("⚠️ **Sistema XP:** User não existe (será criado)")
+    except Exception as e:
+        resultados.append("❌ **Sistema XP:** Erro - " + str(e))
+
+    # 6. Teste AI System
+    try:
+        ai_response = ai_system.generate_response("teste", None)
+        if ai_response:
+            resultados.append("✅ **Sistema IA:** Funcionando")
+        else:
+            resultados.append("❌ **Sistema IA:** Sem resposta")
+    except Exception as e:
+        resultados.append("❌ **Sistema IA:** Erro - " + str(e))
+
+    # 7. Teste Background Tasks
+    running_tasks = []
+    if update_status.is_running():
+        running_tasks.append("Status Update")
+    if backup_database.is_running():
+        running_tasks.append("Backup")
+    if check_reminders.is_running():
+        running_tasks.append("Reminders")
+    if check_giveaways.is_running():
+        running_tasks.append("Giveaways")
+
+    if running_tasks:
+        resultados.append(f"✅ **Background Tasks:** {len(running_tasks)} ativos - {', '.join(running_tasks)}")
+    else:
+        resultados.append("❌ **Background Tasks:** Nenhum ativo")
+
+    # 8. Teste Final - Latência
+    start = time.time()
+    latency = round(bot.latency * 1000, 2)
+    end = time.time()
+    response_time = round((end - start) * 1000, 2)
+
+    if latency < 200:
+        resultados.append(f"✅ **Latência:** {latency}ms - Excelente")
+    else:
+        resultados.append(f"⚠️ **Latência:** {latency}ms - Alta")
+
+    # Montar embed final
+    sucesso = len([r for r in resultados if r.startswith("✅")])
+    avisos = len([r for r in resultados if r.startswith("⚠️")])
+    erros = len([r for r in resultados if r.startswith("❌")])
+
+    if erros == 0:
+        cor = 0x00ff00
+        status = "🎉 SISTEMA 100% FUNCIONAL!"
+    elif erros <= 2:
+        cor = 0xffaa00  
+        status = "⚠️ Sistema funcional com avisos"
+    else:
+        cor = 0xff0000
+        status = "❌ Sistema com problemas críticos"
+
+    embed_final = create_embed(
+        "📊 Resultado do Teste Completo",
+        f"""**{status}**
+
+**📈 Resumo:**
+• ✅ Sucessos: {sucesso}
+• ⚠️ Avisos: {avisos}  
+• ❌ Erros: {erros}
+
+**📋 Detalhes:**
+""" + "\n".join(resultados) + f"""
+
+**⏱️ Uptime:** {format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds()))}
+**💾 Comandos executados:** {global_stats['commands_used']:,}
+**📨 Mensagens processadas:** {global_stats['messages_processed']:,}""",
+        color=cor
+    )
+
+    await msg.edit(embed=embed_final)
+
+# ============ COMANDOS BÁSICOS ============
+@bot.command(name='ping', aliases=['p', 'latencia', 'latency'])
+async def ping(ctx):
+    """Mostra a latência do bot"""
+    global_stats['commands_used'] += 1
+
+    start_time = time.time()
+    message = await ctx.send("🏓 Pong!")
+    end_time = time.time()
+
+    api_latency = round(bot.latency * 1000, 2)
+    response_time = round((end_time - start_time) * 1000, 2)
+
+    embed = create_embed(
+        "🏓 Pong!",
+        f"""**Latência da API:** {api_latency}ms
+**Tempo de resposta:** {response_time}ms
+**Status:** {'🟢 Excelente' if api_latency < 100 else '🟡 Bom' if api_latency < 200 else '🔴 Lento'}
+
+**Uptime:** {format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds()))}""",
+        color=0x00ff00 if api_latency < 100 else 0xffaa00 if api_latency < 200 else 0xff0000
+    )
+
+    await message.edit(content=None, embed=embed)
+
+@bot.command(name='ajuda', aliases=['help', 'comandos', 'commands'])
+async def help_command(ctx, categoria=None):
+    """Sistema de ajuda completo"""
+    if not categoria:
+        embed = create_embed(
+            "📚 Central de Ajuda - RXbot",
+            """**🎮 Diversão:**
+`RXajuda diversao` - Jogos, piadas, entretenimento
+
+**💰 Economia:**
+`RXajuda economia` - Dinheiro, loja premium, trabalho, troca de itens
+
+**🏆 Ranks:**
+`RXajuda ranks` - Sistema de ranking e XP
+
+**⚔️ Eventos de Clan:**
+`RXajuda eventos` - Batalhas entre clans e apostas
+
+**⚙️ Utilidades:**
+`RXajuda utilidades` - Ferramentas, conversores e lembretes
+
+**🛡️ Moderação:**
+`RXajuda moderacao` - Kick, ban, clear, warns
+
+**📊 Informações:**
+`RXajuda info` - Stats, perfil, servidor, avatar
+
+**🎁 Sorteios:**
+`RXajuda sorteios` - Sistema completo de sorteios
+
+**🎟️ Tickets:**
+`RXajuda tickets` - Sistema de suporte com feedback
+
+**👑 Administração:**
+`RXajuda admin` - Comandos para administradores
+
+**🛠️ Sistema:**
+`RXajuda sistema` - Status, performance, diagnóstico
+
+**🤖 IA Avançada:**
+Mencione o bot para conversar!
+
+**Total:** 300+ comandos disponíveis!""",
+            color=0x7289da
+        )
+        embed.set_footer(text="Use RXajuda <categoria> para ver comandos específicos!")
+        await ctx.send(embed=embed)
+
+    elif categoria.lower() in ['diversao', 'diversão', 'fun']:
+        embed = create_embed(
+            "🎮 Comandos de Diversão",
+            """**🎲 Jogos Básicos:**
+• `RXjokenpo <escolha>` - Pedra, papel, tesoura
+• `RXdado [lados]` - Rola um dado (padrão 6 lados)
+• `RXmoeda` - Cara ou coroa
+
+**🎊 Entretenimento:**
+• `RXpiada` - Conta uma piada aleatória
+• `RXenquete <pergunta>` - Cria enquete com reações
+• `RXpoll <pergunta>` - Enquete rápida
+
+**🎮 Jogos da Loja:**
+• **Desafio do Dia** - Mini-game com prêmios (item da loja)
+• **Caixa Misteriosa** - Caixa com surpresas (item da loja)
+• **Explosão de Moedas** - Chuva de moedas no chat (item da loja)
+
+**🤖 IA Interativa:**
+• Mencione o bot para conversar!
+• Sistema de IA com 200+ tópicos
+• Respostas contextuais inteligentes""",
+            color=0x7289da
+        )
+        await ctx.send(embed=embed)
+
+    elif categoria.lower() in ['economia', 'money', 'eco']:
+        embed = create_embed(
+            "💰 Comandos de Economia",
+            """**💵 Dinheiro Básico:**
+• `RXsaldo [@user]` - Ver saldo (carteira + banco)
+• `RXdaily` - Recompensa diária (100 moedas)
+• `RXweekly` - Recompensa semanal (700 moedas)
+• `RXmonthly` - Recompensa mensal (2500 moedas)
+• `RXtrabalhar` - Trabalhe por dinheiro (cooldown 2h)
+• `RXcrime` - Cometa um crime (risco/recompensa, cooldown 4h)
+
+**🏦 Transferências:**
+• `RXtransferir <@user> <valor>` - Transferir dinheiro
+• `RXpay <@user> <valor>` - Pagar alguém
+• `RXdepositar <valor>` - Depositar no banco
+• `RXsacar <valor>` - Sacar do banco
+
+**🛒 Loja Premium (10 itens únicos):**
+• `RXloja` - Ver loja com itens exclusivos
+• `RXcomprar <id>` - Comprar item da loja
+• `RXinventario [@user]` - Ver inventário completo
+• `RXusar <id>` - Usar item comprado
+
+**🔄 Sistema de Troca (NOVO):**
+• `RXdaritem <@user> <id> [qtd]` - Dar item para outro usuário
+• `RXtrocar <@user>` - Sistema de troca segura entre usuários
+• `RXefeitos [@user]` - Ver buffs e efeitos ativos
+• `RXsettitle <título>` - Definir título personalizado (requer item)
+
+**👑 Administração:**
+• `RXaddsaldo <@user> <valor>` - [ADMIN] Adicionar saldo
+• `RXremovesaldo <@user> <valor>` - [ADMIN] Remover saldo""",
+            color=0xffd700
+        )
+        await ctx.send(embed=embed)
+
+    elif categoria.lower() in ['ranks', 'rank', 'ranking']:
+        embed = create_embed(
+            "🏆 Sistema de Ranks",
+            """**Comandos de Rank:**
+• `RXrank [@user]` - Ver rank de usuário
+• `RXranklist` - Lista todos os ranks
+• `RXleaderboard [tipo]` - Ranking do servidor
+• `RXlb xp` - Top XP/Rank
+• `RXlb coins` - Top Economia  
+• `RXlb rep` - Top Reputação
+• `RXlevel [@user]` - Ver nível e XP
+• `RXtop` - Ranking geral
+
+**Sistema:**
+• Ganhe 5 XP por mensagem
+• 12 ranks disponíveis (Novato → Imortal)
+• Rankings por XP, dinheiro e reputação""",
+            color=0xffd700
+        )
+        await ctx.send(embed=embed)
+
+    elif categoria.lower() in ['moderacao', 'moderação', 'mod']:
+        embed = create_embed(
+            "🛡️ Comandos de Moderação",
+            """**Punições:**
+• `RXban <@user> [motivo]` - Banir membro
+• `RXkick <@user> [motivo]` - Expulsar membro
+• `RXmute <@user> [tempo]` - Mutar membro
+• `RXunmute <@user>` - Desmutar membro
+• `RXwarn <@user> [motivo]` - Dar advertência
+• `RXwarns [@user]` - Ver advertências
+
+**Limpeza:**
+• `RXclear <quantidade>` - Limpar mensagens (1-100)
+• `RXpurge <@user>` - Limpar mensagens de usuário
+• `RXlimpar <numero>` - Limpar mensagens
+
+**Gerenciamento:**
+• `RXlockdown` - Bloquear canal
+• `RXunlockdown` - Desbloquear canal
+• `RXslowmode <segundos>` - Modo lento no canal
+• `RXnuke` - Recriar canal completamente""",
+            color=0xff6b6b
+        )
+        await ctx.send(embed=embed)
+
+    elif categoria.lower() in ['info', 'informações', 'informacoes']:
+        embed = create_embed(
+            "📊 Comandos de Informações",
+            """**Usuário:**
+• `RXperfil [@user]` - Ver perfil completo
+• `RXavatar [@user]` - Ver avatar em alta resolução  
+• `RXuserinfo <@user>` - Info detalhada do usuário
+• `RXid [@user]` - Ver ID do usuário
+• `RXcreatetime [@user]` - Data de criação da conta
+
+**Servidor:**
+• `RXserverinfo` - Informações do servidor
+• `RXserverpic` - Ícone do servidor
+• `RXmembercount` - Contagem de membros
+• `RXroles` - Lista de cargos
+• `RXchannels` - Lista de canais
+
+**Sistema:**
+• `RXstats` - Estatísticas do bot
+• `RXping` - Latência do bot
+• `RXuptime` - Tempo online do bot
+• `RXversion` - Versão do bot""",
+            color=0x7289da
+        )
+        await ctx.send(embed=embed)
+
+    elif categoria.lower() in ['utilidades', 'util']:
+        embed = create_embed(
+            "⚙️ Comandos de Utilidades",
+            """**⏰ Ferramentas Básicas:**
+• `RXlembrete <tempo> <texto>` - Criar lembrete
+• `RXenquete <pergunta>` - Criar enquete
+• `RXpoll <pergunta>` - Enquete rápida
+
+**🔧 Conversores:**
+• `RXbase64 <texto>` - Converter para base64
+• `RXhash <texto>` - Gerar hash MD5/SHA
+• `RXbin <texto>` - Converter para binário
+• `RXhex <texto>` - Converter para hexadecimal
+
+**📝 Textos:**
+• `RXreverse <texto>` - Inverter texto
+• `RXuppercase <texto>` - MAIÚSCULAS
+• `RXlowercase <texto>` - minúsculas
+• `RXcapitalize <texto>` - Primeira Maiúscula
+
+**🔒 Segurança:**
+• `RXpassword [tamanho]` - Gerar senha segura
+• `RXqr <texto>` - Gerar QR Code
+
+**💡 Dica:** Use `RXlembrete 30m Estudar` para lembretes!""",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
+
+    elif categoria.lower() in ['sorteios', 'sorteio', 'giveaway']:
+        embed = create_embed(
+            "🎁 Sistema Completo de Sorteios",
+            """**Para Administradores:**
+• `RXcriarsorteio <dados>` - Criar sorteio
+• `RXgiveaway <dados>` - Criar sorteio
+• `RXendgiveaway <id>` - Finalizar sorteio
+• `RXreroll <id>` - Sortear novamente
+
+**Formato do sorteio:**
+`Título | Prêmio | Duração | Vencedores`
+
+**Para Todos:**
+• `RXsorteios` - Ver sorteios ativos
+• `RXgiveaways` - Lista de sorteios
+• Reaja com 🎉 para participar!
+
+**Exemplo:**
+`RXcriarsorteio iPhone 15 | iPhone novo | 24h | 1`
+
+**Durações aceitas:** 30m, 2h, 1d, 7d""",
+            color=0xffd700
+        )
+        await ctx.send(embed=embed)
+
+    elif categoria.lower() in ['tickets', 'ticket', 'suporte']:
+        embed = create_embed(
+            "🎟️ Sistema Completo de Tickets",
+            """**📝 Criar Tickets:**
+• `RXticket <motivo>` - Criar ticket com motivo específico
+• `RXticket` - Menu interativo de criação rápida
+• `RXtestetier` - Ticket específico para teste tier
+
+**🎯 Sistema Rápido (React):**
+🐛 Bug/Erro no bot | 💰 Problema com economia
+⚖️ Denúncia/Moderação | 💡 Sugestão/Ideia
+❓ Dúvida geral | 🛠️ Suporte técnico | 👑 Tier
+
+**🔧 Gerenciar Tickets:**
+• Reaja com 🔒 para fechar ticket
+• `RXadduser <@user>` - Adicionar usuário ao ticket
+• `RXremoveuser <@user>` - Remover usuário do ticket
+
+**⭐ Sistema de Feedback (NOVO):**
+• `RXfeedback <texto> X/10` - Avaliar atendimento
+• `RXfeedbacks` - [STAFF] Ver todas as avaliações
+• Sistema de notas de 0 a 10
+• Estatísticas automáticas para staff
+
+**👑 Para Staff/Admin:**
+• `RXtickets` - Ver todos os tickets
+• `RXresultadotier <resultado>` - Enviar resultado teste tier
+• Prioridade automática para tickets tier
+• Logs automáticos de fechamento""",
+            color=0x7289da
+        )
+        await ctx.send(embed=embed)
+
+    elif categoria.lower() in ['admin', 'administracao']:
+        embed = create_embed(
+            "👑 Comandos de Administração",
+            """**🎟️ Sistema de Tickets:**
+• `RXresultadotier <resultado>` - Enviar resultado teste tier
+• `RXfeedbacks` - Ver avaliações de tickets (com estatísticas)
+
+**🎁 Sistema de Sorteios:**
+• `RXcriarsorteio <dados>` - Criar sorteios
+• `RXendgiveaway <id>` - Finalizar sorteio
+• `RXreroll <id>` - Sortear novamente
+
+**⚔️ Eventos de Clan:**
+• `RXcriareventoclan <dados>` - Criar batalha entre clans
+• `RXeventosclan` - Ver eventos ativos
+• `RXfinalizareventoclan <id> <vencedor>` - Finalizar evento
+
+**💰 Economia Admin:**
+• `RXaddsaldo <@user> <valor>` - Adicionar saldo
+• `RXremovesaldo <@user> <valor>` - Remover saldo
+
+**🛡️ Moderação Avançada:**
+• `RXban <@user> [motivo]` - Ban com confirmação
+• `RXkick <@user> [motivo]` - Kick com confirmação
+• `RXclear <quantidade>` - Limpeza com confirmação
+• `RXwarn <@user> [motivo]` - Sistema de warns
+
+**🔧 Sistema e Monitoramento:**
+• `RXdiagnostico` - Diagnóstico completo do sistema
+• `RXperformance` - Monitor de performance detalhado
+• `RXtestecompleto` - Teste de todos os sistemas
+• `RXbackup` - Backup do banco de dados
+
+**💡 Total:** 300+ comandos | 8 sistemas de proteção 24/7""",
+            color=0xff6b6b
+        )
+        await ctx.send(embed=embed)
+
+    elif categoria.lower() in ['sistema', 'system', 'status']:
+        embed = create_embed(
+            "🛠️ Comandos de Sistema",
+            """**📊 Status e Informações:**
+• `RXping` - Latência do bot
+• `RXstatus` - Status completo do sistema
+• `RXuptime` - Tempo online do bot
+• `RXstats` - Estatísticas detalhadas do bot
+
+**🔍 Monitoramento:**
+• `RXperformance` - [ADMIN] Monitor de performance
+• `RXdiagnostico` - [ADMIN] Diagnóstico completo
+• `RXtestecompleto` - [ADMIN] Teste de todos os sistemas
+
+**🌐 Keep-alive System:**
+• ✅ Auto-ping (25s)
+• ✅ Keep-alive externo (120s)
+• ✅ Heartbeat (180s)
+• ✅ Monitor de emergência (180s)
+• ✅ Sistema anti-hibernação (45s)
+• ✅ Reconexão automática
+
+**🔧 Administração:**
+• `RXbackup` - [ADMIN] Backup do banco de dados
+• Sistema de restart automático
+• Monitoramento de latência
+• Notificações de erro no canal de alerta
+
+**💡 Dica:** O bot tem 8 sistemas de proteção rodando 24/7!""",
+            color=0x00ff80
+        )
+        await ctx.send(embed=embed)
+
+    elif categoria.lower() in ['eventos', 'clan', 'clans']:
+        embed = create_embed(
+            "⚔️ Sistema de Eventos de Clan",
+            """**Para Membros:**
+• `RXeventosclan` - Ver eventos ativos
+• Reaja com ⚔️ para participar
+• Reaja com 🏆 para apostar no seu clan
+
+**Para Administradores:**
+• `RXcriareventoclan <dados>` - Criar evento
+• `RXfinalizareventoclan <id> <vencedor>` - Finalizar
+
+**Formato de Criação:**
+`RXcriareventoclan CLAN1 vs CLAN2 | tipo | aposta | duração`
+
+**Exemplo:**
+`RXcriareventoclan XCLAN vs GSN | Battle Royale | 5000 | 2h`
+
+**Tipos de Eventos:**
+• Battle Royale
+• Team Deathmatch  
+• King of the Hill
+• Capture the Flag
+• Tournament
+
+**Durações aceitas:** 30m, 1h, 2h, 6h, 12h, 1d
+
+**Como funciona:**
+• Membros dos clans participam com aposta obrigatória
+• Admin decide o vencedor
+• Prêmio total é distribuído entre os vencedores""",
+            color=0xff6600
+        )
+        await ctx.send(embed=embed)
+
+# ============ COMANDOS DE MODERAÇÃO ============
+@bot.command(name='clear', aliases=['limpar', 'purge'])
+@commands.has_permissions(manage_messages=True)
+async def clear_messages(ctx, amount: int = 10):
+    """Limpa mensagens do canal"""
+    if amount < 1 or amount > 100:
+        embed = create_embed("❌ Quantidade inválida", "Use entre 1 e 100 mensagens", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    # Sistema de confirmação para limpeza
+    embed = create_embed(
+        "🧹 Confirmação de Limpeza",
+        f"""**⚠️ ATENÇÃO: Ação Irreversível**
+
+**Você está prestes a deletar {amount} mensagens!**
+
+**📍 Canal:** {ctx.channel.mention}
+**👤 Moderador:** {ctx.author.mention}
+**📊 Quantidade:** {amount} mensagens
+
+**Deseja realmente continuar?**""",
+        color=0xff6b6b
+    )
+
+    msg = await ctx.send(embed=embed)
+    await msg.add_reaction("✅")
+    await msg.add_reaction("❌")
+
+    # Armazenar para processar confirmação
+    active_games[msg.id] = {
+        'type': 'clear_confirmation',
+        'user': ctx.author.id,
+        'channel': ctx.channel.id,
+        'amount': amount
+    }
+
+@bot.command(name='ban', aliases=['banir'])
+@commands.has_permissions(ban_members=True)
+async def ban_member(ctx, member: discord.Member, *, reason="Sem motivo especificado"):
+    """Bane um membro"""
+    if member == ctx.author:
+        embed = create_embed("❌ Impossível", "Você não pode se banir!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    if member.top_role >= ctx.author.top_role:
+        embed = create_embed("❌ Sem permissão", "Você não pode banir este membro!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    # Sistema de confirmação para ban
+    embed = create_embed(
+        "🔨 Confirmação de Ban",
+        f"""**🚨 AÇÃO EXTREMAMENTE GRAVE**
+
+**Você está prestes a BANIR um membro!**
+
+**👤 Usuário:** {member.mention} ({member.name}#{member.discriminator})
+**🛡️ Moderador:** {ctx.author.mention}
+**📝 Motivo:** {reason}
+
+**⚠️ Esta ação é IRREVERSÍVEL!**
+**Tem certeza que deseja continuar?**
+
+Reaja com ✅ para confirmar ou ❌ para cancelar""",
+        color=0xff0000
+    )
+
+    msg = await ctx.send(embed=embed)
+    await msg.add_reaction("✅")
+    await msg.add_reaction("❌")
+
+    # Armazenar para processar confirmação
+    active_games[msg.id] = {
+        'type': 'ban_confirmation',
+        'user': ctx.author.id,
+        'channel': ctx.channel.id,
+        'member_id': member.id,
+        'reason': reason
+    }
+
+# ============ COMANDOS DE ECONOMIA ============
+@bot.command(name='saldo', aliases=['balance', 'bal'])
+async def balance(ctx, user: discord.Member = None):
+    """Ver saldo do usuário"""
+    target = user or ctx.author
+    data = get_user_data(target.id)
+
+    if not data:
+        update_user_data(target.id)
+        coins, bank = 50, 0
+    else:
+        coins, bank = data[1], data[5]
+
+    total = coins + bank
+
+    embed = create_embed(
+        f"💰 Carteira de {target.display_name}",
+        f"""**💵 Dinheiro:** {coins:,} moedas
+**🏦 Banco:** {bank:,} moedas
+**💎 Total:** {total:,} moedas
+
+*Use `RXdaily` para ganhar moedas diárias!*""",
+        color=0xffd700
+    )
+    embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
+    await ctx.send(embed=embed)
+
+@bot.command(name='daily', aliases=['diario'])
+async def daily(ctx):
+    """Recompensa diária"""
+    user_id = ctx.author.id
+    data = get_user_data(user_id)
+
+    if not data:
+        update_user_data(user_id)
+        data = get_user_data(user_id)
+
+    last_daily = data[6]
+    today = datetime.date.today().isoformat()
+
+    if last_daily == today:
+        embed = create_embed(
+            "⏰ Já coletado!",
+            "Você já coletou sua recompensa diária hoje!\nVolte amanhã para coletar novamente.",
+            color=0xff6b6b
+        )
+        await ctx.send(embed=embed)
+        return
+
+    # Update user data
+    new_coins = data[1] + DAILY_REWARD
+
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE users SET coins = ?, last_daily = ? WHERE user_id = ?',
+                          (new_coins, today, user_id))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        logger.error(f"Error updating daily: {e}")
+
+    embed = create_embed(
+        "🎁 Recompensa Diária!",
+        f"""**Recompensa:** {DAILY_REWARD:,} moedas
+**Novo saldo:** {new_coins:,} moedas
+
+🔥 *Continue coletando diariamente!*""",
+        color=0x00ff00
+    )
+    await ctx.send(embed=embed)
+
+# ============ COMANDOS DE RANK ============
+@bot.command(name='rank', aliases=['ranking', 'nivel'])
+async def user_rank(ctx, user: discord.Member = None):
+    """Ver rank do usuário"""
+    global_stats['commands_used'] += 1
+    target = user or ctx.author
+    data = get_user_data(target.id)
+
+    if not data:
+        update_user_data(target.id)
+        xp, level = 0, 1
+    else:
+        xp, level = data[2], data[3]
+
+    current_rank_id, current_rank = get_user_rank(xp)
+
+    # Calcular progresso para próximo rank
+    next_rank_id = current_rank_id + 1 if current_rank_id < 12 else 12
+    next_rank = RANK_SYSTEM.get(next_rank_id, RANK_SYSTEM[12])
+
+    if current_rank_id < 12:
+        xp_needed = next_rank["xp"] - xp
+        progress = ((xp - current_rank["xp"]) / (next_rank["xp"] - current_rank["xp"])) * 100
+        progress_bar = "█" * int(progress // 10) + "░" * (10 - int(progress // 10))
+    else:
+        xp_needed = 0
+        progress = 100
+        progress_bar = "█" * 10
+
+    # Obter título personalizado se existir
+    custom_title = ""
+    if data:
+        settings_data = data[11]
+        settings = json.loads(settings_data) if settings_data else {}
+        if settings.get('custom_title'):
+            custom_title = f" | {settings['custom_title']}"
+
+    embed = create_embed(
+        f"{current_rank['emoji']} Rank de {target.display_name}{custom_title}",
+        f"""**🏆 Rank Atual:** {current_rank['name']} (#{current_rank_id})
+**⭐ Level:** {level}
+**💫 XP Total:** {xp:,}
+
+**📊 Progresso para próximo rank:**
+{progress_bar} {progress:.1f}%
+**{next_rank['emoji']} Próximo:** {next_rank['name']}
+**💪 XP Necessário:** {xp_needed:,}
+
+**🎯 Estatísticas:**
+• Mensagens para próximo rank: ~{xp_needed // XP_PER_MESSAGE:,}
+• Posição no servidor: #{await get_user_position(target.id, ctx.guild.id)}""",
+        color=current_rank["color"]
+    )
+
+    embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
+    await ctx.send(embed=embed)
+
+@bot.command(name='transferir', aliases=['transfer', 'pay'])
+async def transferir(ctx, user: discord.Member, amount: int):
+    """Transferir dinheiro para outro usuário"""
+    if amount <= 0:
+        embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    if user == ctx.author:
+        embed = create_embed("❌ Impossível", "Você não pode transferir para si mesmo!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    sender_data = get_user_data(ctx.author.id)
+    if not sender_data:
+        update_user_data(ctx.author.id)
+        sender_data = get_user_data(ctx.author.id)
+
+    sender_coins = sender_data[1]
+
+    if sender_coins < amount:
+        embed = create_embed(
+            "💸 Dinheiro insuficiente",
+            f"Você só tem **{sender_coins:,} moedas**!\nPrecisa de **{amount:,} moedas**.",
+            color=0xff0000
+        )
+        await ctx.send(embed=embed)
+        return
+
+    # Processar transferência
+    try:
+        receiver_data = get_user_data(user.id)
+        if not receiver_data:
+            update_user_data(user.id)
+            receiver_data = get_user_data(user.id)
+
+        receiver_coins = receiver_data[1]
+
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            # Atualizar saldos
+            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (sender_coins - amount, ctx.author.id))
+            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (receiver_coins + amount, user.id))
+
+            # Registrar transações
+            cursor.execute('''
+                INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (ctx.author.id, ctx.guild.id, 'transfer_out', -amount, f"Transferiu para {user.name}"))
+
+            cursor.execute('''
+                INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (user.id, ctx.guild.id, 'transfer_in', amount, f"Recebeu de {ctx.author.name}"))
+
+            conn.commit()
+            conn.close()
+
+        embed = create_embed(
+            "✅ Transferência realizada!",
+            f"**De:** {ctx.author.mention}\n"
+            f"**Para:** {user.mention}\n"
+            f"**Valor:** {amount:,} moedas\n\n"
+            f"**Seu novo saldo:** {sender_coins - amount:,} moedas",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
+
+        # Notificar receptor
+        try:
+            dm_embed = create_embed(
+                "💰 Dinheiro Recebido!",
+                f"Você recebeu **{amount:,} moedas** de {ctx.author.mention}!\n"
+                f"**Seu novo saldo:** {receiver_coins + amount:,} moedas",
+                color=0x00ff00
+            )
+            await user.send(embed=dm_embed)
+        except:
+            pass
 
     except Exception as e:
-        logger.error(f"❌ Backup failed: {e}")
+        logger.error(f"Erro na transferência: {e}")
+        embed = create_embed("❌ Erro", "Erro ao processar transferência!", color=0xff0000)
+        await ctx.send(embed=embed)
 
-@tasks.loop(minutes=1)
-async def check_reminders():
-    """Check for due reminders"""
+@bot.command(name='depositar', aliases=['deposit'])
+async def depositar(ctx, amount: int):
+    """Depositar dinheiro no banco"""
+    if amount <= 0:
+        embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    user_data = get_user_data(ctx.author.id)
+    if not user_data:
+        update_user_data(ctx.author.id)
+        user_data = get_user_data(ctx.author.id)
+
+    coins, bank = user_data[1], user_data[5]
+
+    if coins < amount:
+        embed = create_embed(
+            "💸 Dinheiro insuficiente",
+            f"Você só tem **{coins:,} moedas** na carteira!",
+            color=0xff0000
+        )
+        await ctx.send(embed=embed)
+        return
+
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE users SET coins = ?, bank = ? WHERE user_id = ?', 
+                          (coins - amount, bank + amount, ctx.author.id))
+            conn.commit()
+            conn.close()
+
+        embed = create_embed(
+            "🏦 Depósito realizado!",
+            f"**Valor depositado:** {amount:,} moedas\n"
+            f"**Carteira:** {coins - amount:,} moedas\n"
+            f"**Banco:** {bank + amount:,} moedas\n"
+            f"**Total:** {(coins - amount) + (bank + amount):,} moedas",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        logger.error(f"Erro no depósito: {e}")
+        embed = create_embed("❌ Erro", "Erro ao depositar!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='sacar', aliases=['withdraw'])
+async def sacar(ctx, amount: int):
+    """Sacar dinheiro do banco"""
+    if amount <= 0:
+        embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    user_data = get_user_data(ctx.author.id)
+    if not user_data:
+        update_user_data(ctx.author.id)
+        user_data = get_user_data(ctx.author.id)
+
+    coins, bank = user_data[1], user_data[5]
+
+    if bank < amount:
+        embed = create_embed(
+            "🏦 Saldo insuficiente no banco",
+            f"Você só tem **{bank:,} moedas** no banco!",
+            color=0xff0000
+        )
+        await ctx.send(embed=embed)
+        return
+
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE users SET coins = ?, bank = ? WHERE user_id = ?', 
+                          (coins + amount, bank - amount, ctx.author.id))
+            conn.commit()
+            conn.close()
+
+        embed = create_embed(
+            "💰 Saque realizado!",
+            f"**Valor sacado:** {amount:,} moedas\n"
+            f"**Carteira:** {coins + amount:,} moedas\n"
+            f"**Banco:** {bank - amount:,} moedas\n"
+            f"**Total:** {(coins + amount) + (bank - amount):,} moedas",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        logger.error(f"Erro no saque: {e}")
+        embed = create_embed("❌ Erro", "Erro ao sacar!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='trabalhar', aliases=['work'])
+async def trabalhar(ctx):
+    """Trabalhar para ganhar dinheiro"""
+    user_data = get_user_data(ctx.author.id)
+    if not user_data:
+        update_user_data(ctx.author.id)
+        user_data = get_user_data(ctx.author.id)
+
+    # Verificar cooldown (2 horas)
+    try:
+        settings_data = user_data[11]
+        settings = json.loads(settings_data) if settings_data else {}
+        last_work = settings.get('last_work', 0)
+
+        current_time = time.time()
+        cooldown_time = WORK_COOLDOWN  # 2 horas
+
+        if current_time - last_work < cooldown_time:
+            remaining = cooldown_time - (current_time - last_work)
+            embed = create_embed(
+                "⏰ Muito cansado!",
+                f"Você precisa descansar por mais **{format_time(int(remaining))}**!",
+                color=0xff6b6b
+            )
+            await ctx.send(embed=embed)
+            return
+    except:
+        settings = {}
+
+    # Trabalhos disponíveis
+    trabalhos = [
+        {"nome": "Programador", "min": 150, "max": 300, "emoji": "💻"},
+        {"nome": "Delivery", "min": 80, "max": 200, "emoji": "🛵"},
+        {"nome": "Professor", "min": 120, "max": 250, "emoji": "👨‍🏫"},
+        {"nome": "Cozinheiro", "min": 100, "max": 220, "emoji": "👨‍🍳"},
+        {"nome": "Mecânico", "min": 90, "max": 180, "emoji": "🔧"},
+        {"nome": "Designer", "min": 110, "max": 240, "emoji": "🎨"},
+    ]
+
+    trabalho = random.choice(trabalhos)
+    ganho = random.randint(trabalho["min"], trabalho["max"])
+
+    # Bonus por level
+    level = user_data[3]
+    bonus = int(ganho * (level * 0.05))  # 5% por level
+    ganho_total = ganho + bonus
+
     try:
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
 
-            current_time = datetime.datetime.now()
+            # Atualizar dinheiro
+            new_coins = user_data[1] + ganho_total
+            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
+
+            # Atualizar cooldown
+            settings['last_work'] = current_time
+            cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+
+            # Registrar transação
             cursor.execute('''
-                SELECT id, user_id, guild_id, channel_id, reminder_text
-                FROM reminders
-                WHERE remind_time <= ?
-            ''', (current_time,))
-
-            due_reminders = cursor.fetchall()
-
-            for reminder in due_reminders:
-                try:
-                    reminder_id, user_id, guild_id, channel_id, text = reminder
-
-                    channel = bot.get_channel(channel_id)
-                    if channel:
-                        user = bot.get_user(user_id)
-                        embed = create_embed(
-                            "⏰ Lembrete!",
-                            f"{user.mention if user else 'Usuário'}, você pediu para ser lembrado:\n\n**{text}**",
-                            color=0xffaa00
-                        )
-                        await channel.send(embed=embed)
-
-                    cursor.execute('DELETE FROM reminders WHERE id = ?', (reminder_id,))
-
-                except Exception as e:
-                    logger.error(f"Error sending reminder: {e}")
+                INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (ctx.author.id, ctx.guild.id, 'work', ganho_total, f"Trabalhou como {trabalho['nome']}"))
 
             conn.commit()
             conn.close()
 
-    except Exception as e:
-        logger.error(f"Error checking reminders: {e}")
+        embed = create_embed(
+            f"{trabalho['emoji']} Trabalho Concluído!",
+            f"**Profissão:** {trabalho['nome']}\n"
+            f"**Ganho base:** {ganho:,} moedas\n"
+            f"**Bônus level {level}:** {bonus:,} moedas\n"
+            f"**Total ganho:** {ganho_total:,} moedas\n"
+            f"**Novo saldo:** {new_coins:,} moedas\n\n"
+            f"*Próximo trabalho em 2 horas*",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
 
-@tasks.loop(minutes=1)
-async def check_giveaways():
-    """Check for finished giveaways"""
+        # Chance de ganhar XP
+        if random.randint(1, 100) <= 30:  # 30% chance
+            xp_bonus = random.randint(10, 25)
+            add_xp(ctx.author.id, xp_bonus)
+            await ctx.send(f"🎉 Bônus: +{xp_bonus} XP por trabalhar bem!")
+
+    except Exception as e:
+        logger.error(f"Erro no trabalho: {e}")
+        embed = create_embed("❌ Erro", "Erro ao trabalhar!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='crime', aliases=['roubar'])
+async def crime(ctx):
+    """Cometer um crime (risco/recompensa)"""
+    user_data = get_user_data(ctx.author.id)
+    if not user_data:
+        update_user_data(ctx.author.id)
+        user_data = get_user_data(ctx.author.id)
+
+    # Verificar cooldown (4 horas)
+    try:
+        settings_data = user_data[11]
+        settings = json.loads(settings_data) if settings_data else {}
+        last_crime = settings.get('last_crime', 0)
+
+        current_time = time.time()
+        cooldown_time = CRIME_COOLDOWN  # 4 horas
+
+        if current_time - last_crime < cooldown_time:
+            remaining = cooldown_time - (current_time - last_crime)
+            embed = create_embed(
+                "🚔 Procurado pela polícia!",
+                f"Você precisa se esconder por mais **{format_time(int(remaining))}**!",
+                color=0xff6b6b
+            )
+            await ctx.send(embed=embed)
+            return
+    except:
+        settings = {}
+
+    # 60% chance de sucesso
+    sucesso = random.randint(1, 100) <= 60
+
+    crimes = [
+        {"nome": "Hackear banco", "ganho": (800, 1500), "perda": (200, 400), "emoji": "💻"},
+        {"nome": "Roubar loja", "ganho": (300, 800), "perda": (100, 300), "emoji": "🏪"},
+        {"nome": "Furtar carteira", "ganho": (150, 400), "perda": (50, 150), "emoji": "👛"},
+        {"nome": "Golpe online", "ganho": (500, 1200), "perda": (150, 350), "emoji": "📱"},
+        {"nome": "Contrabando", "ganho": (600, 1000), "perda": (200, 500), "emoji": "📦"},
+    ]
+
+    crime = random.choice(crimes)
+
     try:
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
 
-            current_time = datetime.datetime.now()
-            cursor.execute('''
-                SELECT id, guild_id, channel_id, creator_id, title, prize, winners_count, participants, message_id
-                FROM giveaways
-                WHERE end_time <= ? AND status = 'active'
-            ''', (current_time,))
+            if sucesso:
+                # Crime bem-sucedido
+                ganho = random.randint(crime["ganho"][0], crime["ganho"][1])
+                new_coins = user_data[1] + ganho
 
-            finished_giveaways = cursor.fetchall()
+                cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
 
-            for giveaway in finished_giveaways:
-                try:
-                    gw_id, guild_id, channel_id, creator_id, title, prize, winners_count, participants_json, message_id = giveaway
+                cursor.execute('''
+                    INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (ctx.author.id, ctx.guild.id, 'crime_success', ganho, f"Crime bem-sucedido: {crime['nome']}"))
 
-                    channel = bot.get_channel(channel_id)
-                    if not channel:
-                        continue
+                embed = create_embed(
+                    f"🎭 Crime Bem-Sucedido!",
+                    f"**Crime:** {crime['emoji']} {crime['nome']}\n"
+                    f"**Ganho:** {ganho:,} moedas\n"
+                    f"**Novo saldo:** {new_coins:,} moedas\n\n"
+                    f"🕵️ *Ninguém te viu...*",
+                    color=0x00ff00
+                )
 
-                    participants = json.loads(participants_json) if participants_json else []
+            else:
+                # Crime falhou
+                perda = random.randint(crime["perda"][0], crime["perda"][1])
+                perda = min(perda, user_data[1])  # Não pode perder mais do que tem
+                new_coins = max(0, user_data[1] - perda)
 
-                    if len(participants) == 0:
-                        embed = create_embed(
-                            "😔 Sorteio Cancelado",
-                            f"**{title}**\n\nNenhum participante! O sorteio foi cancelado.",
-                            color=0xff6b6b
-                        )
-                        await channel.send(embed=embed)
-                    else:
-                        # Selecionar vencedores
-                        actual_winners_count = min(winners_count, len(participants))
-                        winners = random.sample(participants, actual_winners_count)
+                cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
 
-                        winner_mentions = []
-                        for winner_id in winners:
-                            user = bot.get_user(winner_id)
-                            if user:
-                                winner_mentions.append(user.mention)
+                cursor.execute('''
+                    INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (ctx.author.id, ctx.guild.id, 'crime_fail', -perda, f"Crime falhou: {crime['nome']}"))
 
-                        embed = create_embed(
-                            "🎉 Sorteio Finalizado!",
-                            f"""**{title}**
+                embed = create_embed(
+                    f"🚔 Crime Falhou!",
+                    f"**Crime:** {crime['emoji']} {crime['nome']}\n"
+                    f"**Multa:** {perda:,} moedas\n"
+                    f"**Novo saldo:** {new_coins:,} moedas\n\n"
+                    f"🚨 *A polícia te pegou!*",
+                    color=0xff0000
+                )
 
-    🏆 **Vencedor(es):** {', '.join(winner_mentions)}
-    🎁 **Prêmio:** {prize}
-    👥 **Total de participantes:** {len(participants)}
-
-    Parabéns aos vencedores! 🎊""",
-                            color=0x00ff00
-                        )
-
-                        await channel.send(embed=embed)
-
-                        # Tentar encontrar e editar a mensagem original
-                        try:
-                            original_msg = await channel.fetch_message(message_id)
-                            ended_embed = create_embed(
-                                "🎁 Sorteio Finalizado",
-                                f"**{title}**\n\n🏆 Vencedores: {', '.join(winner_mentions)}\n🎁 Prêmio: {prize}",
-                                color=0xff6b6b
-                            )
-                            await original_msg.edit(embed=ended_embed)
-                        except:
-                            pass
-
-                    # Marcar como finalizado
-                    cursor.execute('UPDATE giveaways SET status = ? WHERE id = ?', ('finished', gw_id))
-
-                except Exception as e:
-                    logger.error(f"Error finishing giveaway: {e}")
+            # Atualizar cooldown
+            settings['last_crime'] = current_time
+            cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
 
             conn.commit()
             conn.close()
 
-    except Exception as e:
-        logger.error(f"Error checking giveaways: {e}")
+        await ctx.send(embed=embed)
 
-# ============ SISTEMA DE SORTEIOS COMPLETO ============
-@bot.command(name='criarsorteio', aliases=['giveaway', 'sortear'])
+    except Exception as e:
+        logger.error(f"Erro no crime: {e}")
+        embed = create_embed("❌ Erro", "Erro ao cometer crime!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='weekly', aliases=['semanal'])
+async def weekly(ctx):
+    """Recompensa semanal"""
+    user_id = ctx.author.id
+    data = get_user_data(user_id)
+
+    if not data:
+        update_user_data(user_id)
+        data = get_user_data(user_id)
+
+    last_weekly = data[7]
+    today = datetime.date.today()
+    week_start = today - datetime.timedelta(days=today.weekday())
+    week_start_str = week_start.isoformat()
+
+    if last_weekly and last_weekly >= week_start_str:
+        next_week = week_start + datetime.timedelta(days=7)
+        embed = create_embed(
+            "⏰ Já coletado esta semana!",
+            f"Você já coletou sua recompensa semanal!\nPróxima coleta: {next_week.strftime('%d/%m/%Y')}",
+            color=0xff6b6b
+        )
+        await ctx.send(embed=embed)
+        return
+
+    # Update user data
+    new_coins = data[1] + WEEKLY_REWARD
+
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE users SET coins = ?, last_weekly = ? WHERE user_id = ?',
+                          (new_coins, week_start_str, user_id))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        logger.error(f"Error updating weekly: {e}")
+
+    embed = create_embed(
+        "🎁 Recompensa Semanal!",
+        f"""**Recompensa:** {WEEKLY_REWARD:,} moedas
+**Novo saldo:** {new_coins:,} moedas
+
+🔥 *Continue coletando semanalmente!*""",
+        color=0x00ff00
+    )
+    await ctx.send(embed=embed)
+
+@bot.command(name='monthly', aliases=['mensal'])
+async def monthly(ctx):
+    """Recompensa mensal"""
+    user_id = ctx.author.id
+    data = get_user_data(user_id)
+
+    if not data:
+        update_user_data(user_id)
+        data = get_user_data(user_id)
+
+    last_monthly = data[8]
+    today = datetime.date.today()
+    month_start = today.replace(day=1).isoformat()
+
+    if last_monthly == month_start:
+        next_month = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+        embed = create_embed(
+            "⏰ Já coletado este mês!",
+            f"Você já coletou sua recompensa mensal!\nPróxima coleta: {next_month.strftime('%d/%m/%Y')}",
+            color=0xff6b6b
+        )
+        await ctx.send(embed=embed)
+        return
+
+    # Update user data
+    new_coins = data[1] + MONTHLY_REWARD
+
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE users SET coins = ?, last_monthly = ? WHERE user_id = ?',
+                          (new_coins, month_start, user_id))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        logger.error(f"Error updating monthly: {e}")
+
+    embed = create_embed(
+        "🎁 Recompensa Mensal!",
+        f"""**Recompensa:** {MONTHLY_REWARD:,} moedas
+**Novo saldo:** {new_coins:,} moedas
+
+🔥 *Continue coletando mensalmente!*""",
+        color=0x00ff00
+    )
+    await ctx.send(embed=embed)
+
+@bot.command(name='leaderboard', aliases=['lb', 'toplist'])
+async def leaderboard(ctx, tipo='xp'):
+    """Ver ranking do servidor"""
+    global_stats['commands_used'] += 1
+
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            if tipo.lower() in ['xp', 'rank', 'nivel']:
+                cursor.execute('''
+                    SELECT user_id, xp, level FROM users 
+                    ORDER BY xp DESC LIMIT 15
+                ''')
+                title = "🏆 Top XP/Rank do Servidor"
+                field_name = "Ranking por XP"
+            elif tipo.lower() in ['coins', 'money', 'dinheiro']:
+                cursor.execute('''
+                    SELECT user_id, coins, bank FROM users 
+                    ORDER BY (coins + bank) DESC LIMIT 15
+                ''')
+                title = "💰 Top Economia do Servidor"
+                field_name = "Ranking por Dinheiro"
+            elif tipo.lower() in ['rep', 'reputacao']:
+                cursor.execute('''
+                    SELECT user_id, reputation FROM users 
+                    ORDER BY reputation DESC LIMIT 15
+                ''')
+                title = "⭐ Top Reputação do Servidor"
+                field_name = "Ranking por Reputação"
+            else:
+                cursor.execute('''
+                    SELECT user_id, xp, level FROM users 
+                    ORDER BY xp DESC LIMIT 15
+                ''')
+                title = "🏆 Top XP/Rank do Servidor"
+                field_name = "Ranking por XP"
+
+            results = cursor.fetchall()
+            conn.close()
+
+        if not results:
+            embed = create_embed("📊 Ranking Vazio", "Ainda não há dados suficientes para o ranking!", color=0xffaa00)
+            await ctx.send(embed=embed)
+            return
+
+        embed = create_embed(title, f"Top {len(results)} usuários do servidor:", color=0xffd700)
+
+        leaderboard_text = ""
+        medals = ["🥇", "🥈", "🥉"]
+
+        for i, result in enumerate(results):
+            user_id = result[0]
+            user = ctx.guild.get_member(user_id)
+
+            if not user:
+                continue
+
+            medal = medals[i] if i < 3 else f"{i+1}º"
+
+            if tipo.lower() in ['xp', 'rank', 'nivel']:
+                xp, level = result[1], result[2]
+                rank_id, rank_data = get_user_rank(xp)
+                leaderboard_text += f"{medal} **{user.display_name}**\n"
+                leaderboard_text += f"   {rank_data['emoji']} {rank_data['name']} | Level {level} | {xp:,} XP\n\n"
+
+            elif tipo.lower() in ['coins', 'money', 'dinheiro']:
+                coins, bank = result[1], result[2]
+                total = coins + bank
+                leaderboard_text += f"{medal} **{user.display_name}**\n"
+                leaderboard_text += f"   💰 {total:,} moedas (💵 {coins:,} + 🏦 {bank:,})\n\n"
+
+            elif tipo.lower() in ['rep', 'reputacao']:
+                rep = result[1]
+                leaderboard_text += f"{medal} **{user.display_name}**\n"
+                leaderboard_text += f"   ⭐ {rep} pontos de reputação\n\n"
+
+        if leaderboard_text:
+            embed.add_field(name=field_name, value=leaderboard_text[:1024], inline=False)
+
+        embed.set_footer(text=f"Use: RXleaderboard xp/coins/rep • Posição de {ctx.author.display_name}: #{await get_user_position(ctx.author.id, ctx.guild.id)}")
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        logger.error(f"Erro no leaderboard: {e}")
+        embed = create_embed("❌ Erro", "Erro ao carregar ranking. Tente novamente.", color=0xff0000)
+        await ctx.send(embed=embed)
+
+async def get_user_position(user_id, guild_id):
+    """Obter posição do usuário no ranking"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            # Contar quantos usuários têm XP maior
+            cursor.execute('SELECT COUNT(*) FROM users WHERE xp > (SELECT xp FROM users WHERE user_id = ?)', (user_id,))
+            position = cursor.fetchone()[0] + 1
+
+            conn.close()
+            return position
+    except:
+        return "?"
+
+@bot.command(name='ranklist', aliases=['ranks', 'rankinfo'])
+async def rank_list(ctx):
+    """Lista todos os ranks disponíveis"""
+    global_stats['commands_used'] += 1
+
+    embed = create_embed(
+        "🏆 Sistema de Ranks do RXbot",
+        "Ganhe XP enviando mensagens e suba de rank!",
+        color=0xffd700
+    )
+
+    rank_text = ""
+    for rank_id, rank_data in RANK_SYSTEM.items():
+        rank_text += f"{rank_data['emoji']} **{rank_data['name']}** - {rank_data['xp']:,} XP\n"
+
+    embed.add_field(name="📋 Lista de Ranks", value=rank_text, inline=False)
+    embed.add_field(name="💡 Dicas", value=f"• Ganhe {XP_PER_MESSAGE} XP por mensagem\n• Use `RXrank` para ver seu progresso\n• Use `RXleaderboard` para ver o ranking", inline=False)
+
+    await ctx.send(embed=embed)
+
+# ============ COMANDOS DE SORTEIO ============
+@bot.command(name='criarsorteio', aliases=['giveaway'])
 @commands.has_permissions(administrator=True)
 async def create_giveaway(ctx, *, giveaway_data=None):
     """[ADMIN] Criar um novo sorteio"""
     if not giveaway_data:
         embed = create_embed(
             "🎁 Como criar um sorteio",
-            """**Formato:** `RXcriarsorteio Título | Prêmio | Duração | Vencedores`
+            """**Formato:** `Título | Prêmio | Duração | Vencedores`
 
-    **Exemplo:**
-    `RXcriarsorteio iPhone 15 Pro | iPhone 15 Pro Max 256GB | 24h | 1`
-    `RXcriarsorteio Nitro Discord | 3 meses de Nitro | 7d | 3`
+**Exemplo:**
+`RXcriarsorteio iPhone 15 | iPhone 15 Pro | 24h | 1`
 
-    **Durações:** 30m, 2h, 1d, 7d, etc.
-    **Vencedores:** Número de pessoas que vão ganhar""",
+**Durações:** 30m, 2h, 1d, 7d""",
             color=0x7289da
         )
         await ctx.send(embed=embed)
@@ -1280,11 +3950,11 @@ async def create_giveaway(ctx, *, giveaway_data=None):
         embed = create_embed(
             f"🎁 {title}",
             f"""**Prêmio:** {prize}
-    **Vencedores:** {winners_count}
-    **Termina:** <t:{int(end_time.timestamp())}:R>
-    **Criado por:** {ctx.author.mention}
+**Vencedores:** {winners_count}
+**Termina:** <t:{int(end_time.timestamp())}:R>
+**Criado por:** {ctx.author.mention}
 
-    Reaja com 🎉 para participar!""",
+Reaja com 🎉 para participar!""",
             color=0xffd700
         )
 
@@ -1302,19 +3972,9 @@ async def create_giveaway(ctx, *, giveaway_data=None):
             conn.commit()
             conn.close()
 
-        # Confirmação
-        confirm_embed = create_embed(
-            "✅ Sorteio Criado!",
-            f"O sorteio **{title}** foi criado com sucesso!\nTerminará em {amount}{unit}.",
-            color=0x00ff00
-        )
-        await ctx.send(embed=confirm_embed, delete_after=10)
-
     except ValueError:
-        embed = create_embed("❌ Duração inválida", "Use números válidos: 30m, 2h, 1d, etc.", color=0xff0000)
+        embed = create_embed("❌ Duração inválida", "Use números válidos: 30m, 2h, 1d", color=0xff0000)
         await ctx.send(embed=embed)
-    except Exception as e:
-        logger.error(f"Error creating giveaway: {e}")
 
 @bot.command(name='sorteios', aliases=['giveaways'])
 async def list_giveaways(ctx):
@@ -1348,27 +4008,15 @@ async def list_giveaways(ctx):
             color=0xffd700
         )
 
-        for giveaway in giveaways[:5]:  # Show only first 5
-            title, prize, end_time_str, winners_count, participants_json = giveaway
+        for giveaway in giveaways[:5]:
+            title, prize, end_time_str, winners_count, participants_json, _ = giveaway  # Ignorar status e created_at
             participants = json.loads(participants_json) if participants_json else []
-
-            try:
-                end_time = datetime.datetime.fromisoformat(end_time_str)
-                time_left = end_time - datetime.datetime.now()
-
-                if time_left.total_seconds() > 0:
-                    time_left_str = format_time(int(time_left.total_seconds()))
-                else:
-                    time_left_str = "Finalizado"
-            except:
-                time_left_str = "Erro no tempo"
 
             embed.add_field(
                 name=f"🎊 {title}",
                 value=f"🎁 **Prêmio:** {prize}\n"
                       f"🏆 **Vencedores:** {winners_count}\n"
-                      f"👥 **Participantes:** {len(participants)}\n"
-                      f"⏰ **Termina em:** {time_left_str}",
+                      f"👥 **Participantes:** {len(participants)}",
                 inline=False
             )
 
@@ -1377,118 +4025,1391 @@ async def list_giveaways(ctx):
     except Exception as e:
         logger.error(f"Error listing giveaways: {e}")
 
-@bot.event
-async def on_reaction_add(reaction, user):
-    """Handle giveaway participation"""
-    if user.bot:
+# ============ SISTEMA DE TESTE TIER E FEEDBACK ============
+@bot.command(name='resultadotier', aliases=['testetierresult'])
+@commands.has_permissions(administrator=True)
+async def resultado_teste_tier(ctx, *, resultado):
+    """[ADMIN] Enviar resultado de teste tier para canal específico"""
+    try:
+        channel = bot.get_channel(CHANNEL_ID_TESTE_TIER)
+        if not channel:
+            embed = create_embed("❌ Erro", "Canal de teste tier não encontrado!", color=0xff0000)
+            await ctx.send(embed=embed)
+            return
+
+        embed = create_embed(
+            "📋 Resultado - Teste Tier",
+            f"""**Resultado do teste tier:**
+
+{resultado}
+
+**Avaliado por:** {ctx.author.mention}
+**Data:** <t:{int(datetime.datetime.now().timestamp())}:F>
+
+*Este é um resultado oficial do teste tier.*""",
+            color=0xffd700
+        )
+
+        await channel.send(embed=embed)
+
+        # Confirmar envio
+        confirm_embed = create_embed(
+            "✅ Resultado Enviado!",
+            f"Resultado do teste tier foi enviado para {channel.mention}",
+            color=0x00ff00
+        )
+        await ctx.send(embed=confirm_embed, delete_after=10)
+
+    except Exception as e:
+        logger.error(f"Erro ao enviar resultado tier: {e}")
+        embed = create_embed("❌ Erro", "Erro ao enviar resultado!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='feedback', aliases=['avaliar'])
+async def feedback_ticket(ctx, *, avaliacao):
+    """Dar feedback sobre atendimento de ticket"""
+    # Verificar se está em um canal de ticket
+    if not ctx.channel.name.startswith('ticket-'):
+        embed = create_embed(
+            "❌ Comando Inválido",
+            "Este comando só pode ser usado dentro de canais de ticket!",
+            color=0xff0000
+        )
+        await ctx.send(embed=embed)
         return
 
-    if str(reaction.emoji) == "🎉":
+    try:
+        # Extrair nota da avaliação usando regex
+        import re
+        notas = re.findall(r'(\d{1,2})/10', avaliacao)
+
+        if not notas:
+            embed = create_embed(
+                "❌ Formato Inválido",
+                "Por favor, inclua uma nota no formato X/10\n**Exemplo:** `RXfeedback Ótimo atendimento! Nota 9/10`",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
+
+        # Converter notas para números
+        notas_numericas = [int(nota) for nota in notas if 0 <= int(nota) <= 10]
+
+        if not notas_numericas:
+            embed = create_embed(
+                "❌ Nota Inválida",
+                "Use notas entre 0 e 10!",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
+
+        # Calcular média arredondada
+        media = round(sum(notas_numericas) / len(notas_numericas))
+
+        # Salvar feedback no banco
         try:
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
 
-                cursor.execute('''
-                    SELECT id, participants FROM giveaways
-                    WHERE message_id = ? AND status = 'active'
-                ''', (reaction.message.id,))
-
-                giveaway = cursor.fetchone()
-
-                if giveaway:
-                    gw_id, participants_json = giveaway
-                    participants = json.loads(participants_json) if participants_json else []
-
-                    if user.id not in participants:
-                        participants.append(user.id)
-
-                        cursor.execute('''
-                            UPDATE giveaways SET participants = ? WHERE id = ?
-                        ''', (json.dumps(participants), gw_id))
-
-                        conn.commit()
-
-                        # Enviar confirmação via DM
-                        try:
-                            embed = create_embed(
-                                "✅ Participação Confirmada!",
-                                "Você foi inscrito no sorteio com sucesso!\nBoa sorte! 🍀",
-                                color=0x00ff00
-                            )
-                            await user.send(embed=embed)
-                        except:
-                            pass
-
-                conn.close()
-
-        except Exception as e:
-            logger.error(f"Error handling giveaway participation: {e}")
-
-@bot.event
-async def on_reaction_remove(reaction, user):
-    """Handle giveaway departure"""
-    if user.bot:
-        return
-
-    if str(reaction.emoji) == "🎉":
-        try:
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
+                # Criar tabela de feedback se não existir
+                cursor.execute('''CREATE TABLE IF NOT EXISTS ticket_feedback (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticket_channel_id INTEGER,
+                    user_id INTEGER,
+                    feedback_text TEXT,
+                    notas TEXT,
+                    media_nota INTEGER,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )''')
 
                 cursor.execute('''
-                    SELECT id, participants FROM giveaways
-                    WHERE message_id = ? AND status = 'active'
-                ''', (reaction.message.id,))
+                    INSERT INTO ticket_feedback (ticket_channel_id, user_id, feedback_text, notas, media_nota)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (ctx.channel.id, ctx.author.id, avaliacao, ','.join(notas), media))
 
-                giveaway = cursor.fetchone()
-
-                if giveaway:
-                    gw_id, participants_json = giveaway
-                    participants = json.loads(participants_json) if participants_json else []
-
-                    if user.id in participants:
-                        participants.remove(user.id)
-
-                        cursor.execute('''
-                            UPDATE giveaways SET participants = ? WHERE id = ?
-                        ''', (json.dumps(participants), gw_id))
-
-                        conn.commit()
-
+                conn.commit()
                 conn.close()
-
         except Exception as e:
-            logger.error(f"Error handling giveaway departure: {e}")
+            logger.error(f"Erro ao salvar feedback: {e}")
 
-# ============ COMANDOS BÁSICOS ============
-@bot.command(name='ping', aliases=['p', 'latencia', 'latency'])
-async def ping(ctx):
-    """Mostra a latência do bot"""
+        # Determinar emoji e cor baseado na média
+        if media >= 9:
+            emoji = "🌟"
+            cor = 0x00ff00
+            qualidade = "Excelente"
+        elif media >= 7:
+            emoji = "⭐"
+            cor = 0xffaa00
+            qualidade = "Bom"
+        elif media >= 5:
+            emoji = "⚠️"
+            cor = 0xff6600
+            qualidade = "Regular"
+        else:
+            emoji = "❌"
+            cor = 0xff0000
+            qualidade = "Ruim"
+
+        embed = create_embed(
+            f"{emoji} Feedback Registrado - {qualidade}",
+            f"""**Avaliação:** {avaliacao}
+
+**📊 Análise das notas:**
+• **Notas encontradas:** {', '.join([f'{n}/10' for n in notas])}
+• **Média arredondada:** {media}/10
+• **Qualidade:** {qualidade}
+
+**👤 Por:** {ctx.author.mention}
+**📅 Data:** <t:{int(datetime.datetime.now().timestamp())}:R>
+
+*Obrigado pelo seu feedback! Ele nos ajuda a melhorar.*""",
+            color=cor
+        )
+
+        await ctx.send(embed=embed)
+
+        # Log para staff
+        logger.info(f"Feedback registrado: {ctx.author} avaliou ticket {ctx.channel.name} com média {media}/10")
+
+    except Exception as e:
+        logger.error(f"Erro no feedback: {e}")
+        embed = create_embed("❌ Erro", "Erro ao processar feedback!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='feedbacks', aliases=['avaliacoes'])
+@commands.has_permissions(manage_messages=True)
+async def ver_feedbacks(ctx):
+    """[STAFF] Ver feedbacks de tickets"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                SELECT feedback_text, notas, media_nota, timestamp, user_id
+                FROM ticket_feedback
+                ORDER BY timestamp DESC
+                LIMIT 10
+            ''')
+
+            feedbacks = cursor.fetchall()
+            conn.close()
+
+        if not feedbacks:
+            embed = create_embed(
+                "📊 Nenhum Feedback",
+                "Ainda não há feedbacks registrados.",
+                color=0xffaa00
+            )
+            await ctx.send(embed=embed)
+            return
+
+        embed = create_embed(
+            "📊 Últimos Feedbacks de Tickets",
+            f"Mostrando os {len(feedbacks)} feedbacks mais recentes:",
+            color=0x7289da
+        )
+
+        for feedback_text, notas, media, timestamp, user_id in feedbacks[:5]:
+            user = bot.get_user(user_id)
+            user_name = user.name if user else "Usuário desconhecido"
+
+            # Emoji baseado na média
+            if media >= 9:
+                emoji = "🌟"
+            elif media >= 7:
+                emoji = "⭐"
+            elif media >= 5:
+                emoji = "⚠️"
+            else:
+                emoji = "❌"
+
+            embed.add_field(
+                name=f"{emoji} Nota: {media}/10",
+                value=f"**{user_name}:** {feedback_text[:100]}{'...' if len(feedback_text) > 100 else ''}\n"
+                      f"*<t:{int(datetime.datetime.fromisoformat(timestamp).timestamp())}:R>*",
+                inline=False
+            )
+
+        # Calcular estatísticas
+        todas_medias = [feedback[2] for feedback in feedbacks]
+        media_geral = round(sum(todas_medias) / len(todas_medias), 1)
+
+        embed.add_field(
+            name="📈 Estatísticas Gerais",
+            value=f"**Média geral:** {media_geral}/10\n"
+                  f"**Total de avaliações:** {len(feedbacks)}",
+            inline=False
+        )
+
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        logger.error(f"Erro ao ver feedbacks: {e}")
+        embed = create_embed("❌ Erro", "Erro ao carregar feedbacks!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+# ============ SISTEMA DE LOJA ============
+# Itens da loja
+LOJA_ITENS = {
+    1: {"nome": "Desafio do Dia", "preco": 5000, "descricao": "Desafie outro jogador a um mini game. Quem vencer, ganha coins!", "emoji": "🎯", "raridade": "Comum"},
+    2: {"nome": "Caixa Misteriosa", "preco": 7500, "descricao": "Ao abrir, pode conter moedas, XP, itens... ou nada!", "emoji": "🎁", "raridade": "Comum"},
+    3: {"nome": "Ticket Prioritário (1 uso)", "preco": 10000, "descricao": "Ganhe prioridade no atendimento da staff ao abrir um ticket", "emoji": "🎫", "raridade": "Incomum"},
+    4: {"nome": "Explosão de Moedas", "preco": 12000, "descricao": "Gera uma chuva de moedas no chat. Os 3 primeiros a clicar pegam!", "emoji": "🧨", "raridade": "Incomum"},
+    5: {"nome": "Boost de XP (1h)", "preco": 15000, "descricao": "Dobra o XP ganho em todos os comandos por 1 hora", "emoji": "📈", "raridade": "Incomum"},
+    6: {"nome": "Título Personalizado (1 uso)", "preco": 20000, "descricao": "Permite criar um título exclusivo para o seu perfil", "emoji": "👑", "raridade": "Raro"},
+    7: {"nome": "Salário VIP (7 dias)", "preco": 25000, "descricao": "Durante 7 dias, você ganha +50% de coins nos comandos de trabalho", "emoji": "💼", "raridade": "Raro"},
+    8: {"nome": "Cargo Exclusivo (3 dias)", "preco": 30000, "descricao": "Receba um cargo especial e estilizado no servidor RX por 72h", "emoji": "🛡", "raridade": "Raro"},
+    9: {"nome": "RX Medalha Épica (colecionável)", "preco": 40000, "descricao": "Item mensal colecionável. No futuro, poderá ser trocado por prêmios exclusivos", "emoji": "🌌", "raridade": "Lendário"},
+    10: {"nome": "DNA RX (item raro)", "preco": 50000, "descricao": "Item misterioso e ultra-raro. Guardar pode render evoluções, mascotes ou poderes especiais no futuro", "emoji": "🧬", "raridade": "Lendário"}
+}
+
+@bot.command(name='loja', aliases=['shop', 'store'])
+async def loja(ctx):
+    """Ver loja de itens"""
     global_stats['commands_used'] += 1
 
-    start_time = time.time()
-    message = await ctx.send("🏓 Pong!")
-    end_time = time.time()
-
-    api_latency = round(bot.latency * 1000, 2)
-    response_time = round((end_time - start_time) * 1000, 2)
-
     embed = create_embed(
-        "🏓 Pong!",
-        f"""**Latência da API:** {api_latency}ms
-    **Tempo de resposta:** {response_time}ms
-    **Status:** {'🟢 Excelente' if api_latency < 100 else '🟡 Bom' if api_latency < 200 else '🔴 Lento'}
-
-    **Uptime:** {format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds()))}""",
-        color=0x00ff00 if api_latency < 100 else 0xffaa00 if api_latency < 200 else 0xff0000
+        "🛒 Loja Premium do RXbot",
+        "✨ Itens exclusivos e poderosos disponíveis!\nUse `RXcomprar <id>` para comprar um item!",
+        color=0xffd700
     )
 
-    await message.edit(content=None, embed=embed)
+    raridade_cores = {
+        "Comum": "⚪",
+        "Incomum": "🟢", 
+        "Raro": "🔵",
+        "Épico": "🟣",
+        "Lendário": "🟡"
+    }
 
-# ============ COMANDOS DE DIVERSÃO ============
-@bot.command(name='jokenpo', aliases=['pedrapapeltesoura', 'ppt'])
+    for item_id, item in LOJA_ITENS.items():
+        raridade_emoji = raridade_cores.get(item['raridade'], "⚪")
+        embed.add_field(
+            name=f"{item['emoji']} {item['nome']} (ID: {item_id})",
+            value=f"💰 **Preço:** {item['preco']:,} moedas\n"
+                  f"{raridade_emoji} **Raridade:** {item['raridade']}\n"
+                  f"📝 **Função:** {item['descricao']}",
+            inline=True
+        )
+
+    embed.set_footer(text="💡 Use RXinventario para ver seus itens | RXusar <id> para usar")
+    await ctx.send(embed=embed)
+
+@bot.command(name='comprar', aliases=['buy'])
+async def comprar_item(ctx, item_id: int = None):
+    """Comprar item da loja"""
+    if not item_id:
+        embed = create_embed("❌ ID necessário", "Use: `RXcomprar <id>`\nVeja a loja com `RXloja`", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    if item_id not in LOJA_ITENS:
+        embed = create_embed("❌ Item não encontrado", "Use `RXloja` para ver itens disponíveis", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    item = LOJA_ITENS[item_id]
+    user_data = get_user_data(ctx.author.id)
+
+    if not user_data:
+        update_user_data(ctx.author.id)
+        user_data = get_user_data(ctx.author.id)
+
+    coins = user_data[1]
+
+    if coins < item['preco']:
+        embed = create_embed(
+            "💸 Dinheiro insuficiente",
+            f"Você precisa de **{item['preco']:,} moedas** para comprar **{item['nome']}**!\n"
+            f"Você tem apenas **{coins:,} moedas**.",
+            color=0xff0000
+        )
+        await ctx.send(embed=embed)
+        return
+
+    # Processar compra
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            # Remover dinheiro
+            new_coins = coins - item['preco']
+            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
+
+            # Adicionar ao inventário
+            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (ctx.author.id,))
+            inventory_data = cursor.fetchone()[0]
+            inventory = json.loads(inventory_data) if inventory_data else {}
+
+            if str(item_id) in inventory:
+                inventory[str(item_id)] += 1
+            else:
+                inventory[str(item_id)] = 1
+
+            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), ctx.author.id))
+
+            # Registrar transação
+            cursor.execute('''
+                INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (ctx.author.id, ctx.guild.id, 'compra', -item['preco'], f"Comprou {item['nome']}"))
+
+            conn.commit()
+            conn.close()
+
+        embed = create_embed(
+            f"✅ Compra realizada!",
+            f"**Item:** {item['emoji']} {item['nome']}\n"
+            f"**Preço:** {item['preco']:,} moedas\n"
+            f"**Saldo restante:** {new_coins:,} moedas\n\n"
+            f"Item adicionado ao seu inventário!",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        logger.error(f"Erro na compra: {e}")
+        embed = create_embed("❌ Erro", "Erro ao processar compra!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='inventario', aliases=['inventory', 'inv'])
+async def inventario(ctx, user: discord.Member = None):
+    """Ver inventário de itens"""
+    target = user or ctx.author
+    user_data = get_user_data(target.id)
+
+    if not user_data:
+        embed = create_embed("📦 Inventário vazio", f"{target.display_name} ainda não tem itens!", color=0xffaa00)
+        await ctx.send(embed=embed)
+        return
+
+    inventory_data = user_data[10]
+    inventory = json.loads(inventory_data) if inventory_data else {}
+
+    if not inventory:
+        embed = create_embed("📦 Inventário vazio", f"{target.display_name} ainda não tem itens!", color=0xffaa00)
+        await ctx.send(embed=embed)
+        return
+
+    embed = create_embed(
+        f"🎒 Inventário de {target.display_name}",
+        "Seus itens comprados na loja:",
+        color=0x7289da
+    )
+
+    total_valor = 0
+    for item_id, quantidade in inventory.items():
+        if int(item_id) in LOJA_ITENS:
+            item = LOJA_ITENS[int(item_id)]
+            valor_total = item['preco'] * quantidade
+            total_valor += valor_total
+
+            embed.add_field(
+                name=f"{item['emoji']} {item['nome']}",
+                value=f"**Quantidade:** {quantidade}\n**Valor:** {valor_total:,} moedas",
+                inline=True
+            )
+
+    embed.add_field(
+        name="💎 Valor Total do Inventário",
+        value=f"{total_valor:,} moedas",
+        inline=False
+    )
+
+    await ctx.send(embed=embed)
+
+@bot.command(name='daritem', aliases=['giveitem', 'transferitem'])
+async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1):
+    """Dar item do seu inventário para outro usuário"""
+    if quantidade <= 0:
+        embed = create_embed("❌ Quantidade inválida", "Use quantidades positivas!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    if user == ctx.author:
+        embed = create_embed("❌ Impossível", "Você não pode dar itens para si mesmo!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    if item_id not in LOJA_ITENS:
+        embed = create_embed("❌ Item inválido", "Este item não existe!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    # Verificar se o usuário tem o item
+    sender_data = get_user_data(ctx.author.id)
+    if not sender_data:
+        embed = create_embed("❌ Sem itens", "Você não tem itens para dar!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    sender_inventory_data = sender_data[10]
+    sender_inventory = json.loads(sender_inventory_data) if sender_inventory_data else {}
+
+    if str(item_id) not in sender_inventory or sender_inventory[str(item_id)] < quantidade:
+        item_name = LOJA_ITENS[item_id]['nome']
+        embed = create_embed(
+            "❌ Item insuficiente", 
+            f"Você não tem {quantidade}x **{item_name}** suficientes!\n"
+            f"Você tem apenas: {sender_inventory.get(str(item_id), 0)}",
+            color=0xff0000
+        )
+        await ctx.send(embed=embed)
+        return
+
+    try:
+        # Obter dados do receptor
+        receiver_data = get_user_data(user.id)
+        if not receiver_data:
+            update_user_data(user.id)
+            receiver_data = get_user_data(user.id)
+
+        receiver_inventory_data = receiver_data[10]
+        receiver_inventory = json.loads(receiver_inventory_data) if receiver_inventory_data else {}
+
+        item = LOJA_ITENS[item_id]
+
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            # Remover do inventário do remetente
+            sender_inventory[str(item_id)] -= quantidade
+            if sender_inventory[str(item_id)] <= 0:
+                del sender_inventory[str(item_id)]
+
+            # Adicionar ao inventário do receptor
+            if str(item_id) in receiver_inventory:
+                receiver_inventory[str(item_id)] += quantidade
+            else:
+                receiver_inventory[str(item_id)] = quantidade
+
+            # Atualizar banco de dados
+            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', 
+                          (json.dumps(sender_inventory), ctx.author.id))
+            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', 
+                          (json.dumps(receiver_inventory), user.id))
+
+            # Registrar transações
+            cursor.execute('''
+                INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (ctx.author.id, ctx.guild.id, 'item_given', 0, f"Deu {quantidade}x {item['nome']} para {user.name}"))
+
+            cursor.execute('''
+                INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (user.id, ctx.guild.id, 'item_received', 0, f"Recebeu {quantidade}x {item['nome']} de {ctx.author.name}"))
+
+            conn.commit()
+            conn.close()
+
+        embed = create_embed(
+            "✅ Item Transferido!",
+            f"**{item['emoji']} {item['nome']}**\n"
+            f"**Quantidade:** {quantidade}x\n"
+            f"**De:** {ctx.author.mention}\n"
+            f"**Para:** {user.mention}\n\n"
+            f"Item transferido com sucesso!",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
+
+        # Notificar receptor
+        try:
+            dm_embed = create_embed(
+                f"🎁 Item Recebido!",
+                f"Você recebeu **{quantidade}x {item['emoji']} {item['nome']}** de {ctx.author.mention}!\n\n"
+                f"**Descrição:** {item['descricao']}\n"
+                f"Use `RXinventario` para ver seus itens!",
+                color=0x00ff00
+            )
+            await user.send(embed=dm_embed)
+        except:
+            pass
+
+        # Log da transferência
+        logger.info(f"Item transferido: {ctx.author.name} deu {quantidade}x {item['nome']} para {user.name}")
+
+    except Exception as e:
+        logger.error(f"Erro ao transferir item: {e}")
+        embed = create_embed("❌ Erro", "Erro ao transferir item! Contate um administrador.", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='trocar', aliases=['trade', 'negociar'])
+async def sistema_troca(ctx, user: discord.Member):
+    """Sistema de troca segura entre usuários"""
+    if user == ctx.author:
+        embed = create_embed("❌ Impossível", "Você não pode trocar itens com você mesmo!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    if user.bot:
+        embed = create_embed("❌ Impossível", "Você não pode trocar itens com bots!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    # Verificar se ambos usuários têm itens
+    sender_data = get_user_data(ctx.author.id)
+    receiver_data = get_user_data(user.id)
+
+    if not sender_data:
+        embed = create_embed("❌ Sem dados", "Você não tem dados no sistema!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    if not receiver_data:
+        embed = create_embed("❌ Usuário inválido", "O usuário não tem dados no sistema!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    sender_inventory_data = sender_data[10]
+    sender_inventory = json.loads(sender_inventory_data) if sender_inventory_data else {}
+
+    receiver_inventory_data = receiver_data[10]
+    receiver_inventory = json.loads(receiver_inventory_data) if receiver_inventory_data else {}
+
+    if not sender_inventory:
+        embed = create_embed("❌ Sem itens", "Você não possui itens para trocar!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    if not receiver_inventory:
+        embed = create_embed("❌ Sem itens", f"{user.display_name} não possui itens para trocar!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    # Criar embed de apresentação da troca
+    embed = create_embed(
+        "🔄 Sistema de Troca Segura",
+        f"""**Iniciando troca entre:**
+**👤 {ctx.author.mention}** ↔️ **👤 {user.mention}**
+
+**📋 Como funciona:**
+1️⃣ Ambos escolhem itens para oferecer
+2️⃣ Sistema mostra a proposta completa
+3️⃣ Ambos confirmam a troca
+4️⃣ Itens são transferidos automaticamente
+
+**⚠️ Regras:**
+• A troca é **irreversível** após confirmação
+• Ambos devem concordar com os termos
+• Sistema 100% seguro - sem roubos
+
+**🔥 {user.mention}, você aceita negociar?**
+Reaja com ✅ para aceitar ou ❌ para recusar""",
+        color=0x7289da
+    )
+
+    trade_msg = await ctx.send(embed=embed)
+    await trade_msg.add_reaction("✅")
+    await trade_msg.add_reaction("❌")
+
+    # Armazenar dados da troca
+    active_games[trade_msg.id] = {
+        'type': 'trade_invitation',
+        'initiator': ctx.author.id,
+        'target': user.id,
+        'channel': ctx.channel.id,
+        'step': 'invitation'
+    }
+
+@bot.command(name='efeitos', aliases=['buffs', 'effects'])
+async def ver_efeitos(ctx, user: discord.Member = None):
+    """Ver buffs e efeitos ativos do usuário"""
+    target = user or ctx.author
+    user_data = get_user_data(target.id)
+
+    if not user_data:
+        embed = create_embed("❌ Dados não encontrados", f"{target.display_name} não está no sistema!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    settings_data = user_data[11]
+    settings = json.loads(settings_data) if settings_data else {}
+
+    efeitos_ativos = []
+    current_time = datetime.datetime.now().timestamp()
+
+    # Verificar XP Boost
+    xp_boost_end = settings.get('xp_boost', 0)
+    if xp_boost_end > current_time:
+        tempo_restante = int(xp_boost_end - current_time)
+        efeitos_ativos.append(f"📈 **Boost de XP:** XP dobrado por {format_time(tempo_restante)}")
+
+    # Verificar Salário VIP
+    vip_salary_end = settings.get('vip_salary', 0)
+    if vip_salary_end > current_time:
+        dias_restantes = int((vip_salary_end - current_time) / 86400)
+        efeitos_ativos.append(f"💼 **Salário VIP:** +50% em trabalhos por {dias_restantes} dias")
+
+    # Verificar Cargo Exclusivo
+    exclusive_role_end = settings.get('exclusive_role', 0)
+    if exclusive_role_end > current_time:
+        dias_restantes = int((exclusive_role_end - current_time) / 86400)
+        efeitos_ativos.append(f"🛡️ **Cargo Exclusivo:** Privilégios especiais por {dias_restantes} dias")
+
+    # Verificar Tickets Prioritários
+    priority_tickets = settings.get('priority_tickets', 0)
+    if priority_tickets > 0:
+        efeitos_ativos.append(f"🎫 **Tickets Prioritários:** {priority_tickets} usos disponíveis")
+
+    # Verificar Habilidades Especiais
+    special_abilities = settings.get('special_abilities', [])
+    if special_abilities:
+        abilities_text = ", ".join([ability.replace('_', ' ').title() for ability in special_abilities])
+        efeitos_ativos.append(f"🧬 **Habilidades Especiais:** {abilities_text}")
+
+    # Verificar Coleção
+    collection_power = settings.get('collection_power', 0)
+    epic_medals = settings.get('epic_medals', 0)
+    dna_rx = settings.get('dna_rx', 0)
+    evolution_points = settings.get('evolution_points', 0)
+
+    if collection_power > 0 or epic_medals > 0 or dna_rx > 0:
+        efeitos_ativos.append(f"🌌 **Coleção:** {epic_medals} Medalhas Épicas, {dna_rx} DNA RX")
+        efeitos_ativos.append(f"⚡ **Poder de Evolução:** {evolution_points} pontos")
+
+    if not efeitos_ativos:
+        embed = create_embed(
+            f"✨ Efeitos de {target.display_name}",
+            "**Nenhum efeito ativo no momento**\n\n"
+            "💡 **Como obter efeitos:**\n"
+            "• Compre itens na `RXloja`\n"
+            "• Use itens especiais como Boost de XP\n"
+            "• Colecione DNA RX e Medalhas Épicas\n"
+            "• Ative Tickets Prioritários",
+            color=0xffaa00
+        )
+    else:
+        embed = create_embed(
+            f"✨ Efeitos Ativos - {target.display_name}",
+            "\n".join(efeitos_ativos),
+            color=0x00ff00
+        )
+
+    embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
+    await ctx.send(embed=embed)
+
+@bot.command(name='usar', aliases=['use'])
+async def usar_item(ctx, item_id: int = None):
+    """Usar item do inventário"""
+    if not item_id:
+        embed = create_embed("❌ ID necessário", "Use: `RXusar <id>`", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    user_data = get_user_data(ctx.author.id)
+    if not user_data:
+        embed = create_embed("❌ Dados não encontrados", "Você não tem dados de usuário!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    inventory_data = user_data[10]
+    inventory = json.loads(inventory_data) if inventory_data else {}
+
+    if str(item_id) not in inventory or inventory[str(item_id)] <= 0:
+        embed = create_embed("❌ Item não encontrado", "Você não possui este item!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    if item_id not in LOJA_ITENS:
+        embed = create_embed("❌ Item inválido", "Este item não existe!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    item = LOJA_ITENS[item_id]
+
+    # Aplicar efeito do item ANTES de remover do inventário
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            # Buscar dados atuais
+            cursor.execute('SELECT settings, coins, xp FROM users WHERE user_id = ?', (ctx.author.id,))
+            user_info = cursor.fetchone()
+            settings_data, current_coins, current_xp = user_info[0], user_info[1], user_info[2]
+            settings = json.loads(settings_data) if settings_data else {}
+
+            resultado = ""
+
+            # ITEM 1: Desafio do Dia
+            if item_id == 1:
+                # Simular mini-game (pedra/papel/tesoura automático)
+                resultado_jogo = random.choice(['vitoria', 'derrota', 'empate'])
+                if resultado_jogo == 'vitoria':
+                    premio = random.randint(200, 500)
+                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins + premio, ctx.author.id))
+                    resultado = f"🎉 **VITÓRIA!** Você ganhou {premio:,} moedas!"
+                elif resultado_jogo == 'empate':
+                    resultado = f"😐 **EMPATE!** Nada aconteceu."
+                else:
+                    perda = random.randint(50, 150)
+                    perda = min(perda, current_coins)
+                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins - perda, ctx.author.id))
+                    resultado = f"😢 **DERROTA!** Você perdeu {perda:,} moedas."
+
+            # ITEM 2: Caixa Misteriosa
+            elif item_id == 2:
+                sorte = random.randint(1, 100)
+                if sorte <= 5:  # 5% - Muito raro
+                    premio_coins = random.randint(2000, 5000)
+                    premio_xp = random.randint(100, 200)
+                    cursor.execute('UPDATE users SET coins = ?, xp = ? WHERE user_id = ?', (current_coins + premio_coins, current_xp + premio_xp, ctx.author.id))
+                    resultado = f"🌟 **JACKPOT!** {premio_coins:,} moedas + {premio_xp} XP!"
+                elif sorte <= 25:  # 20% - Bom
+                    premio_coins = random.randint(500, 1500)
+                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins + premio_coins, ctx.author.id))
+                    resultado = f"💰 **SORTE!** Você ganhou {premio_coins:,} moedas!"
+                elif sorte <= 50:  # 25% - Regular
+                    premio_xp = random.randint(50, 100)
+                    cursor.execute('UPDATE users SET xp = ? WHERE user_id = ?', (current_xp + premio_xp, ctx.author.id))
+                    resultado = f"⭐ **XP!** Você ganhou {premio_xp} pontos de experiência!"
+                elif sorte <= 80:  # 30% - Pequeno
+                    premio_coins = random.randint(100, 300)
+                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins + premio_coins, ctx.author.id))
+                    resultado = f"🪙 **Algo!** {premio_coins:,} moedas encontradas."
+                else:  # 20% - Nada
+                    resultado = f"📦 **VAZIA!** A caixa estava vazia... que azar!"
+
+            # ITEM 3: Ticket Prioritário
+            elif item_id == 3:
+                settings['priority_tickets'] = settings.get('priority_tickets', 0) + 1
+                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                resultado = f"🎫 **PRIORIDADE ATIVADA!** Seu próximo ticket terá atendimento prioritário!"
+
+            # ITEM 4: Explosão de Moedas
+            elif item_id == 4:
+                # Criar evento de chuva de moedas
+                moedas_total = random.randint(800, 1500)
+                embed_chuva = create_embed(
+                    "🧨 EXPLOSÃO DE MOEDAS!",
+                    f"💰 **{ctx.author.mention} ativou uma Explosão de Moedas!**\n\n"
+                    f"🪙 **{moedas_total:,} moedas** estão caindo do céu!\n"
+                    f"⚡ **Os 3 primeiros a reagir com 💰 ganham parte das moedas!**\n\n"
+                    f"🏃‍♂️ **CORRA!** Seja rápido!",
+                    color=0xffd700
+                )
+
+                chuva_msg = await ctx.send(embed=embed_chuva)
+                await chuva_msg.add_reaction("💰")
+
+                # Armazenar evento
+                active_games[chuva_msg.id] = {
+                    'type': 'coin_rain',
+                    'total_coins': moedas_total,
+                    'participants': [],
+                    'max_participants': 3,
+                    'creator': ctx.author.id
+                }
+
+                resultado = f"🧨 **EXPLOSÃO ATIVADA!** Chuva de {moedas_total:,} moedas liberada no chat!"
+
+            # ITEM 5: Boost de XP (1h)
+            elif item_id == 5:
+                boost_end = datetime.datetime.now() + datetime.timedelta(hours=1)
+                settings['xp_boost'] = boost_end.timestamp()
+                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                resultado = f"📈 **BOOST ATIVO!** XP dobrado por 1 hora! (até <t:{int(boost_end.timestamp())}:t>)"
+
+            # ITEM 6: Título Personalizado
+            elif item_id == 6:
+                settings['custom_title_available'] = True
+                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                resultado = f"👑 **TÍTULO DESBLOQUEADO!** Use `RXsettitle <título>` para definir seu título personalizado!"
+
+            # ITEM 7: Salário VIP (7 dias)
+            elif item_id == 7:
+                vip_end = datetime.datetime.now() + datetime.timedelta(days=7)
+                settings['vip_salary'] = vip_end.timestamp()
+                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                resultado = f"💼 **SALÁRIO VIP ATIVO!** +50% em trabalhos por 7 dias! (até <t:{int(vip_end.timestamp())}:d>)"
+
+            # ITEM 8: Cargo Exclusivo (3 dias)
+            elif item_id == 8:
+                exclusive_end = datetime.datetime.now() + datetime.timedelta(days=3)
+                settings['exclusive_role'] = exclusive_end.timestamp()
+                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+
+                # Tentar criar/dar cargo especial se possível
+                try:
+                    guild = ctx.guild
+                    role_name = f"👑 {ctx.author.display_name} VIP"
+                    existing_role = discord.utils.get(guild.roles, name=role_name)
+
+                    if not existing_role:
+                        special_role = await guild.create_role(
+                            name=role_name,
+                            color=discord.Color.gold(),
+                            reason="Cargo exclusivo da loja RX"
+                        )
+                    else:
+                        special_role = existing_role
+
+                    await ctx.author.add_roles(special_role, reason="Item da loja: Cargo Exclusivo")
+                    resultado = f"🛡️ **CARGO EXCLUSIVO ATIVO!** Você recebeu o cargo {special_role.mention} por 3 dias!"
+                except:
+                    resultado = f"🛡️ **CARGO EXCLUSIVO ATIVO!** Privilégios especiais por 3 dias! (Cargo automático indisponível)"
+
+            # ITEM 9: RX Medalha Épica
+            elif item_id == 9:
+                settings['epic_medals'] = settings.get('epic_medals', 0) + 1
+                settings['collection_power'] = settings.get('collection_power', 0) + 10
+                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                resultado = f"🌌 **MEDALHA ÉPICA COLETADA!** Adicionada à sua coleção! Poder de Coleção: +10 (Total: {settings['collection_power']})"
+
+            # ITEM 10: DNA RX
+            elif item_id == 10:
+                settings['dna_rx'] = settings.get('dna_rx', 0) + 1
+                settings['evolution_points'] = settings.get('evolution_points', 0) + 25
+
+                # Chance de desbloquear habilidade especial
+                if random.randint(1, 100) <= 30:  # 30% chance
+                    special_abilities = ['super_luck', 'coin_magnet', 'xp_master', 'command_master']
+                    new_ability = random.choice(special_abilities)
+                    if 'special_abilities' not in settings:
+                        settings['special_abilities'] = []
+                    if new_ability not in settings['special_abilities']:
+                        settings['special_abilities'].append(new_ability)
+                        cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                        resultado = f"🧬 **DNA RX ABSORVIDO!** +25 Pontos de Evolução + Habilidade Especial: **{new_ability.replace('_', ' ').title()}**!"
+                    else:
+                        cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                        resultado = f"🧬 **DNA RX ABSORVIDO!** +25 Pontos de Evolução! (Total: {settings['evolution_points']})"
+                else:
+                    cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                    resultado = f"🧬 **DNA RX ABSORVIDO!** +25 Pontos de Evolução! (Total: {settings['evolution_points']})"
+
+            # Remover item do inventário APÓS aplicar efeito
+            inventory[str(item_id)] -= 1
+            if inventory[str(item_id)] <= 0:
+                del inventory[str(item_id)]
+
+            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), ctx.author.id))
+
+            conn.commit()
+            conn.close()
+
+        embed = create_embed(
+            f"✅ {item['emoji']} {item['nome']} Usado!",
+            f"**Efeito aplicado:**\n{resultado}\n\n"
+            f"**Descrição:** {item['descricao']}",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
+
+        # Log do uso
+        logger.info(f"Item usado: {ctx.author.name} usou {item['nome']} (ID: {item_id})")
+
+    except Exception as e:
+        logger.error(f"Erro ao usar item {item_id}: {e}")
+        embed = create_embed("❌ Erro", "Erro ao usar item! Contate um administrador.", color=0xff0000)
+        await ctx.send(embed=embed)
+
+# Comando para definir título personalizado
+@bot.command(name='settitle', aliases=['definirtitulo'])
+async def set_custom_title(ctx, *, titulo=None):
+    """Definir título personalizado (requer item da loja)"""
+    if not titulo:
+        embed = create_embed("❌ Título necessário", "Use: `RXsettitle Meu Título Épico`", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    if len(titulo) > 50:
+        embed = create_embed("❌ Título muito longo", "Use no máximo 50 caracteres!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    user_data = get_user_data(ctx.author.id)
+    if not user_data:
+        embed = create_embed("❌ Erro", "Dados do usuário não encontrados!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    settings_data = user_data[11]
+    settings = json.loads(settings_data) if settings_data else {}
+
+    if not settings.get('custom_title_available', False):
+        embed = create_embed(
+            "❌ Título não disponível",
+            "Você precisa comprar e usar o item **👑 Título Personalizado** da loja!",
+            color=0xff0000
+        )
+        await ctx.send(embed=embed)
+        return
+
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            settings['custom_title'] = titulo
+            settings['custom_title_available'] = False  # Consumir o uso
+
+            cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+            conn.commit()
+            conn.close()
+
+        embed = create_embed(
+            "👑 Título Definido!",
+            f"**Seu novo título:** {titulo}\n\nSeu título aparecerá em comandos como `RXrank` e `RXperfil`!",
+            color=0xffd700
+        )
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        logger.error(f"Erro ao definir título: {e}")
+        embed = create_embed("❌ Erro", "Erro ao definir título!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+# ============ COMANDOS DE ADMINISTRAÇÃO AVANÇADOS ============
+@bot.command(name='addsaldo', aliases=['addcoins', 'addmoney'])
+@commands.has_permissions(administrator=True)
+async def add_saldo(ctx, user: discord.Member, amount: int):
+    """[ADMIN] Adicionar saldo a um usuário"""
+    if amount <= 0:
+        embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    try:
+        user_data = get_user_data(user.id)
+        if not user_data:
+            update_user_data(user.id)
+            current_coins = 50
+        else:
+            current_coins = user_data[1]
+
+        new_coins = current_coins + amount
+
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user.id))
+
+            # Registrar transação
+            cursor.execute('''
+                INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (user.id, ctx.guild.id, 'admin_add', amount, f"Saldo adicionado por {ctx.author.name}"))
+
+            conn.commit()
+            conn.close()
+
+        embed = create_embed(
+            "✅ Saldo Adicionado!",
+            f"**Usuário:** {user.mention}\n"
+            f"**Valor adicionado:** {amount:,} moedas\n"
+            f"**Saldo anterior:** {current_coins:,} moedas\n"
+            f"**Novo saldo:** {new_coins:,} moedas\n"
+            f"**Administrador:** {ctx.author.mention}",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
+
+        # Notificar usuário
+        try:
+            dm_embed = create_embed(
+                "💰 Saldo Recebido!",
+                f"Um administrador adicionou **{amount:,} moedas** à sua conta!\n"
+                f"**Novo saldo:** {new_coins:,} moedas",
+                color=0x00ff00
+            )
+            await user.send(embed=dm_embed)
+        except:
+            pass
+
+    except Exception as e:
+        logger.error(f"Erro ao adicionar saldo: {e}")
+        embed = create_embed("❌ Erro", "Erro ao adicionar saldo!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='removesaldo', aliases=['removecoins', 'removemoney'])
+@commands.has_permissions(administrator=True)
+async def remove_saldo(ctx, user: discord.Member, amount: int):
+    """[ADMIN] Remover saldo de um usuário"""
+    if amount <= 0:
+        embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
+    try:
+        user_data = get_user_data(user.id)
+        if not user_data:
+            embed = create_embed("❌ Usuário não encontrado", "Este usuário não está no banco de dados!", color=0xff0000)
+            await ctx.send(embed=embed)
+            return
+
+        current_coins = user_data[1]
+
+        if current_coins < amount:
+            embed = create_embed(
+                "❌ Saldo insuficiente",
+                f"{user.mention} só tem {current_coins:,} moedas!\nNão é possível remover {amount:,} moedas.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
+
+        new_coins = max(0, current_coins - amount)
+
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user.id))
+
+            # Registrar transação
+            cursor.execute('''
+                INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (user.id, ctx.guild.id, 'admin_remove', -amount, f"Saldo removido por {ctx.author.name}"))
+
+            conn.commit()
+            conn.close()
+
+        embed = create_embed(
+            "✅ Saldo Removido!",
+            f"**Usuário:** {user.mention}\n"
+            f"**Valor removido:** {amount:,} moedas\n"
+            f"**Saldo anterior:** {current_coins:,} moedas\n"
+            f"**Novo saldo:** {new_coins:,} moedas\n"
+            f"**Administrador:** {ctx.author.mention}",
+            color=0xff6b6b
+        )
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        logger.error(f"Erro ao remover saldo: {e}")
+        embed = create_embed("❌ Erro", "Erro ao remover saldo!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+# ============ SISTEMA DE EVENTOS E BATALHAS DE CLANS ============
+@bot.command(name='criareventoclan', aliases=['createclanevent'])
+@commands.has_permissions(administrator=True)
+async def criar_evento_clan(ctx, *, dados_evento=None):
+    """[ADMIN] Criar evento de batalha entre clans"""
+    if not dados_evento:
+        embed = create_embed(
+            "⚔️ Como criar evento de clan",
+            """**Formato:** `clan1 vs clan2 | tipo | aposta | duração`
+
+**Exemplo:**
+`RXcriareventoclan XCLAN vs GSN | Battle Royale | 5000 | 2h`
+
+**Tipos disponíveis:**
+• Battle Royale
+• Team Deathmatch  
+• King of the Hill
+• Capture the Flag
+• Tournament
+
+**Durações:** 30m, 1h, 2h, 6h, 12h, 1d""",
+            color=0x7289da
+        )
+        await ctx.send(embed=embed)
+        return
+
+    parts = [part.strip() for part in dados_evento.split('|')]
+    if len(parts) < 4:
+        embed = create_embed(
+            "❌ Formato incorreto",
+            "Use: `clan1 vs clan2 | tipo | aposta | duração`",
+            color=0xff0000
+        )
+        await ctx.send(embed=embed)
+        return
+
+    try:
+        # Parsear dados
+        clans_vs = parts[0].split(' vs ')
+        if len(clans_vs) != 2:
+            embed = create_embed("❌ Formato de clans inválido", "Use: `CLAN1 vs CLAN2`", color=0xff0000)
+            await ctx.send(embed=embed)
+            return
+
+        clan1 = clans_vs[0].strip().upper()
+        clan2 = clans_vs[1].strip().upper()
+        tipo_evento = parts[1]
+        aposta = int(parts[2])
+        duracao_str = parts[3]
+
+        # Parse duração
+        time_units = {'m': 60, 'h': 3600, 'd': 86400}
+        unit = duracao_str[-1].lower()
+
+        if unit not in time_units:
+            embed = create_embed("❌ Duração inválida", "Use: m (minutos), h (horas), d (dias)", color=0xff0000)
+            await ctx.send(embed=embed)
+            return
+
+        amount = int(duracao_str[:-1])
+        seconds = amount * time_units[unit]
+        end_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+
+        # Criar embed do evento
+        embed = create_embed(
+            f"⚔️ EVENTO DE CLAN: {clan1} vs {clan2}",
+            f"""**🎮 Tipo:** {tipo_evento}
+**💰 Aposta:** {aposta:,} moedas por participante
+**⏰ Duração:** {duracao_str}
+**🏁 Termina:** <t:{int(end_time.timestamp())}:R>
+**👑 Criado por:** {ctx.author.mention}
+
+**📋 Como participar:**
+Membros dos clans {clan1} e {clan2} podem reagir com:
+⚔️ - Para participar da batalha
+🏆 - Para apostar no seu clan
+
+**⚠️ Regras:**
+• Apenas membros dos clans podem participar
+• Aposta é obrigatória para participar
+• Resultado será decidido por votação ou admin
+• Prêmio vai para o clan vencedor""",
+            color=0xff6600
+        )
+
+        evento_msg = await ctx.send(embed=embed)
+        await evento_msg.add_reaction("⚔️")
+        await evento_msg.add_reaction("🏆")
+
+        # Salvar evento no banco
+        try:
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+
+                # Criar tabela de eventos de clan se não existir
+                cursor.execute('''CREATE TABLE IF NOT EXISTS clan_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    guild_id INTEGER,
+                    creator_id INTEGER,
+                    clan1 TEXT,
+                    clan2 TEXT,
+                    event_type TEXT,
+                    bet_amount INTEGER,
+                    end_time TIMESTAMP,
+                    message_id INTEGER,
+                    participants TEXT DEFAULT '[]',
+                    bets TEXT DEFAULT '{}',
+                    status TEXT DEFAULT 'active',
+                    winner_clan TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )''')
+
+                cursor.execute('''
+                    INSERT INTO clan_events (guild_id, creator_id, clan1, clan2, event_type, bet_amount, end_time, message_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (ctx.guild.id, ctx.author.id, clan1, clan2, tipo_evento, aposta, end_time, evento_msg.id))
+
+                conn.commit()
+                conn.close()
+
+            logger.info(f"Evento de clan criado: {clan1} vs {clan2}")
+
+        except Exception as e:
+            logger.error(f"Erro ao salvar evento de clan: {e}")
+
+    except ValueError:
+        embed = create_embed("❌ Valores inválidos", "Verificar aposta (número) e duração!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='eventosclan', aliases=['clanevents'])
+async def listar_eventos_clan(ctx):
+    """Ver eventos de clan ativos"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                SELECT clan1, clan2, event_type, bet_amount, end_time, participants, status
+                FROM clan_events
+                WHERE guild_id = ? AND status = 'active'
+                ORDER BY end_time
+            ''', (ctx.guild.id,))
+
+            eventos = cursor.fetchall()
+            conn.close()
+
+        if not eventos:
+            embed = create_embed(
+                "⚔️ Nenhum evento ativo",
+                "Não há eventos de clan ativos no momento.\nAdministradores podem criar com `RXcriareventoclan`",
+                color=0xffaa00
+            )
+            await ctx.send(embed=embed)
+            return
+
+        embed = create_embed(
+            "⚔️ Eventos de Clan Ativos",
+            f"Encontrados {len(eventos)} evento(s) ativo(s):",
+            color=0xff6600
+        )
+
+        for evento in eventos[:5]:
+            clan1, clan2, event_type, bet_amount, end_time_str, participants_json, status = evento
+            participants = json.loads(participants_json) if participants_json else []
+
+            embed.add_field(
+                name=f"⚔️ {clan1} vs {clan2}",
+                value=f"**🎮 Tipo:** {event_type}\n"
+                      f"**💰 Aposta:** {bet_amount:,} moedas\n"
+                      f"**👥 Participantes:** {len(participants)}\n"
+                      f"**⏰ Termina:** <t:{int(datetime.datetime.fromisoformat(end_time_str).timestamp())}:R>",
+                inline=False
+            )
+
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        logger.error(f"Erro ao listar eventos de clan: {e}")
+
+@bot.command(name='finalizareventoclan', aliases=['endclanevent'])
+@commands.has_permissions(administrator=True)
+async def finalizar_evento_clan(ctx, evento_id: int, clan_vencedor: str):
+    """[ADMIN] Finalizar evento de clan"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            # Buscar evento
+            cursor.execute('''
+                SELECT clan1, clan2, bet_amount, participants, bets, message_id
+                FROM clan_events
+                WHERE id = ? AND guild_id = ? AND status = 'active'
+            ''', (evento_id, ctx.guild.id))
+
+            evento = cursor.fetchone()
+            if not evento:
+                embed = create_embed("❌ Evento não encontrado", "Evento não existe ou já foi finalizado!", color=0xff0000)
+                await ctx.send(embed=embed)
+                return
+
+            clan1, clan2, bet_amount, participants_json, bets_json, message_id = evento
+            clan_vencedor = clan_vencedor.upper()
+
+            if clan_vencedor not in [clan1, clan2]:
+                embed = create_embed("❌ Clan inválido", f"Use {clan1} ou {clan2}", color=0xff0000)
+                await ctx.send(embed=embed)
+                return
+
+            participants = json.loads(participants_json) if participants_json else []
+            bets = json.loads(bets_json) if bets_json else {}
+
+            # Calcular prêmios
+            vencedores = [p for p in participants if bets.get(str(p), {}).get('clan') == clan_vencedor]
+            premio_total = len(participants) * bet_amount
+            premio_individual = premio_total // len(vencedores) if vencedores else 0
+
+            # Distribuir prêmios
+            for user_id in vencedores:
+                user_data = get_user_data(user_id)
+                if user_data:
+                    new_coins = user_data[1] + premio_individual + bet_amount  # Devolver aposta + prêmio
+                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user_id))
+
+            # Marcar como finalizado
+            cursor.execute('''
+                UPDATE clan_events 
+                SET status = 'finished', winner_clan = ?
+                WHERE id = ?
+            ''', (clan_vencedor, evento_id))
+
+            conn.commit()
+            conn.close()
+
+        embed = create_embed(
+            f"🏆 {clan_vencedor} VENCEU!",
+            f"**Evento #{evento_id} finalizado!**\n\n"
+            f"**Clan Vencedor:** {clan_vencedor}\n"
+            f"**Vencedores:** {len(vencedores)} participantes\n"
+            f"**Prêmio individual:** {premio_individual:,} moedas\n"
+            f"**Total distribuído:** {premio_total:,} moedas\n"
+            f"**Finalizado por:** {ctx.author.mention}",
+            color=0xffd700
+        )
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        logger.error(f"Erro ao finalizar evento: {e}")
+        embed = create_embed("❌ Erro", "Erro ao finalizar evento!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+# ============ SISTEMA DE MONITORAMENTO ============
+@bot.command(name='performance', aliases=['perf', 'monitor'])
+@commands.has_permissions(administrator=True)
+async def performance_monitor(ctx):
+    """[ADMIN] Monitor de performance do sistema"""
+    try:
+        if psutil is None:
+            embed = create_embed(
+                "⚠️ Psutil não disponível",
+                "Módulo psutil não está instalado. Mostrando informações básicas.",
+                color=0xffaa00
+            )
+            await ctx.send(embed=embed)
+            return
+
+        # Informações do sistema
+        memory = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        cpu_percent = psutil.cpu_percent()
+
+        # Informações do processo do bot
+        process = psutil.Process()
+        bot_memory = process.memory_info().rss / 1024 / 1024  # MB
+        bot_cpu = process.cpu_percent()
+
+        # Calcular uptime
+        uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
+
+        embed = create_embed(
+            "📊 Monitor de Performance",
+            f"""**💻 Sistema:**
+• **CPU:** {cpu_percent}%
+• **RAM:** {memory.percent}% ({memory.used // 1024 // 1024} MB / {memory.total // 1024 // 1024} MB)
+• **Disco:** {disk.percent}% ({disk.used // 1024 // 1024 // 1024} GB / {disk.total // 1024 // 1024 // 1024} GB)
+
+**🤖 Bot RX:**
+• **Uso RAM:** {bot_memory:.1f} MB
+• **Uso CPU:** {bot_cpu}%
+• **Uptime:** {format_time(uptime_seconds)}
+• **Latência:** {round(bot.latency * 1000, 2)}ms
+
+**📈 Estatísticas:**
+• **Servidores:** {len(bot.guilds):,}
+• **Usuários:** {len(set(bot.get_all_members())):,}
+• **Comandos/hora:** {global_stats['commands_used'] * 3600 // max(uptime_seconds, 1):,}
+• **Msgs/minuto:** {global_stats['messages_processed'] * 60 // max(uptime_seconds, 1):,}
+
+**🔄 Keep-alive:**
+• Auto-ping: ✅ A cada 60s
+• External: ✅ A cada 4min
+• Heartbeat: ✅ A cada 3min""",
+            color=0x00ff00 if cpu_percent < 70 and memory.percent < 80 else 0xffaa00 if cpu_percent < 90 else 0xff0000
+        )
+
+        await ctx.send(embed=embed)
+
+    except ImportError:
+        embed = create_embed(
+            "⚠️ Psutil não disponível",
+            "Instale psutil para monitoramento completo:\n`pip install psutil`",
+            color=0xffaa00
+        )
+        await ctx.send(embed=embed)
+    except Exception as e:
+        embed = create_embed("❌ Erro", f"Erro ao obter dados: {e}", color=0xff0000)
+        await ctx.send(embed=embed)
+
+# ============ JOGOS E DIVERSÃO ============
+@bot.command(name='jokenpo', aliases=['pedrapapeltesoura'])
 async def jokenpo(ctx, escolha=None):
     """Joga pedra, papel ou tesoura"""
     if not escolha:
@@ -1515,11 +5436,6 @@ async def jokenpo(ctx, escolha=None):
          (escolha == 'tesoura' and bot_escolha == 'papel'):
         resultado = "Você ganhou! 🎉"
         color = 0x00ff00
-        # Dar recompensa
-        data = get_user_data(ctx.author.id)
-        if data:
-            new_coins = data[1] + 10
-            update_user_data(ctx.author.id, coins=new_coins)
     else:
         resultado = "Você perdeu! 😢"
         color = 0xff0000
@@ -1533,7 +5449,7 @@ async def jokenpo(ctx, escolha=None):
     )
     await ctx.send(embed=embed)
 
-@bot.command(name='dado', aliases=['dice', 'roll'])
+@bot.command(name='dado', aliases=['dice'])
 async def dice(ctx, lados: int = 6):
     """Rola um dado"""
     if lados < 2 or lados > 100:
@@ -1549,7 +5465,7 @@ async def dice(ctx, lados: int = 6):
     )
     await ctx.send(embed=embed)
 
-@bot.command(name='moeda', aliases=['coin', 'flip'])
+@bot.command(name='moeda', aliases=['coin'])
 async def coin_flip(ctx):
     """Cara ou coroa"""
     resultado = random.choice(['Cara', 'Coroa'])
@@ -1562,44 +5478,6 @@ async def coin_flip(ctx):
     )
     await ctx.send(embed=embed)
 
-@bot.command(name='8ball', aliases=['bola8', 'magicball'])
-async def magic_8ball(ctx, *, pergunta=None):
-    """Bola mágica 8"""
-    if not pergunta:
-        embed = create_embed("❌ Pergunta necessária", "Use: `RX8ball Vou passar na prova?`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    respostas = [
-        "Sim, definitivamente!",
-        "É certo que sim!",
-        "Sem dúvida!",
-        "Sim, com certeza!",
-        "Você pode confiar nisso!",
-        "Como eu vejo, sim!",
-        "Provavelmente sim!",
-        "Perspectiva boa!",
-        "Sinais apontam que sim!",
-        "Resposta nebulosa, tente novamente!",
-        "Pergunte novamente mais tarde!",
-        "Melhor não te dizer agora!",
-        "Não consigo prever agora!",
-        "Concentre-se e pergunte novamente!",
-        "Não conte com isso!",
-        "Minha resposta é não!",
-        "Minhas fontes dizem que não!",
-        "Perspectiva não muito boa!",
-        "Muito duvidoso!"
-    ]
-
-    resposta = random.choice(respostas)
-    embed = create_embed(
-        "🔮 Bola Mágica 8",
-        f"**Pergunta:** {pergunta}\n**Resposta:** {resposta}",
-        color=0x7289da
-    )
-    await ctx.send(embed=embed)
-
 @bot.command(name='piada', aliases=['joke'])
 async def piada(ctx):
     """Conta uma piada"""
@@ -1608,115 +5486,11 @@ async def piada(ctx):
         "O que a impressora falou para a outra impressora? Essa folha é sua ou é impressão minha?",
         "Por que o livro de matemática estava triste? Porque tinha muitos problemas!",
         "O que o pato disse para a pata? Vem quá!",
-        "Por que os programadores preferem dark mode? Porque light atrai bugs!",
-        "O que a zero falou para o oito? Que cinto maneiro!",
-        "Por que o JavaScript foi ao psicólogo? Porque estava com problemas de undefined!",
-        "O que um núcleo falou para o outro? Para de ser radioativo!",
-        "Por que o HTML e o CSS terminaram? Porque não tinham química!",
-        "O que o Git disse para o SVN? Você está desatualizado!"
+        "Por que os programadores preferem dark mode? Porque light atrai bugs!"
     ]
 
     piada = random.choice(piadas)
     embed = create_embed("😂 Piada do RXbot", piada, color=0xffaa00)
-    await ctx.send(embed=embed)
-
-@bot.command(name='fato', aliases=['fact'])
-async def fato(ctx):
-    """Fato interessante"""
-    fatos = [
-        "As abelhas podem voar mais alto que o Monte Everest!",
-        "Um polvo tem três corações e sangue azul!",
-        "Existem mais árvores na Terra do que estrelas na Via Láctea!",
-        "O coração de uma baleia azul é tão grande quanto um carro!",
-        "Um grupo de flamingos é chamado de 'flamboyance'!",
-        "As formigas podem levantar 50 vezes o próprio peso!",
-        "A velocidade da luz é de aproximadamente 300.000 km/s!",
-        "O cérebro humano usa cerca de 20% da energia do corpo!",
-        "Uma nuvem pode pesar mais de um milhão de quilos!",
-        "Os golfinhos chamam uns aos outros por nomes!"
-    ]
-
-    fato = random.choice(fatos)
-    embed = create_embed("🤓 Fato Interessante", fato, color=0x7289da)
-    await ctx.send(embed=embed)
-
-@bot.command(name='quiz')
-async def quiz(ctx):
-    """Jogo de quiz"""
-    perguntas = [
-        {"pergunta": "Qual é a capital do Brasil?", "resposta": "brasilia", "opcoes": ["A) São Paulo", "B) Rio de Janeiro", "C) Brasília", "D) Salvador"]},
-        {"pergunta": "Quantos continentes existem?", "resposta": "7", "opcoes": ["A) 5", "B) 6", "C) 7", "D) 8"]},
-        {"pergunta": "Qual o maior planeta do sistema solar?", "resposta": "jupiter", "opcoes": ["A) Terra", "B) Marte", "C) Júpiter", "D) Saturno"]},
-        {"pergunta": "Quem pintou a Mona Lisa?", "resposta": "leonardo", "opcoes": ["A) Picasso", "B) Leonardo da Vinci", "C) Van Gogh", "D) Monet"]},
-        {"pergunta": "Qual é o elemento químico H?", "resposta": "hidrogenio", "opcoes": ["A) Hélio", "B) Hidrogênio", "C) Ferro", "D) Ouro"]}
-    ]
-
-    pergunta = random.choice(perguntas)
-
-    embed = create_embed(
-        "🧠 Quiz RXbot",
-        f"**{pergunta['pergunta']}**\n\n" + "\n".join(pergunta['opcoes']) + "\n\nDigite sua resposta no chat!",
-        color=0x7289da
-    )
-
-    await ctx.send(embed=embed)
-
-    def check(m):
-        return m.author == ctx.author and m.channel == ctx.channel
-
-    try:
-        resposta = await bot.wait_for('message', timeout=30.0, check=check)
-        if pergunta['resposta'].lower() in resposta.content.lower():
-            # Dar recompensa
-            data = get_user_data(ctx.author.id)
-            if data:
-                new_coins = data[1] + 25
-                update_user_data(ctx.author.id, coins=new_coins)
-
-            embed = create_embed("✅ Correto!", f"Parabéns! Você ganhou 25 moedas! 🪙", color=0x00ff00)
-        else:
-            embed = create_embed("❌ Incorreto!", f"A resposta correta era: {pergunta['resposta']}", color=0xff0000)
-
-        await ctx.send(embed=embed)
-    except asyncio.TimeoutError:
-        embed = create_embed("⏰ Tempo esgotado!", "Você demorou muito para responder!", color=0xff6b6b)
-        await ctx.send(embed=embed)
-
-@bot.command(name='forca')
-async def hangman(ctx):
-    """Jogo da forca"""
-    palavras = ["PYTHON", "DISCORD", "PROGRAMACAO", "COMPUTADOR", "INTERNET", "TECNOLOGIA"]
-    palavra = random.choice(palavras)
-    progresso = ["_"] * len(palavra)
-    tentativas = 6
-    letras_usadas = []
-
-    embed = create_embed(
-        "🎪 Jogo da Forca",
-        f"```\n{' '.join(progresso)}\n```\n**Tentativas restantes:** {tentativas}\n**Letras usadas:** {', '.join(letras_usadas) if letras_usadas else 'Nenhuma'}",
-        color=0x7289da
-    )
-
-    message = await ctx.send(embed=embed)
-
-    # Simplified hangman - just show the answer for demo
-    embed = create_embed(
-        "🎪 Jogo da Forca",
-        f"A palavra era: **{palavra}**\nUse `RXforca` para jogar novamente!",
-        color=0x7289da
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='meme')
-async def meme(ctx):
-    """Gera memes aleatórios"""
-    memes = [
-        "https://i.imgflip.com/1bij.jpg",
-        "https://i.imgflip.com/5c7lwq.jpg",
-        "https://i.imgflip.com/25w3.jpg"
-    ]
-    embed = create_embed("😂 Meme Aleatório", color=0xffaa00)
-    embed.set_image(url=random.choice(memes))
     await ctx.send(embed=embed)
 
 @bot.command(name='enquete', aliases=['poll'])
@@ -1734,1516 +5508,624 @@ async def poll(ctx, *, pergunta=None):
     await message.add_reaction("👎")
     await message.add_reaction("🤷")
 
-@bot.command(name='cores', aliases=['colors'])
-async def colors(ctx):
-    """Mostra cores em hexadecimal"""
-    cores = [
-        ("Vermelho", "#FF0000", 0xFF0000),
-        ("Verde", "#00FF00", 0x00FF00),
-        ("Azul", "#0000FF", 0x0000FF),
-        ("Amarelo", "#FFFF00", 0xFFFF00),
-        ("Roxo", "#800080", 0x800080),
-        ("Rosa", "#FFC0CB", 0xFFC0CB)
-    ]
-
-    cor = random.choice(cores)
-    embed = create_embed(f"🎨 Cor: {cor[0]}", f"**Hex:** {cor[1]}", color=cor[2])
-    await ctx.send(embed=embed)
-
-# ============ COMANDOS DE ECONOMIA ============
-@bot.command(name='saldo', aliases=['balance', 'bal', 'money', 'coins'])
-async def balance(ctx, user: discord.Member = None):
-    """Ver saldo do usuário"""
-    target = user or ctx.author
-    data = get_user_data(target.id)
-
-    if not data:
-        update_user_data(target.id)
-        coins, bank = 50, 0
-    else:
-        coins, bank = data[1], data[5]
-
-    total = coins + bank
-
-    embed = create_embed(
-        f"💰 Carteira de {target.display_name}",
-        f"""**💵 Dinheiro:** {coins:,} moedas
-    **🏦 Banco:** {bank:,} moedas
-    **💎 Total:** {total:,} moedas
-
-    *Use `RXdaily` para ganhar moedas diárias!*""",
-        color=0xffd700
-    )
-    embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
-    await ctx.send(embed=embed)
-
-@bot.command(name='daily', aliases=['diario'])
-async def daily(ctx):
-    """Recompensa diária"""
-    user_id = ctx.author.id
-    data = get_user_data(user_id)
-
-    if not data:
-        update_user_data(user_id)
-        data = get_user_data(user_id)
-
-    if data is None:
-        logger.error(f"Could not retrieve or create user data for user ID: {user_id}")
+@bot.command(name='lembrete', aliases=['reminder', 'lembrar'])
+async def create_reminder(ctx, tempo=None, *, texto=None):
+    """Criar um lembrete"""
+    if not tempo or not texto:
         embed = create_embed(
-            "❌ Erro",
-            "Não foi possível processar sua solicitação. Tente novamente mais tarde.",
-            color=0xff0000
-        )
-        await ctx.send(embed=embed)
-        return
-
-    last_daily = data[6]
-    today = datetime.date.today().isoformat()
-
-    if last_daily == today:
-        embed = create_embed(
-            "⏰ Já coletado!",
-            "Você já coletou sua recompensa diária hoje!\nVolte amanhã para coletar novamente.",
-            color=0xff6b6b
-        )
-        await ctx.send(embed=embed)
-        return
-
-    # Calculate reward
-    total_reward = DAILY_REWARD
-
-    # Update user data
-    new_coins = data[1] + total_reward
-
-    try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, last_daily = ? WHERE user_id = ?',
-                          (new_coins, today, user_id))
-            conn.commit()
-            conn.close()
-    except Exception as e:
-        logger.error(f"Error updating daily: {e}")
-
-    embed = create_embed(
-        "🎁 Recompensa Diária!",
-        f"""**Recompensa:** {total_reward:,} moedas
-    **Novo saldo:** {new_coins:,} moedas
-
-    🔥 *Continue coletando diariamente!*""",
-        color=0x00ff00
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='transferir', aliases=['transfer', 'pay'])
-async def transfer_money(ctx, user: discord.Member, amount: int):
-    """Transfere dinheiro para outro usuário"""
-    if user == ctx.author:
-        embed = create_embed("❌ Impossível", "Você não pode transferir para si mesmo!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    if amount <= 0:
-        embed = create_embed("❌ Valor inválido", "O valor deve ser positivo!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    sender_data = get_user_data(ctx.author.id)
-    if not sender_data or sender_data[1] < amount:
-        embed = create_embed("❌ Saldo insuficiente", "Você não tem dinheiro suficiente!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    # Transfer money
-    receiver_data = get_user_data(user.id)
-    if not receiver_data:
-        update_user_data(user.id)
-        receiver_data = get_user_data(user.id)
-
-    new_sender_coins = sender_data[1] - amount
-    new_receiver_coins = receiver_data[1] + amount
-
-    update_user_data(ctx.author.id, coins=new_sender_coins)
-    update_user_data(user.id, coins=new_receiver_coins)
-
-    embed = create_embed(
-        "💸 Transferência Realizada",
-        f"{ctx.author.mention} transferiu **{amount:,} moedas** para {user.mention}!",
-        color=0x00ff00
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='loja', aliases=['shop', 'store'])
-async def shop(ctx):
-    """Loja virtual"""
-    items = [
-        {"name": "🎭 Emoji Personalizado", "price": 5000, "desc": "Crie um emoji personalizado"},
-        {"name": "🌈 Cor Personalizada", "price": 10000, "desc": "Cor personalizada no seu perfil"},
-        {"name": "👑 Título VIP", "price": 25000, "desc": "Título especial VIP"},
-        {"name": "🎪 Evento Privado", "price": 50000, "desc": "Organize um evento privado"},
-        {"name": "🤖 Bot Personalizado", "price": 100000, "desc": "Configure o bot para você"}
-    ]
-
-    embed = create_embed("🛒 Loja RXbot", "Itens disponíveis para compra:", color=0x7289da)
-
-    for i, item in enumerate(items, 1):
-        embed.add_field(
-            name=f"{i}. {item['name']} - {item['price']:,} moedas",
-            value=item['desc'],
-            inline=False
-        )
-
-    embed.set_footer(text="Use RXcomprar <número> para comprar um item")
-    await ctx.send(embed=embed)
-
-@bot.command(name='comprar', aliases=['buy'])
-async def buy_item(ctx, item_id: int):
-    """Compra item da loja"""
-    items = [
-        {"name": "🎭 Emoji Personalizado", "price": 5000},
-        {"name": "🌈 Cor Personalizada", "price": 10000},
-        {"name": "👑 Título VIP", "price": 25000},
-        {"name": "🎪 Evento Privado", "price": 50000},
-        {"name": "🤖 Bot Personalizado", "price": 100000}
-    ]
-
-    if item_id < 1 or item_id > len(items):
-        embed = create_embed("❌ Item inválido", f"Escolha um item de 1 a {len(items)}", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    item = items[item_id - 1]
-    user_data = get_user_data(ctx.author.id)
-
-    if not user_data or user_data[1] < item['price']:
-        embed = create_embed("❌ Saldo insuficiente", f"Você precisa de {item['price']:,} moedas para comprar este item!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    new_coins = user_data[1] - item['price']
-    update_user_data(ctx.author.id, coins=new_coins)
-
-    embed = create_embed(
-        "🎉 Compra Realizada!",
-        f"Você comprou: **{item['name']}**\n**Preço:** {item['price']:,} moedas\n**Saldo restante:** {new_coins:,} moedas",
-        color=0x00ff00
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='trabalhar', aliases=['work'])
-async def work(ctx):
-    """Trabalhe para ganhar dinheiro"""
-    user_data = get_user_data(ctx.author.id)
-
-    trabalhos = [
-        {"nome": "Programador", "min": 20, "max": 80},
-        {"nome": "Designer", "min": 15, "max": 60},
-        {"nome": "Streamer", "min": 10, "max": 45},
-        {"nome": "YouTuber", "min": 12, "max": 50},
-        {"nome": "Gamer", "min": 8, "max": 35}
-    ]
-
-    trabalho = random.choice(trabalhos)
-    ganho = random.randint(trabalho["min"], trabalho["max"])
-
-    if not user_data:
-        update_user_data(ctx.author.id)
-        user_data = get_user_data(ctx.author.id)
-
-    new_coins = user_data[1] + ganho
-    update_user_data(ctx.author.id, coins=new_coins)
-
-    embed = create_embed(
-        "💼 Trabalho Concluído!",
-        f"Você trabalhou como **{trabalho['nome']}** e ganhou **{ganho:,} moedas**!\n"
-        f"**Novo saldo:** {new_coins:,} moedas",
-        color=0x00ff00
-    )
-    await ctx.send(embed=embed)
-
-# ============ COMANDOS DE UTILIDADES ============
-@bot.command(name='resetmemoria', aliases=['clearmemory', 'limparmente'])
-async def reset_memory(ctx, user: discord.Member = None):
-    """Reseta a memória de conversas da IA"""
-    target = user or ctx.author
-
-    # Se especificou outro usuário, precisa ser admin
-    if user and user != ctx.author:
-        if not ctx.author.guild_permissions.administrator:
-            embed = create_embed(
-                "❌ Sem permissão",
-                "Apenas administradores podem resetar a memória de outros usuários!",
-                color=0xff0000
-            )
-            await ctx.send(embed=embed)
-            return
-
-    # Limpar memória de conversas
-    if target.id in conversation_memory:
-        conversation_memory[target.id].clear()
-
-    if target.id in user_personalities:
-        user_personalities[target.id].clear()
-
-    embed = create_embed(
-        "🧠 Memória Resetada",
-        f"A memória de conversas de **{target.display_name}** foi limpa!\n"
-        f"A IA não se lembrará mais das conversas anteriores.\n"
-        f"**Executado por:** {ctx.author.mention}",
-        color=0x00ff00
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='vermemoria', aliases=['showmemory', 'memoria'])
-async def show_memory(ctx):
-    """Mostra estatísticas da memória da IA"""
-    user_id = ctx.author.id
-
-    memory_count = len(conversation_memory[user_id]) if user_id in conversation_memory else 0
-    personality_data = len(user_personalities[user_id]) if user_id in user_personalities else 0
-
-    embed = create_embed(
-        "🧠 Status da Memória IA",
-        f"""**Suas conversas armazenadas:** {memory_count}/50
-    **Dados de personalidade:** {personality_data} itens
-
-    **Comandos disponíveis:**
-    • `RXresetmemoria` - Limpar sua memória
-    • `RXresetmemoria @user` - Limpar memória de outro usuário (admin)
-
-    *A IA usa essas informações para conversas mais naturais!*""",
-        color=0x7289da
-    )
-    await ctx.send(embed=embed)
-
-# ============ COMANDOS ADMINISTRATIVOS ============
-@bot.command(name='addcoins', aliases=['darcoins', 'adicionarcoins'])
-@commands.has_permissions(administrator=True)
-async def add_coins(ctx, user: discord.Member, amount: int):
-    """[ADMIN] Adiciona RXcoins para um usuário"""
-    if amount <= 0:
-        embed = create_embed("❌ Valor inválido", "O valor deve ser positivo!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    # Verificar se o usuário existe no banco de dados
-    user_data = get_user_data(user.id)
-    if not user_data:
-        update_user_data(user.id)
-        user_data = get_user_data(user.id)
-
-    new_coins = user_data[1] + amount
-    update_user_data(user.id, coins=new_coins)
-
-    embed = create_embed(
-        "💰 RXcoins Adicionadas",
-        f"**{amount:,} RXcoins** foram adicionadas para {user.mention}!\n"
-        f"**Novo saldo:** {new_coins:,} RXcoins\n"
-        f"**Administrador:** {ctx.author.mention}",
-        color=0x00ff00
-    )
-    await ctx.send(embed=embed)
-
-    # Log da transação
-    try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (user.id, ctx.guild.id, 'admin_add', amount, f'Adicionado por {ctx.author.name}'))
-            conn.commit()
-            conn.close()
-    except Exception as e:
-        logger.error(f"Error logging transaction: {e}")
-
-@bot.command(name='removecoins', aliases=['tirarcoins', 'removercoins'])
-@commands.has_permissions(administrator=True)
-async def remove_coins(ctx, user: discord.Member, amount: int):
-    """[ADMIN] Remove RXcoins de um usuário"""
-    if amount <= 0:
-        embed = create_embed("❌ Valor inválido", "O valor deve ser positivo!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    user_data = get_user_data(user.id)
-    if not user_data:
-        embed = create_embed("❌ Usuário não encontrado", "Este usuário não tem dados no sistema!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    current_coins = user_data[1]
-    if current_coins < amount:
-        embed = create_embed(
-            "⚠️ Saldo insuficiente",
-            f"{user.display_name} tem apenas {current_coins:,} RXcoins!\n"
-            f"Não é possível remover {amount:,} RXcoins.",
-            color=0xffaa00
-        )
-        await ctx.send(embed=embed)
-        return
-
-    new_coins = current_coins - amount
-    update_user_data(user.id, coins=new_coins)
-
-    embed = create_embed(
-        "💸 RXcoins Removidas",
-        f"**{amount:,} RXcoins** foram removidas de {user.mention}!\n"
-        f"**Novo saldo:** {new_coins:,} RXcoins\n"
-        f"**Administrador:** {ctx.author.mention}",
-        color=0xff6b6b
-    )
-    await ctx.send(embed=embed)
-
-    # Log da transação
-    try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (user.id, ctx.guild.id, 'admin_remove', -amount, f'Removido por {ctx.author.name}'))
-            conn.commit()
-            conn.close()
-    except Exception as e:
-        logger.error(f"Error logging transaction: {e}")
-
-@bot.command(name='setcoins', aliases=['definircoins'])
-@commands.has_permissions(administrator=True)
-async def set_coins(ctx, user: discord.Member, amount: int):
-    """[ADMIN] Define a quantidade exata de RXcoins de um usuário"""
-    if amount < 0:
-        embed = create_embed("❌ Valor inválido", "O valor não pode ser negativo!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    user_data = get_user_data(user.id)
-    if not user_data:
-        update_user_data(user.id)
-
-    update_user_data(user.id, coins=amount)
-
-    embed = create_embed(
-        "🎯 RXcoins Definidas",
-        f"O saldo de {user.mention} foi definido para **{amount:,} RXcoins**!\n"
-        f"**Administrador:** {ctx.author.mention}",
-        color=0x7289da
-    )
-    await ctx.send(embed=embed)
-
-    # Log da transação
-    try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (user.id, ctx.guild.id, 'admin_set', amount, f'Definido por {ctx.author.name}'))
-            conn.commit()
-            conn.close()
-    except Exception as e:
-        logger.error(f"Error logging transaction: {e}")
-
-@bot.command(name='limpartotalmemoria', aliases=['cleartotalmemory', 'resetbot'])
-@commands.has_permissions(administrator=True)
-async def clear_total_memory(ctx):
-    """[ADMIN] Limpa toda a memória do bot (todas as conversas)"""
-    # Confirmar ação
-    embed = create_embed(
-        "⚠️ Confirmação Necessária",
-        "**ATENÇÃO:** Esta ação irá apagar TODA a memória conversacional do bot!\n"
-        "Isso inclui conversas de todos os usuários.\n\n"
-        "Digite `CONFIRMAR` para prosseguir ou qualquer outra coisa para cancelar:",
-        color=0xff6b6b
-    )
-    await ctx.send(embed=embed)
-
-    def check(m):
-        return m.author == ctx.author and m.channel == ctx.channel
-
-    try:
-        response = await bot.wait_for('message', timeout=30.0, check=check)
-
-        if response.content.upper() == 'CONFIRMAR':
-            # Limpar toda a memória
-            conversation_memory.clear()
-            user_personalities.clear()
-
-            embed = create_embed(
-                "🧠 Memória Total Limpa",
-                "✅ Toda a memória conversacional do bot foi apagada!\n"
-                "🔄 O bot agora está com a mente \"fresca\".\n"
-                f"**Executado por:** {ctx.author.mention}",
-                color=0x00ff00
-            )
-            await ctx.send(embed=embed)
-
-            # Log da ação
-            logger.info(f"Total memory cleared by {ctx.author.name} ({ctx.author.id}) in guild {ctx.guild.name}")
-
-        else:
-            embed = create_embed(
-                "❌ Ação Cancelada",
-                "A limpeza total da memória foi cancelada.",
-                color=0xffaa00
-            )
-            await ctx.send(embed=embed)
-
-    except asyncio.TimeoutError:
-        embed = create_embed(
-            "⏰ Tempo Esgotado",
-            "A confirmação não foi recebida. Ação cancelada.",
-            color=0xff6b6b
-        )
-        await ctx.send(embed=embed)
-
-@bot.command(name='statusmemoria', aliases=['memorystatus'])
-@commands.has_permissions(administrator=True)
-async def memory_status(ctx):
-    """[ADMIN] Mostra estatísticas completas da memória do bot"""
-    total_users = len(conversation_memory)
-    total_conversations = sum(len(memory) for memory in conversation_memory.values())
-    total_personalities = sum(len(personality) for personality in user_personalities.values())
-
-    # Encontrar usuário com mais conversas
-    if conversation_memory:
-        most_active_user_id = max(conversation_memory.keys(), key=lambda k: len(conversation_memory[k]))
-        most_active_user = bot.get_user(most_active_user_id)
-        most_conversations = len(conversation_memory[most_active_user_id])
-    else:
-        most_active_user = None
-        most_conversations = 0
-
-    embed = create_embed(
-        "🧠 Status Global da Memória IA",
-        f"""**📊 Estatísticas Gerais:**
-    • **Usuários com memória:** {total_users}
-    • **Total de conversas:** {total_conversations}
-    • **Dados de personalidade:** {total_personalities}
-
-    **🏆 Usuário mais ativo:**
-    • **Nome:** {most_active_user.display_name if most_active_user else 'Nenhum'}
-    • **Conversas:** {most_conversations}
-
-    **⚙️ Comandos Admin:**
-    • `RXlimpartotalmemoria` - Limpar toda memória
-    • `RXresetmemoria @user` - Limpar memória específica
-    • `RXstatusmemoria` - Ver estatísticas da memória
-
-    **💾 Limite por usuário:** 50 conversas""",
-        color=0x7289da
-    )
-
-    embed.set_footer(text=f"Solicitado por {ctx.author.display_name}")
-    await ctx.send(embed=embed)
-
-@bot.command(name='calc', aliases=['calcular'])
-async def calculator(ctx, *, expressao=None):
-    """Calculadora simples"""
-    if not expressao:
-        embed = create_embed("❌ Expressão necessária", "Use: `RXcalc 2 + 2`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        # Sanitize expression for safety
-        allowed_chars = "0123456789+-*/()."
-        clean_expr = ''.join(c for c in expressao if c in allowed_chars or c.isspace())
-
-        resultado = eval(clean_expr)
-        embed = create_embed(
-            "🧮 Calculadora",
-            f"**Expressão:** {expressao}\n**Resultado:** {resultado}",
+            "⏰ Como usar lembretes",
+            """**Formato:** `RXlembrete <tempo> <texto>`
+
+**Exemplos:**
+• `RXlembrete 30m Verificar email`
+• `RXlembrete 2h Reunião importante`
+• `RXlembrete 1d Aniversário do João`
+
+**Tempos aceitos:** m (minutos), h (horas), d (dias)""",
             color=0x7289da
         )
-    except:
-        embed = create_embed("❌ Expressão inválida", "Verifique a sintaxe da expressão", color=0xff0000)
-
-    await ctx.send(embed=embed)
-
-@bot.command(name='tempo', aliases=['time'])
-async def current_time(ctx, *, timezone=None):
-    """Mostra hora atual"""
-    if timezone:
-        embed = create_embed(
-            "⏰ Hora Atual",
-            f"Para mostrar horário de {timezone}, conecte uma API de timezone!",
-            color=0x7289da
-        )
-    else:
-        now = datetime.datetime.now()
-        embed = create_embed(
-            "⏰ Hora Atual",
-            f"**Data:** {now.strftime('%d/%m/%Y')}\n**Hora:** {now.strftime('%H:%M:%S')}",
-            color=0x7289da
-        )
-
-    await ctx.send(embed=embed)
-
-@bot.command(name='lembrete', aliases=['remind'])
-async def reminder(ctx, tempo, *, mensagem=None):
-    """Cria um lembrete"""
-    if not mensagem:
-        embed = create_embed("❌ Mensagem necessária", "Use: `RXlembrete 30m Fazer algo`", color=0xff0000)
         await ctx.send(embed=embed)
         return
 
-    # Parse time
-    time_units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
+    # Parse tempo
+    time_units = {'m': 60, 'h': 3600, 'd': 86400}
     unit = tempo[-1].lower()
 
     if unit not in time_units:
-        embed = create_embed("❌ Unidade inválida", "Use: s (segundos), m (minutos), h (horas), d (dias)", color=0xff0000)
+        embed = create_embed("❌ Tempo inválido", "Use: m (minutos), h (horas), d (dias)", color=0xff0000)
         await ctx.send(embed=embed)
         return
 
     try:
         amount = int(tempo[:-1])
         seconds = amount * time_units[unit]
-
         remind_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
 
+        # Salvar no banco
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO reminders (user_id, guild_id, channel_id, reminder_text, remind_time)
                 VALUES (?, ?, ?, ?, ?)
-            ''', (ctx.author.id, ctx.guild.id, ctx.channel.id, mensagem, remind_time))
+            ''', (ctx.author.id, ctx.guild.id, ctx.channel.id, texto, remind_time))
             conn.commit()
             conn.close()
 
         embed = create_embed(
-            "⏰ Lembrete Criado",
-            f"Vou te lembrar em {amount}{unit}: **{mensagem}**",
+            "✅ Lembrete Criado!",
+            f"**Texto:** {texto}\n"
+            f"**Quando:** <t:{int(remind_time.timestamp())}:F>\n"
+            f"**Em:** <t:{int(remind_time.timestamp())}:R>",
             color=0x00ff00
         )
         await ctx.send(embed=embed)
 
     except ValueError:
-        embed = create_embed("❌ Tempo inválido", "Use formato: 30m, 2h, 1d, etc.", color=0xff0000)
+        embed = create_embed("❌ Número inválido", "Use números válidos: 30m, 2h, 1d", color=0xff0000)
         await ctx.send(embed=embed)
 
-@bot.command(name='senha', aliases=['password'])
-async def generate_password(ctx, tamanho: int = 12):
-    """Gera senha aleatória"""
-    if tamanho < 4 or tamanho > 50:
-        embed = create_embed("❌ Tamanho inválido", "Use entre 4 e 50 caracteres", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
+@bot.command(name='status', aliases=['sistema'])
+async def sistema_status(ctx):
+    """Status completo do sistema"""
+    global_stats['commands_used'] += 1
 
-    chars = string.ascii_letters + string.digits + "!@#$%&*"
-    senha = ''.join(random.choice(chars) for _ in range(tamanho))
+    uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
 
     embed = create_embed(
-        "🔑 Senha Gerada",
-        f"**Senha:** `{senha}`\n**Tamanho:** {tamanho} caracteres",
+        "🔧 Status do Sistema RXbot",
+        f"""**⚡ Sistema Principal:**
+• Status: 🟢 Online e Estável
+• Uptime: {format_time(uptime_seconds)}
+• Latência: {round(bot.latency * 1000, 2)}ms
+
+**🛡️ Sistemas de Proteção:**
+• ✅ Auto-ping (30s)
+• ✅ Keep-alive externo (120s)  
+• ✅ Heartbeat (180s)
+• ✅ Monitor de emergência (180s)
+• ✅ Sistema anti-hibernação (45s)
+
+**📊 Estatísticas:**
+• Servidores: {len(bot.guilds)}
+• Usuários: {len(set(bot.get_all_members()))}
+• Comandos executados: {global_stats['commands_used']:,}
+• Mensagens processadas: {global_stats['messages_processed']:,}
+
+**🌐 Keep-alive URLs:**
+• `/ping` - Ping básico
+• `/keepalive` - Keep-alive principal
+• `/monitor` - Monitoramento detalhado
+• `/force-alive` - Força ativação
+
+**💡 Dica:** Configure UptimeRobot para máxima proteção!""",
         color=0x00ff00
     )
 
-    try:
-        await ctx.author.send(embed=embed)
-        await ctx.send("✅ Senha enviada no seu privado!")
-    except:
-        await ctx.send("❌ Não consegui enviar no privado. Verifique suas configurações de DM.")
-
-@bot.command(name='base64')
-async def base64_encode(ctx, *, texto=None):
-    """Codifica texto em Base64"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXbase64 Hello World`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    encoded = base64.b64encode(texto.encode()).decode()
-    embed = create_embed(
-        "🔐 Base64",
-        f"**Original:** {texto}\n**Codificado:** `{encoded}`",
-        color=0x7289da
-    )
     await ctx.send(embed=embed)
 
-@bot.command(name='hash')
-async def hash_text(ctx, *, texto=None):
-    """Gera hash MD5 do texto"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXhash Hello World`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
+@bot.command(name='uptime')
+async def uptime(ctx):
+    """Mostra o tempo que o bot está online"""
+    global_stats['commands_used'] += 1
 
-    hash_md5 = hashlib.md5(texto.encode()).hexdigest()
-    embed = create_embed(
-        "🔒 Hash MD5",
-        f"**Original:** {texto}\n**Hash:** `{hash_md5}`",
-        color=0x7289da
-    )
-    await ctx.send(embed=embed)
-
-# ============ COMANDOS DE TEXTO ============
-@bot.command(name='reverso', aliases=['reverse'])
-async def reverse_text(ctx, *, texto=None):
-    """Reverte o texto"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXreverso Hello World`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    reversed_text = texto[::-1]
-    embed = create_embed(
-        "🔄 Texto Reverso",
-        f"**Original:** {texto}\n**Reverso:** {reversed_text}",
-        color=0x7289da
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='maiuscula', aliases=['upper'])
-async def uppercase(ctx, *, texto=None):
-    """Converte para maiúscula"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXmaiuscula hello world`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
+    uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
 
     embed = create_embed(
-        "🔤 Maiúscula",
-        f"**Original:** {texto}\n**Maiúscula:** {texto.upper()}",
-        color=0x7289da
-    )
-    await ctx.send(embed=embed)
+        "⏱️ Uptime do RXbot",
+        f"""**⏰ Tempo online:** {format_time(uptime_seconds)}
+**🚀 Iniciado em:** <t:{int(global_stats['uptime_start'].timestamp())}:F>
+**💬 Status:** 🟢 Online e estável
+**💬 Comandos executados:** {global_stats['commands_used']:,}
+**📨 Mensagens processadas:** {global_stats['messages_processed']:,}
 
-@bot.command(name='minuscula', aliases=['lower'])
-async def lowercase(ctx, *, texto=None):
-    """Converte para minúscula"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXminuscula HELLO WORLD`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    embed = create_embed(
-        "🔤 Minúscula",
-        f"**Original:** {texto}\n**Minúscula:** {texto.lower()}",
-        color=0x7289da
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='contar', aliases=['count'])
-async def count_text(ctx, *, texto=None):
-    """Conta caracteres e palavras"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXcontar Hello World`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    chars = len(texto)
-    words = len(texto.split())
-    lines = len(texto.split('\n'))
-
-    embed = create_embed(
-        "📊 Estatísticas do Texto",
-        f"**Caracteres:** {chars}\n**Palavras:** {words}\n**Linhas:** {lines}",
-        color=0x7289da
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='ascii')
-async def ascii_art(ctx, *, texto=None):
-    """Converte texto em ASCII art simples"""
-    if not texto:
-        texto = "RXbot"
-
-    ascii_map = {
-        'A': "  ▄▀█  \n █▄█ ", 'B': " █▄▄ \n █▄█ ", 'C': " ▄▀█ \n █▄▄ ",
-        'R': " █▀█ \n █▀▄ ", 'X': " ▀▄▀ \n █▄█ ", 'O': " █▀█ \n █▄█ "
-    }
-
-    result = ""
-    for char in texto.upper():
-        if char in ascii_map:
-            result += ascii_map[char] + "  "
-        elif char == ' ':
-            result += "   "
-
-    embed = create_embed("🎨 ASCII Art", f"```\n{result}\n```", color=0x7289da)
-    await ctx.send(embed=embed)
-
-# ============ COMANDOS DE MODERAÇÃO ============
-@bot.command(name='warn', aliases=['advertir', 'aviso'])
-@commands.has_permissions(manage_messages=True)
-async def warn_user(ctx, user: discord.Member, *, motivo="Sem motivo especificado"):
-    """Advertir um usuário"""
-    if user == ctx.author:
-        embed = create_embed("❌ Impossível", "Você não pode se advertir!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    if user.top_role >= ctx.author.top_role:
-        embed = create_embed("❌ Sem permissão", "Você não pode advertir este membro!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    # Atualizar warnings no banco de dados
-    user_data = get_user_data(user.id)
-    if not user_data:
-        update_user_data(user.id)
-        user_data = get_user_data(user.id)
-
-    warnings = user_data[15] + 1
-    update_user_data(user.id, warnings=warnings)
-
-    # Log da moderação
-    try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (ctx.guild.id, user.id, ctx.author.id, 'warn', motivo))
-            conn.commit()
-            conn.close()
-    except Exception as e:
-        logger.error(f"Error logging moderation: {e}")
-
-    # Determinar castigo baseado no número de warnings
-    castigo = ""
-    action_taken = False
-
-    if warnings >= 5:
-        # 5+ warnings = Ban
-        try:
-            await user.ban(reason=f"5+ Warnings: {motivo}")
-            castigo = f"\n🔨 **BANIDO** do servidor por acúmulo de {warnings} warnings!"
-            action_taken = True
-        except:
-            castigo = f"\n⚠️ Tentativa de ban falhou (5+ warnings)"
-
-    elif warnings >= 3:
-        # 3-4 warnings = Timeout 24h
-        try:
-            timeout_until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)
-            await user.timeout(timeout_until, reason=f"3+ Warnings: {motivo}")
-            castigo = f"\n⏰ **TIMEOUT 24h** por acúmulo de {warnings} warnings!"
-            action_taken = True
-        except:
-            castigo = f"\n⚠️ Tentativa de timeout falhou (3+ warnings)"
-
-    elif warnings == 2:
-        # 2 warnings = Timeout 1h
-        try:
-            timeout_until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
-            await user.timeout(timeout_until, reason=f"2 Warnings: {motivo}")
-            castigo = f"\n⏰ **TIMEOUT 1h** por acúmulo de {warnings} warnings!"
-            action_taken = True
-        except:
-            castigo = f"\n⚠️ Tentativa de timeout falhou (2 warnings)"
-
-    embed = create_embed(
-        "⚠️ Usuário Advertido",
-        f"**{user.mention}** recebeu um warning!\n"
-        f"**Motivo:** {motivo}\n"
-        f"**Total de warnings:** {warnings}/5\n"
-        f"**Moderador:** {ctx.author.mention}{castigo}",
-        color=0xff6b6b if action_taken else 0xffaa00
-    )
-
-    await ctx.send(embed=embed)
-
-    # Enviar DM para o usuário
-    try:
-        dm_embed = create_embed(
-            f"⚠️ Warning em {ctx.guild.name}",
-            f"**Motivo:** {motivo}\n"
-            f"**Warnings totais:** {warnings}/5\n"
-            f"**Moderador:** {ctx.author.name}\n\n"
-            f"📋 **Lembre-se das regras:**\n"
-            f"• Respeite todos os membros\n"
-            f"• Não faça spam\n"
-            f"• Mantenha conversas adequadas\n"
-            f"• Siga as diretrizes do Discord{castigo}",
-            color=0xff6b6b
-        )
-        await user.send(embed=dm_embed)
-    except:
-        pass
-
-@bot.command(name='warnings', aliases=['avisos', 'infrações'])
-async def check_warnings(ctx, user: discord.Member = None):
-    """Verificar warnings de um usuário"""
-    target = user or ctx.author
-    user_data = get_user_data(target.id)
-
-    if not user_data:
-        warnings = 0
-    else:
-        warnings = user_data[15]
-
-    # Buscar histórico de moderação
-    try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT action, reason, timestamp FROM moderation_logs
-                WHERE user_id = ? AND guild_id = ?
-                ORDER BY timestamp DESC LIMIT 5
-            ''', (target.id, ctx.guild.id))
-            logs = cursor.fetchall()
-            conn.close()
-    except Exception as e:
-        logger.error(f"Error fetching moderation logs: {e}")
-        logs = []
-
-    # Status baseado em warnings
-    if warnings == 0:
-        status = "🟢 Limpo"
-        color = 0x00ff00
-    elif warnings <= 2:
-        status = "🟡 Atenção"
-        color = 0xffaa00
-    else:
-        status = "🔴 Perigo"
-        color = 0xff0000
-
-    embed = create_embed(
-        f"⚠️ Warnings de {target.display_name}",
-        f"**Status:** {status}\n"
-        f"**Warnings:** {warnings}/5\n"
-        f"**Próximo castigo:** {get_next_punishment(warnings)}",
-        color=color
-    )
-
-    if logs:
-        log_text = ""
-        for log in logs[:3]:  # Mostrar últimos 3
-            action, reason, timestamp = log
-            try:
-                dt = datetime.datetime.fromisoformat(timestamp)
-                log_text += f"• **{action.upper()}:** {reason} ({dt.strftime('%d/%m/%Y')})\n"
-            except:
-                log_text += f"• **{action.upper()}:** {reason}\n"
-
-        if log_text:
-            embed.add_field(name="📋 Histórico Recente", value=log_text, inline=False)
-
-    embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
-    await ctx.send(embed=embed)
-
-def get_next_punishment(current_warnings):
-    """Retorna o próximo castigo baseado no número atual de warnings"""
-    if current_warnings == 0:
-        return "1º Warning = Aviso"
-    elif current_warnings == 1:
-        return "2º Warning = Timeout 1h"
-    elif current_warnings == 2:
-        return "3º Warning = Timeout 24h"
-    elif current_warnings >= 3 and current_warnings < 5:
-        return "5º Warning = Ban permanente"
-    else:
-        return "Ban permanente aplicado"
-
-@bot.command(name='limparwarnings', aliases=['clearwarnings', 'resetwarnings'])
-@commands.has_permissions(administrator=True)
-async def clear_warnings(ctx, user: discord.Member):
-    """[ADMIN] Limpar warnings de um usuário"""
-    update_user_data(user.id, warnings=0)
-
-    embed = create_embed(
-        "✅ Warnings Limpos",
-        f"Todos os warnings de {user.mention} foram removidos!\n"
-        f"**Administrador:** {ctx.author.mention}",
-        color=0x00ff00
-    )
-    await ctx.send(embed=embed)
-
-    # Log da moderação
-    try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (ctx.guild.id, user.id, ctx.author.id, 'clear_warnings', 'Warnings removidos por admin'))
-            conn.commit()
-            conn.close()
-    except Exception as e:
-        logger.error(f"Error logging moderation: {e}")
-
-@bot.command(name='timeout', aliases=['mute', 'mutar'])
-@commands.has_permissions(moderate_members=True)
-async def timeout_user(ctx, user: discord.Member, duration: str, *, motivo="Sem motivo especificado"):
-    """Aplicar timeout em um usuário"""
-    if user == ctx.author:
-        embed = create_embed("❌ Impossível", "Você não pode se mutar!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    if user.top_role >= ctx.author.top_role:
-        embed = create_embed("❌ Sem permissão", "Você não pode mutar este membro!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    # Parse duration
-    time_units = {'m': 'minutos', 'h': 'horas', 'd': 'dias'}
-    unit = duration[-1].lower()
-
-    if unit not in time_units:
-        embed = create_embed("❌ Formato inválido", "Use: 30m, 2h, 1d", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        amount = int(duration[:-1])
-
-        if unit == 'm':
-            delta = datetime.timedelta(minutes=amount)
-        elif unit == 'h':
-            delta = datetime.timedelta(hours=amount)
-        elif unit == 'd':
-            delta = datetime.timedelta(days=amount)
-
-        timeout_until = datetime.datetime.now(datetime.timezone.utc) + delta
-
-        await user.timeout(timeout_until, reason=motivo)
-
-        embed = create_embed(
-            "⏰ Timeout Aplicado",
-            f"**{user.mention}** foi mutado por **{amount}{unit}**!\n"
-            f"**Motivo:** {motivo}\n"
-            f"**Moderador:** {ctx.author.mention}",
-            color=0xff6b6b
-        )
-        await ctx.send(embed=embed)
-
-        # Log da moderação
-        try:
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason, duration)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (ctx.guild.id, user.id, ctx.author.id, 'timeout', motivo, amount))
-                conn.commit()
-                conn.close()
-        except Exception as e:
-            logger.error(f"Error logging moderation: {e}")
-
-    except ValueError:
-        embed = create_embed("❌ Duração inválida", "Use números válidos: 30m, 2h, 1d", color=0xff0000)
-        await ctx.send(embed=embed)
-    except Exception as e:
-        embed = create_embed("❌ Erro", f"Não foi possível aplicar timeout: {str(e)}", color=0xff0000)
-        await ctx.send(embed=embed)
-
-@bot.command(name='regras', aliases=['rules'])
-async def server_rules(ctx):
-    """Mostra as regras do servidor"""
-    embed = create_embed(
-        "📋 Regras do Servidor",
-        """**1. 🤝 RESPEITO MÚTUO**
-    • Trate todos com respeito e cordialidade
-    • Não toleramos assédio, bullying ou discriminação
-    • Mantenha conversas civilizadas
-
-    **2. 🚫 CONTEÚDO PROIBIDO**
-    • Sem spam, flood ou mensagens repetitivas
-    • Proibido conteúdo NSFW, violento ou ofensivo
-    • Não compartilhe links suspeitos ou maliciosos
-
-    **3. 💬 COMUNICAÇÃO**
-    • Use canais apropriados para cada assunto
-    • Não faça menções desnecessárias (@everyone/@here)
-    • Evite discussões políticas ou religiosas
-
-    **4. 🎮 JOGOS E DIVERSÃO**
-    • Respeite outros jogadores nos jogos
-    • Não trapaceie ou abuse de bugs
-    • Divirta-se respeitando os limites
-
-    **5. ⚖️ CONSEQUÊNCIAS**
-    • **1-2 Warnings:** Avisos e timeout curto
-    • **3-4 Warnings:** Timeout de 24 horas
-    • **5+ Warnings:** Ban permanente
-
-    ⚠️ **Moderadores têm palavra final em todas as situações**""",
-        color=0x7289da
-    )
-
-    embed.add_field(
-        name="📞 Precisa de Ajuda?",
-        value="Use `RXticket <motivo>` para abrir um ticket de suporte!",
-        inline=False
-    )
-
-    embed.set_footer(text="Ao permanecer no servidor, você concorda com estas regras")
-    await ctx.send(embed=embed)
-
-@bot.command(name='clear', aliases=['limpar', 'purge'])
-@commands.has_permissions(manage_messages=True)
-async def clear_messages(ctx, amount: int = 10):
-    """Limpa mensagens do canal"""
-    if amount < 1 or amount > 100:
-        embed = create_embed("❌ Quantidade inválida", "Use entre 1 e 100 mensagens", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    deleted = await ctx.channel.purge(limit=amount + 1)  # +1 para incluir o comando
-
-    embed = create_embed(
-        "🧹 Canal Limpo",
-        f"**{len(deleted) - 1} mensagens** foram deletadas!",
+**🔄 Sistemas ativos:**
+• ✅ Auto-ping (60s)
+• ✅ Keep-alive externo (4min)
+• ✅ Heartbeat (3min)
+• ✅ Backup automático (6h)""",
         color=0x00ff00
     )
 
-    msg = await ctx.send(embed=embed)
-    await asyncio.sleep(5)
-    await msg.delete()
-
-@bot.command(name='kick', aliases=['expulsar'])
-@commands.has_permissions(kick_members=True)
-async def kick_member(ctx, member: discord.Member, *, reason="Sem motivo especificado"):
-    """Expulsa um membro"""
-    if member == ctx.author:
-        embed = create_embed("❌ Impossível", "Você não pode se expulsar!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    if member.top_role >= ctx.author.top_role:
-        embed = create_embed("❌ Sem permissão", "Você não pode expulsar este membro!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        await member.kick(reason=reason)
-        embed = create_embed(
-            "👢 Membro Expulso",
-            f"**{member}** foi expulso!\n**Motivo:** {reason}",
-            color=0xff6b6b
-        )
-        await ctx.send(embed=embed)
-    except:
-        embed = create_embed("❌ Erro", "Não foi possível expulsar o membro!", color=0xff0000)
-        await ctx.send(embed=embed)
-
-@bot.command(name='ban', aliases=['banir'])
-@commands.has_permissions(ban_members=True)
-async def ban_member(ctx, member: discord.Member, *, reason="Sem motivo especificado"):
-    """Bane um membro"""
-    if member == ctx.author:
-        embed = create_embed("❌ Impossível", "Você não pode se banir!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    if member.top_role >= ctx.author.top_role:
-        embed = create_embed("❌ Sem permissão", "Você não pode banir este membro!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        await member.ban(reason=reason)
-        embed = create_embed(
-            "🔨 Membro Banido",
-            f"**{member}** foi banido!\n**Motivo:** {reason}",
-            color=0xff0000
-        )
-        await ctx.send(embed=embed)
-    except:
-        embed = create_embed("❌ Erro", "Não foi possível banir o membro!", color=0xff0000)
-        await ctx.send(embed=embed)
-
-# ============ COMANDOS DE INFORMAÇÃO ============
-@bot.command(name='userinfo', aliases=['uinfo', 'perfil'])
-async def user_info(ctx, user: discord.Member = None):
-    """Informações do usuário"""
-    target = user or ctx.author
-
-    embed = create_embed(
-        f"👤 Perfil de {target.display_name}",
-        f"""**ID:** {target.id}
-    **Nome:** {target.name}#{target.discriminator}
-    **Apelido:** {target.display_name}
-    **Conta criada:** {target.created_at.strftime('%d/%m/%Y')}
-    **Entrou no servidor:** {target.joined_at.strftime('%d/%m/%Y')}
-    **Status:** {str(target.status).title()}
-    **Maior cargo:** {target.top_role.mention}""",
-        color=target.color
-    )
-    embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
     await ctx.send(embed=embed)
 
-@bot.command(name='serverinfo', aliases=['sinfo', 'servidor'])
+@bot.command(name='stats', aliases=['estatisticas'])
+async def bot_stats(ctx):
+    """Estatísticas completas do bot"""
+    global_stats['commands_used'] += 1
+
+    uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
+
+    # Contar usuários únicos
+    unique_users = len(set(bot.get_all_members()))
+
+    embed = create_embed(
+        f"📊 Estatísticas do RXbot",
+        f"""**🤖 Bot Info:**
+• **Nome:** {bot.user.name}#{bot.user.discriminator}
+• **ID:** {bot.user.id}
+• **Uptime:** {format_time(uptime_seconds)}
+
+**📈 Números:**
+• **Servidores:** {len(bot.guilds):,}
+• **Usuários únicos:** {unique_users:,}
+• **Canais totais:** {len(list(bot.get_all_channels())):,}
+• **Comandos executados:** {global_stats['commands_used']:,}
+• **Mensagens processadas:** {global_stats['messages_processed']:,}
+
+**🌐 Sistema:**
+• **Latência:** {round(bot.latency * 1000, 2)}ms
+• **Python:** {platform.python_version()}
+• **Discord.py:** {discord.__version__}
+• **Plataforma:** {platform.system()} {platform.release()}""",
+        color=0x7289da
+    )
+
+    await ctx.send(embed=embed)
+
+@bot.command(name='serverinfo', aliases=['infoserver'])
 async def server_info(ctx):
     """Informações do servidor"""
+    global_stats['commands_used'] += 1
     guild = ctx.guild
 
+    # Contar membros por status
+    online = len([m for m in guild.members if m.status == discord.Status.online])
+    idle = len([m for m in guild.members if m.status == discord.Status.idle])
+    dnd = len([m for m in guild.members if m.status == discord.Status.dnd])
+    offline = len([m for m in guild.members if m.status == discord.Status.offline])
+
     embed = create_embed(
-        f"🏠 {guild.name}",
-        f"""**ID:** {guild.id}
-    **Dono:** {guild.owner.mention}
-    **Criado em:** {guild.created_at.strftime('%d/%m/%Y')}
-    **Membros:** {guild.member_count}
-    **Canais:** {len(guild.channels)}
-    **Cargos:** {len(guild.roles)}
-    **Emojis:** {len(guild.emojis)}
-    **Boost Level:** {guild.premium_tier}""",
+        f"📋 Informações - {guild.name}",
+        f"""**🏠 Servidor:**
+• **Nome:** {guild.name}
+• **ID:** {guild.id}
+• **Criado:** <t:{int(guild.created_at.timestamp())}:F>
+• **Dono:** {guild.owner.mention if guild.owner else 'Desconhecido'}
+
+**👥 Membros ({guild.member_count}):**
+• 🟢 Online: {online}
+• 🟡 Ausente: {idle}  
+• 🔴 Ocupado: {dnd}
+• ⚫ Offline: {offline}
+
+**📊 Canais ({len(guild.channels)}):**
+• 💬 Texto: {len(guild.text_channels)}
+• 🔊 Voz: {len(guild.voice_channels)}
+• 📁 Categorias: {len(guild.categories)}
+
+**🎭 Outros:**
+• **Cargos:** {len(guild.roles)}
+• **Emojis:** {len(guild.emojis)}
+• **Boost:** Nível {guild.premium_tier} ({guild.premium_subscription_count} boosts)""",
         color=0x7289da
     )
+
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
+
+    await ctx.send(embed=embed)
+
+@bot.command(name='userinfo', aliases=['uinfo'])
+async def user_info(ctx, user: discord.Member = None):
+    """Informações detalhadas do usuário"""
+    global_stats['commands_used'] += 1
+    target = user or ctx.author
+
+    # Buscar dados do usuário no banco
+    user_data = get_user_data(target.id)
+    if user_data:
+        coins, xp, level, rep, bank = user_data[1], user_data[2], user_data[3], user_data[4], user_data[5]
+        warnings = user_data[15]
+    else:
+        coins = xp = level = rep = bank = warnings = 0
+
+    # Status emoji
+    status_emoji = {
+        discord.Status.online: "🟢",
+        discord.Status.idle: "🟡", 
+        discord.Status.dnd: "🔴",
+        discord.Status.offline: "⚫"
+    }
+
+    embed = create_embed(
+        f"👤 {target.display_name}",
+        f"""**📋 Informações Básicas:**
+• **Nome:** {target.name}#{target.discriminator}
+• **ID:** {target.id}
+• **Status:** {status_emoji.get(target.status, '❓')} {target.status.name.title()}
+• **Criado:** <t:{int(target.created_at.timestamp())}:R>
+• **Entrou:** <t:{int(target.joined_at.timestamp())}:R>
+
+**🎮 Gaming:**
+• **Level:** {level}
+• **XP:** {xp:,}
+• **Reputação:** {rep}
+
+**💰 Economia:**
+• **Carteira:** {coins:,} moedas
+• **Banco:** {bank:,} moedas
+• **Total:** {coins + bank:,} moedas
+
+**⚖️ Moderação:**
+• **Advertências:** {warnings}
+• **Cargo mais alto:** {target.top_role.name}""",
+        color=target.color if target.color != discord.Color.default() else 0x7289da
+    )
+
+    embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
     await ctx.send(embed=embed)
 
 @bot.command(name='avatar', aliases=['av'])
 async def avatar(ctx, user: discord.Member = None):
-    """Mostra o avatar do usuário"""
+    """Mostra o avatar do usuário em alta resolução"""
+    global_stats['commands_used'] += 1
     target = user or ctx.author
+
+    avatar_url = target.avatar.url if target.avatar else target.default_avatar.url
 
     embed = create_embed(
         f"🖼️ Avatar de {target.display_name}",
-        f"[Download]({target.avatar.url if target.avatar else target.default_avatar.url})",
-        color=target.color
+        f"[Clique aqui para ver em alta resolução]({avatar_url}?size=1024)",
+        color=target.color if target.color != discord.Color.default() else 0x7289da
     )
-    embed.set_image(url=target.avatar.url if target.avatar else target.default_avatar.url)
+
+    embed.set_image(url=f"{avatar_url}?size=512")
     await ctx.send(embed=embed)
 
-@bot.command(name='level', aliases=['lvl', 'rank'])
-async def level(ctx, user: discord.Member = None):
-    """Mostra o nível do usuário"""
-    target = user or ctx.author
-    data = get_user_data(target.id)
-
-    if not data:
-        update_user_data(target.id)
-        data = get_user_data(target.id)
-
-    xp = data[2]
-    level = data[3]
-    next_level_xp = ((level + 1) ** 2) * 100
-
-    embed = create_embed(
-        f"📊 Nível de {target.display_name}",
-        f"""**Nível:** {level}
-    **XP:** {xp:,}
-    **XP para próximo nível:** {next_level_xp - xp:,}
-    **Mensagens enviadas:** {data[12]}""",
-        color=target.color
-    )
-    embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
-    await ctx.send(embed=embed)
-
-@bot.command(name='botinfo', aliases=['binfo'])
-async def bot_info(ctx):
-    """Informações do bot"""
-    uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
-    
-    embed = create_embed(
-        "🤖 RXbot - Informações",
-        f"""**Versão:** 2.0.0
-    **Criado por:** RX Team
-    **Servidores:** {len(bot.guilds)}
-    **Usuários:** {len(set(bot.get_all_members()))}
-    **Comandos:** 200+
-    **Uptime:** {format_time(uptime_seconds)}
-    **Latência:** {round(bot.latency * 1000)}ms
-
-    **Recursos:**
-    • Sistema de economia completo
-    • Jogos e diversão
-    • Moderação avançada
-    • Sistema de eventos
-    • IA conversacional
-    • Sistema de tickets
-
-    **Monitoramento:**
-    • Keep-alive ativo na porta 8080
-    • Endpoints: `/ping`, `/status`, `/health`
-    • Backup automático a cada 6h""",
-        color=0x7289da
-    )
-    embed.set_thumbnail(url=bot.user.avatar.url)
-    await ctx.send(embed=embed)
-
-@bot.command(name='uptime')
-async def uptime_command(ctx):
-    """Mostra informações detalhadas de uptime"""
-    uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
-    
-    embed = create_embed(
-        "⏰ Status de Uptime",
-        f"""**🟢 Bot Online há:** {format_time(uptime_seconds)}
-    **📊 Comandos executados:** {global_stats['commands_used']:,}
-    **💬 Mensagens processadas:** {global_stats['messages_processed']:,}
-    **🏠 Servidores ativos:** {len(bot.guilds)}
-    **👥 Usuários únicos:** {len(set(bot.get_all_members()))}
-    
-    **🔗 Endpoints de monitoramento:**
-    • `/ping` - Ping simples
-    • `/status` - Status detalhado  
-    • `/health` - Health check
-    
-    **📡 Latência atual:** {round(bot.latency * 1000)}ms""",
-        color=0x00ff00
-    )
-    
-    embed.set_footer(text="Keep-alive ativo • UptimeRobot monitorando")
-    await ctx.send(embed=embed)
-
-# ============ SISTEMA DE AJUDA EXPANDIDO ============
-@bot.command(name='ajuda', aliases=['help', 'comandos', 'commands'])
-async def help_command(ctx, categoria=None):
-    """Sistema de ajuda completo"""
-    if not categoria:
-        embed = create_embed(
-            "📚 Central de Ajuda - RXbot",
-            """**🎮 Diversão (40+ comandos):**
-    `RXajuda diversao` - Jogos, piadas, memes
-
-    **💰 Economia (30+ comandos):**
-    `RXajuda economia` - Dinheiro, loja, trabalho
-
-    **⚙️ Utilidades (50+ comandos):**
-    `RXajuda utilidades` - Calculadora, tempo, lembretes
-
-    **🛡️ Moderação (30+ comandos):**
-    `RXajuda moderacao` - Kick, ban, clear
-
-    **📅 Eventos (10+ comandos):**
-    `RXajuda eventos` - Criar e gerenciar eventos
-
-    **🎨 Texto (20+ comandos):**
-    `RXajuda texto` - Manipulação de texto
-
-    **📊 Informações (30+ comandos):**
-    `RXajuda info` - Stats, perfil, servidor
-
-    **🎟️ Tickets:**
-    `RXticket <motivo>` - Criar ticket de suporte
-
-    **📋 Regras:**
-    `RXregras` - Ver regras do servidor
-
-    **🤖 IA Avançada:**
-    Mencione o bot para conversar!
-
-    **Total:** 200+ comandos disponíveis!""",
-            color=0x7289da
-        )
-        embed.set_footer(text="Use RXajuda <categoria> para ver comandos específicos!")
-        await ctx.send(embed=embed)
-
-    elif categoria.lower() in ['diversao', 'diversão', 'fun']:
-        embed = create_embed(
-            "🎮 Comandos de Diversão",
-            """**Jogos:**
-    • `RXjokenpo <escolha>` - Pedra, papel, tesoura
-    • `RXquiz` - Jogo de perguntas e respostas
-    • `RXforca` - Jogo da forca
-    • `RXdado [lados]` - Rola um dado (padrão 6 lados)
-    • `RXmoeda` - Cara ou coroa
-    • `RX8ball <pergunta>` - Bola mágica 8
-
-    **Entretenimento:**
-    • `RXpiada` - Conta uma piada aleatória
-    • `RXfato` - Fato interessante
-    • `RXmeme` - Memes aleatórios
-    • `RXsorteio <@users>` - Sorteia entre usuários
-    • `RXenquete <pergunta>` - Cria enquete com reações
-    • `RXascii <texto>` - ASCII art
-    • `RXcores` - Mostra cores aleatórias""",
-            color=0x7289da
-        )
-        await ctx.send(embed=embed)
-
-    elif categoria.lower() in ['economia', 'money', 'eco']:
-        embed = create_embed(
-            "💰 Comandos de Economia",
-            """**Dinheiro:**
-    • `RXsaldo [@user]` - Ver saldo (carteira + banco)
-    • `RXdaily` - Recompensa diária (500💰)
-    • `RXtrabalhar` - Trabalhe por dinheiro
-    • `RXtransferir <@user> <valor>` - Transferir dinheiro
-
-    **Loja:**
-    • `RXloja` - Ver itens da loja
-    • `RXcomprar <id>` - Comprar item da loja
-
-    **Sistema completo de economia virtual!**
-    *Ganhe moedas jogando, trabalhando e participando!*""",
-            color=0xffd700
-        )
-        await ctx.send(embed=embed)
-
-    elif categoria.lower() in ['utilidades', 'utils', 'tools']:
-        embed = create_embed(
-            "⚙️ Comandos de Utilidades",
-            """**Ferramentas:**
-    • `RXcalc <expressão>` - Calculadora matemática
-    • `RXtempo [timezone]` - Hora atual
-    • `RXlembrete <tempo> <msg>` - Criar lembrete
-    • `RXsenha [tamanho]` - Gerar senha segura
-    • `RXbase64 <texto>` - Codificar em Base64
-    • `RXhash <texto>` - Gerar hash MD5
-
-    **Memória IA:**
-    • `RXresetmemoria [@user]` - Resetar memória de conversas
-    • `RXvermemoria` - Ver status da memória
-
-    **Exemplos:**
-    • `RXlembrete 30m Estudar` - Lembrete em 30 minutos
-    • `RXcalc 2 + 2 * 3` - Calcula expressões
-    • `RXsenha 16` - Senha de 16 caracteres""",
-            color=0x7289da
-        )
-        await ctx.send(embed=embed)
-
-    elif categoria.lower() in ['moderacao', 'mod', 'admin']:
-        embed = create_embed(
-            "🛡️ Comandos de Moderação",
-            """**Punições & Warnings:**
-    • `RXwarn <@user> [motivo]` - Advertir usuário
-    • `RXwarnings [@user]` - Ver warnings de usuário
-    • `RXtimeout <@user> <tempo> [motivo]` - Timeout (30m, 2h, 1d)
-    • `RXlimparwarnings <@user>` - Limpar warnings (admin)
-
-    **Moderação Básica:**
-    • `RXclear [quantidade]` - Limpar mensagens (1-100)
-    • `RXkick <@user> [motivo]` - Expulsar membro
-    • `RXban <@user> [motivo]` - Banir membro
-
-    **Sistema de Regras:**
-    • `RXregras` - Ver regras do servidor
-
-    **Tickets:**
-    • `RXticket <motivo>` - Criar ticket de suporte
-    • `RXfechar [motivo]` - Fechar ticket (dentro do canal)
-
-    **Eventos (Admin):**
-    • `RXcriarevento` - Criar evento para o servidor
-
-    **Economia Admin:**
-    • `RXaddcoins <@user> <valor>` - Adicionar RXcoins
-    • `RXremovecoins <@user> <valor>` - Remover RXcoins
-    • `RXsetcoins <@user> <valor>` - Definir RXcoins
-
-    **Memória Admin:**
-    • `RXresetmemoria <@user>` - Resetar memória específica
-    • `RXlimpartotalmemoria` - Limpar TODA memória
-    • `RXstatusmemoria` - Ver estatísticas da memória
-
-    **⚖️ Sistema de Castigos:**
-    • 1-2 warnings = Avisos
-    • 3-4 warnings = Timeout 24h
-    • 5+ warnings = Ban permanente
-
-    *Alguns comandos requerem permissões especiais!*""",
-            color=0xff6b6b
-        )
-        await ctx.send(embed=embed)
-
-    elif categoria.lower() in ['eventos', 'events']:
-        embed = create_embed(
-            "📅 Sistema de Eventos",
-            """**Para Administradores:**
-    • `RXcriarevento <dados>` - Criar evento
-    • Formato: `Título | Descrição | Data | Participantes`
-    • Exemplo: `RXcriarevento Torneio | Competição épica | 2024-12-25 20:00 | 20`
-
-    **Para Todos:**
-    • `RXeventos` - Ver eventos disponíveis
-    • `RXparticipar <id>` - Participar de um evento
-
-    **Sistema completo de eventos com inscrições automáticas!**""",
-            color=0x7289da
-        )
-        await ctx.send(embed=embed)
-
-    elif categoria.lower() in ['texto', 'text']:
-        embed = create_embed(
-            "🎨 Comandos de Texto",
-            """**Manipulação:**
-    • `RXreverso <texto>` - Reverter texto
-    • `RXmaiuscula <texto>` - Converter para MAIÚSCULA
-    • `RXminuscula <texto>` - converter para minúscula
-    • `RXcontar <texto>` - Contar caracteres/palavras
-    • `RXascii <texto>` - Criar ASCII art
-
-    **Úteis para formatação e diversão com texto!**""",
-            color=0x7289da
-        )
-        await ctx.send(embed=embed)
-
-    elif categoria.lower() in ['info', 'informacao', 'stats']:
-        embed = create_embed(
-            "📊 Comandos de Informação",
-            """**Perfil & Stats:**
-    • `RXlevel [@user]` - Nível e XP do usuário
-    • `RXuserinfo [@user]` - Informações detalhadas
-    • `RXavatar [@user]` - Avatar em alta qualidade
-    • `RXsaldo [@user]` - Economia do usuário
-
-    **Servidor & Bot:**
-    • `RXserverinfo` - Informações do servidor
-    • `RXbotinfo` - Informações e estatísticas do bot
-    • `RXping` - Latência e uptime
-
-    **Sistema completo de estatísticas e informações!**""",
-            color=0x7289da
-        )
-        await ctx.send(embed=embed)
-
-# Error handling
+# Error handling SUPER melhorado com auto-recuperação
 @bot.event
 async def on_command_error(ctx, error):
-    if isinstance(error, commands.CommandNotFound):
-        return
-    elif isinstance(error, commands.MissingRequiredArgument):
-        embed = create_embed(
-            "❌ Argumento obrigatório",
-            f"Você esqueceu de fornecer: `{error.param.name}`\n"
-            f"Use `RXajuda` para ver os comandos.",
-            color=0xff0000
-        )
-        await ctx.send(embed=embed)
-    elif isinstance(error, commands.BadArgument):
-        embed = create_embed(
-            "❌ Argumento inválido",
-            f"Verifique os argumentos do comando.\n"
-            f"Use `RXajuda` para ver os comandos.",
-            color=0xff0000
-        )
-        await ctx.send(embed=embed)
-    elif isinstance(error, commands.MissingPermissions):
-        embed = create_embed(
-            "❌ Sem permissão",
-            "Você não tem permissão para usar este comando!",
-            color=0xff0000
-        )
-        await ctx.send(embed=embed)
-    else:
-        # Log unexpected errors
-        logger.error(f"Unexpected error in command {ctx.command}: {error}")
+    try:
+        if isinstance(error, commands.CommandNotFound):
+            # Sugerir comando similar
+            command_name = ctx.message.content.split()[0][2:].lower()  # Remove prefix
+            similar_commands = ['ping', 'ajuda', 'saldo', 'rank', 'daily']
+            suggestion = None
 
-        embed = create_embed(
-            "❌ Erro inesperado",
-            "Ocorreu um erro inesperado. Tente novamente em alguns segundos.",
-            color=0xff0000
-        )
-        await ctx.send(embed=embed)
+            for cmd in similar_commands:
+                if command_name in cmd or cmd in command_name:
+                    suggestion = cmd
+                    break
 
-if __name__ == "__main__":
+            if suggestion:
+                embed = create_embed(
+                    "❓ Comando não encontrado",
+                    f"Você quis dizer `RX{suggestion}`?\nUse `RXajuda` para ver todos os comandos.",
+                    color=0xffaa00
+                )
+                await ctx.send(embed=embed, delete_after=8)
+            return
+
+        elif isinstance(error, commands.MissingRequiredArgument):
+            embed = create_embed(
+                "❌ Argumento obrigatório",
+                f"Você esqueceu de fornecer: `{error.param.name}`\n"
+                f"Use `RXajuda` para ver os comandos.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed, delete_after=10)
+
+        elif isinstance(error, commands.MissingPermissions):
+            embed = create_embed(
+                "❌ Sem permissão",
+                "Você não tem permissão para executar este comando!",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed, delete_after=8)
+
+        elif isinstance(error, commands.BotMissingPermissions):
+            embed = create_embed(
+                "❌ Bot sem permissão",
+                f"Eu preciso das seguintes permissões: {', '.join(error.missing_permissions)}",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed, delete_after=10)
+
+        elif isinstance(error, commands.CommandOnCooldown):
+            embed = create_embed(
+                "⏰ Comando em cooldown",
+                f"Aguarde {error.retry_after:.1f} segundos para usar novamente.",
+                color=0xff6b6b
+            )
+            await ctx.send(embed=embed, delete_after=5)
+
+        elif isinstance(error, discord.HTTPException):
+            logger.error(f"Discord HTTP Error: {error}")
+            embed = create_embed(
+                "🔄 Erro de conexão",
+                "Houve um problema de conexão. Tentando novamente...",
+                color=0xff6600
+            )
+            try:
+                await ctx.send(embed=embed, delete_after=5)
+            except:
+                pass
+
+        elif isinstance(error, asyncio.TimeoutError):
+            logger.error(f"Timeout Error: {error}")
+            embed = create_embed(
+                "⏱️ Timeout",
+                "Operação demorou muito para responder. Tente novamente.",
+                color=0xff6600
+            )
+            try:
+                await ctx.send(embed=embed, delete_after=5)
+            except:
+                pass
+
+        else:
+            logger.error(f"Unexpected error in {ctx.command}: {error}")
+            logger.error(f"Error type: {type(error)}")
+
+            # Tentar enviar erro genérico se possível
+            try:
+                embed = create_embed(
+                    "❌ Erro interno",
+                    "Ocorreu um erro interno. A equipe foi notificada.",
+                    color=0xff0000
+                )
+                await ctx.send(embed=embed, delete_after=8)
+            except:
+                pass
+
+            # Notificar canal de alerta
+            try:
+                channel = bot.get_channel(CHANNEL_ID_ALERTA)
+                if channel:
+                    error_embed = create_embed(
+                        "🚨 Erro de Comando",
+                        f"**Comando:** {ctx.command}\n"
+                        f"**Usuário:** {ctx.author}\n"
+                        f"**Canal:** {ctx.channel}\n"
+                        f"**Erro:** {str(error)[:500]}",
+                        color=0xff0000
+                    )
+                    await channel.send(embed=error_embed)
+            except:
+                pass
+
+    except Exception as handler_error:
+        logger.error(f"Erro no error handler: {handler_error}")
+        # Último recurso - resposta simples
+        try:
+            await ctx.send("❌ Erro interno do bot.", delete_after=5)
+        except:
+            pass
+
+# Sistema robusto de inicialização
+async def maintain_connection():
+    """Mantém a conexão do bot estável"""
     while True:
         try:
-            logger.info("🚀 Iniciando RXbor...")
-            keep_alive()
-            bot.run(os.getenv('TOKEN'))
-        except Exception as e:
-            logger.error(f"❌ Erro ao iniciar o bot: {e}")
-            print(f"❌ Erro crítico: {e}")
-            logger.info("🔄 Reiniciando bot em 5 segundos...")
-            time.sleep(5)
-            subprocess.run([sys.executable, sys.argv[0]])
+            if not bot.is_ready():
+                logger.warning("🔄 Bot não está pronto, aguardando...")
+                await asyncio.sleep(30)
+                continue
 
+            # Verificar latência
+            if bot.latency > 5.0:
+                logger.warning(f"⚠️ Latência alta: {bot.latency * 1000:.2f}ms")
+
+            await asyncio.sleep(60)
+
+        except Exception as e:
+            logger.error(f"Erro no maintain_connection: {e}")
+            await asyncio.sleep(30)
+
+async def start_bot():
+    """Sistema de inicialização ULTRA robusto"""
+    reconnect_count = 0
+    max_reconnects = 15  # Aumentado para mais tentativas
+
+    while reconnect_count < max_reconnects:
+        try:
+            logger.info(f"🚀 Iniciando RXbot... (Tentativa {reconnect_count + 1}/{max_reconnects})")
+
+            # Limpeza prévia de memória
+            import gc
+            gc.collect()
+
+            # Verificar token antes de tentar conectar
+            token = os.getenv('TOKEN')
+            if not token:
+                logger.error("🚨 TOKEN não encontrado!")
+                await asyncio.sleep(10)
+                continue
+
+            # Iniciar tasks de manutenção apenas uma vez
+            if not hasattr(bot, '_maintenance_started'):
+                bot._maintenance_started = True
+                asyncio.create_task(maintain_connection())
+
+            # Iniciar o bot com timeout
+            try:
+                await asyncio.wait_for(bot.start(token), timeout=60.0)
+            except asyncio.TimeoutError:
+                logger.error("⏱️ Timeout na inicialização do bot")
+                reconnect_count += 1
+                continue
+
+        except discord.LoginFailure as e:
+            logger.error(f"❌ Falha de login (token inválido): {e}")
+            logger.error("🚨 Verificar TOKEN nas variáveis de ambiente!")
+            await asyncio.sleep(60)  # Esperar mais tempo para token issues
+            reconnect_count += 1
+
+        except discord.HTTPException as e:
+            if e.status == 429:  # Rate limited
+                logger.error("🚨 Rate limited! Aguardando...")
+                wait_time = 120  # 2 minutos para rate limit
+            else:
+                logger.error(f"❌ Erro HTTP Discord: {e}")
+                wait_time = min(300, 30 * (2 ** min(reconnect_count, 5)))
+
+            reconnect_count += 1
+            logger.info(f"🔄 Tentando reconectar em {wait_time} segundos...")
+            await asyncio.sleep(wait_time)
+
+        except discord.ConnectionClosed as e:
+            logger.error(f"🔗 Conexão fechada: {e}")
+            reconnect_count += 1
+            wait_time = 15  # Reconectar rapidamente para connection closed
+            logger.info(f"🔄 Reconectando em {wait_time} segundos...")
+            await asyncio.sleep(wait_time)
+
+        except Exception as e:
+            logger.error(f"❌ Erro inesperado: {e}")
+            logger.error(f"🔍 Tipo do erro: {type(e)}")
+            reconnect_count += 1
+
+            # Limpeza de memória em caso de erro
+            import gc
+            gc.collect()
+
+            wait_time = min(60, 10 * reconnect_count)
+            logger.info(f"🔄 Aguardando {wait_time}s antes da próxima tentativa...")
+            await asyncio.sleep(wait_time)
+
+    logger.error("🚨 Máximo de tentativas atingido. Sistema crítico!")
+
+    # Último recurso: forçar restart do processo
+    import sys
+    logger.error("💀 Erro crítico detectado! Iniciando tentativa de restart...")
+
+    try:
+        await bot.close()
+        await asyncio.sleep(5)
+        logger.info("🔄 Reiniciando conexão do bot...")
+        asyncio.create_task(bot.start(TOKEN))
+    except Exception as e:
+        logger.error(f"Falha ao reiniciar o bot: {e}")
+
+
+def run_flask():
+    """Executa servidor Flask otimizado"""
+    try:
+        app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False, threaded=True)
+    except Exception as e:
+        logger.error(f"Erro no servidor Flask: {e}")
+
+def keep_alive():
+    """Sistema de keep-alive melhorado"""
+    flask_thread = Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    logger.info("🌐 Servidor keep-alive iniciado na porta 8080")
+
+async def auto_restart_system():
+    """Sistema de restart automático melhorado"""
+    restart_count = 0
+
+    while True:
+        try:
+            await asyncio.sleep(60)  # Verificar a cada minuto
+
+            # Verificar se bot está funcionando
+            if not bot.is_ready():
+                restart_count += 1
+                logger.warning(f"🔄 Bot não está ready! Tentativa de restart #{restart_count}")
+
+                # Tentar reconectar ao Discord
+                try:
+                    await bot.close()
+                    await asyncio.sleep(3)
+
+                    token = os.getenv('TOKEN')
+                    if token:
+                        logger.info(f"🚀 Tentando reconectar... (Restart #{restart_count})")
+                        await bot.start(token)
+                    else:
+                        logger.error("🚨 TOKEN não encontrado para restart!")
+
+                except Exception as e:
+                    logger.error(f"Erro no restart automático: {e}")
+                    await asyncio.sleep(10)
+
+        except Exception as e:
+            logger.error(f"Erro no sistema de restart: {e}")
+            await asyncio.sleep(30)
+
+def restart_bot():
+    """Sistema de restart sem exit - mantém processo vivo"""
+    restart_count = 0
+
+    while True:
+        try:
+            restart_count += 1
+            logger.info(f"🚀 Iniciando bot (Tentativa #{restart_count})")
+
+            # Verificar token
+            token = os.getenv('TOKEN')
+            if not token:
+                logger.error("🚨 TOKEN não encontrado!")
+                time.sleep(30)
+                continue
+
+            # Iniciar keep-alive
+            keep_alive()
+
+            # Aguardar Flask inicializar
+            time.sleep(3)
+
+            # Log detalhado
+            logger.info("🌐 Flask iniciado, conectando ao Discord...")
+
+            # Iniciar bot com sistema de restart interno
+            try:
+                async def run_with_restart():
+                    # Iniciar sistema de auto-restart
+                    asyncio.create_task(auto_restart_system())
+                    # Iniciar bot
+                    await start_bot()
+
+                asyncio.run(run_with_restart())
+
+            except KeyboardInterrupt:
+                logger.info("🛑 Bot interrompido pelo usuário")
+                return  # Sair da função, mas não do processo
+
+        except discord.HTTPException as e:
+            logger.error(f"🚨 Erro Discord HTTP: {e}")
+            logger.info(f"🔄 Reconectando em 30s... (Tentativa #{restart_count + 1})")
+            time.sleep(30)
+        except discord.ConnectionClosed as e:
+            logger.error(f"🚨 Conexão fechada: {e}")
+            logger.info(f"🔄 Reconectando em 5s... (Tentativa #{restart_count + 1})")
+            time.sleep(5)
+        except Exception as e:
+            logger.error(f"🚨 Erro: {e}")
+            logger.error(f"🔍 Traceback: {traceback.format_exc()}")
+            logger.info(f"🔄 Reiniciando em 15s... (Tentativa #{restart_count + 1})")
+            time.sleep(15)
+
+        # Log de restart
+        if restart_count < 100:  # Evitar spam de logs
+            logger.warning(f"🔄 Executando restart #{restart_count + 1} em 3s...")
+        time.sleep(3)
+
+if __name__ == "__main__":
+    try:
+        # Iniciar keep-alive primeiro
+        keep_alive()
+
+        # Aguardar Flask inicializar
+        time.sleep(2)
+
+        # Verificar token
+        token = os.getenv('TOKEN')
+        if not token:
+            logger.error("🚨 TOKEN não encontrado nas variáveis de ambiente!")
+            print("❌ Configure a variável de ambiente TOKEN com o token do seu bot Discord")
+            sys.exit(1)
+
+        logger.info("🚀 Iniciando RXbot...")
+
+        # Iniciar bot diretamente
+        asyncio.run(start_bot())
+
+    except KeyboardInterrupt:
+        logger.info("🛑 Bot interrompido pelo usuário")
+    except Exception as e:
+        logger.error(f"🚨 Erro fatal na inicialização: {e}")
+        logger.error(f"🔍 Traceback: {traceback.format_exc()}")
+        sys.exit(1)
