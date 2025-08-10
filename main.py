@@ -91,14 +91,6 @@ try:
     import email.utils
 except ImportError:
     pass
-# Sistema de Keep-alive para UptimeRobot
-from flask import Flask
-import threading
-import requests
-import asyncio
-
-# Criar aplicação Flask para keep-alive
-app = Flask(__name__)
 
 @app.route('/')
 def home():
