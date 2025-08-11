@@ -132,35 +132,64 @@ bot = commands.Bot(
 
 # Sessão HTTP global para evitar vazamentos
 http_session = None
+_session_lock = asyncio.Lock()
 
 async def get_http_session():
-    """Obter sessão HTTP reutilizável"""
+    """Obter sessão HTTP reutilizável com lock para thread safety"""
     global http_session
-    if http_session is None or http_session.closed:
-        connector = aiohttp.TCPConnector(
-            limit=100,
-            limit_per_host=30,
-            ttl_dns_cache=300,
-            use_dns_cache=True,
-            keepalive_timeout=30,
-            enable_cleanup_closed=True
-        )
-        timeout = aiohttp.ClientTimeout(total=30, connect=10)
-        http_session = aiohttp.ClientSession(connector=connector, timeout=timeout)
-    return http_session
+    async with _session_lock:
+        if http_session is None or http_session.closed:
+            connector = aiohttp.TCPConnector(
+                limit=50,
+                limit_per_host=20,
+                ttl_dns_cache=300,
+                use_dns_cache=True,
+                keepalive_timeout=15,
+                enable_cleanup_closed=True,
+                force_close=True,
+                conn_timeout=10
+            )
+            timeout = aiohttp.ClientTimeout(total=20, connect=8)
+            http_session = aiohttp.ClientSession(
+                connector=connector, 
+                timeout=timeout,
+                trust_env=True
+            )
+            logger.info("✅ Nova sessão HTTP criada")
+        return http_session
 
 async def close_http_session():
-    """Fechar sessão HTTP adequadamente"""
+    """Fechar sessão HTTP adequadamente com cleanup completo"""
     global http_session
-    if http_session and not http_session.closed:
-        try:
-            await http_session.close()
-            # Aguardar um pouco para garantir que tudo seja fechado
-            await asyncio.sleep(0.1)
-        except Exception as e:
-            logger.error(f"Erro ao fechar sessão HTTP: {e}")
-        finally:
+    async with _session_lock:
+        if http_session and not http_session.closed:
+            try:
+                logger.info("🔄 Fechando sessão HTTP...")
+                await http_session.close()
+                # Aguardar cleanup completo do connector
+                await asyncio.sleep(0.3)
+                logger.info("✅ Sessão HTTP fechada com sucesso")
+            except Exception as e:
+                logger.error(f"Erro ao fechar sessão HTTP: {e}")
+            finally:
+                http_session = None
+
+async def cleanup_http_session():
+    """Limpeza forçada da sessão HTTP"""
+    global http_session
+    try:
+        if http_session:
+            if not http_session.closed:
+                await http_session.close()
+            await asyncio.sleep(0.2)
             http_session = None
+        # Forçar garbage collection
+        import gc
+        gc.collect()
+        logger.info("🧹 Limpeza forçada de sessão HTTP concluída")
+    except Exception as e:
+        logger.error(f"Erro na limpeza forçada: {e}")
+        http_session = None
 
 # Database connection pool to avoid locking issues
 import threading
@@ -573,25 +602,55 @@ async def update_status():
     except Exception as e:
         logger.error(f"Erro no update_status: {e}")
 
-@tasks.loop(minutes=10)
+@tasks.loop(minutes=8)
 async def cleanup_resources():
-    """Limpeza periódica de recursos"""
+    """Limpeza periódica de recursos com foco em sessões HTTP"""
     try:
+        # Verificar estado da sessão HTTP
+        global http_session
+        session_status = "None"
+        
+        if http_session is None:
+            session_status = "None"
+        elif http_session.closed:
+            session_status = "Closed"
+            logger.warning("⚠️ Sessão HTTP estava fechada - limpando...")
+            await cleanup_http_session()
+        else:
+            session_status = "Active"
+            # Verificar se há conexões antigas
+            if hasattr(http_session, '_connector') and http_session._connector:
+                conn_count = len(http_session._connector._conns)
+                if conn_count > 10:  # Muitas conexões abertas
+                    logger.warning(f"⚠️ Muitas conexões HTTP abertas ({conn_count}) - limpando...")
+                    await cleanup_http_session()
+        
         # Limpeza de memória
         import gc
         collected = gc.collect()
-        if collected > 0:
-            logger.info(f"🧹 Limpeza automática: {collected} objetos removidos da memória")
+        if collected > 5:
+            logger.info(f"🧹 Limpeza automática: {collected} objetos removidos | Sessão HTTP: {session_status}")
+            
+        # Limpeza de active_games antigas (mais de 30 minutos)
+        current_time = time.time()
+        old_games = []
+        for msg_id, game_data in active_games.items():
+            if current_time - game_data.get('created_at', current_time) > 1800:  # 30 min
+                old_games.append(msg_id)
         
-        # Verificar se a sessão HTTP está funcionando
-        global http_session
-        if http_session and http_session.closed:
-            logger.warning("⚠️ Sessão HTTP estava fechada - recriando...")
-            http_session = None
-            await get_http_session()
+        for msg_id in old_games:
+            del active_games[msg_id]
+            
+        if old_games:
+            logger.info(f"🗑️ Removidos {len(old_games)} jogos/sessões antigas")
             
     except Exception as e:
         logger.error(f"Erro na limpeza de recursos: {e}")
+        # Em caso de erro, forçar limpeza da sessão HTTP
+        try:
+            await cleanup_http_session()
+        except:
+            pass
 
 @tasks.loop(hours=6)
 async def backup_database():
@@ -963,24 +1022,34 @@ async def on_disconnect():
     
     # Fechar sessão HTTP para evitar vazamentos
     try:
-        await close_http_session()
+        await cleanup_http_session()
+        logger.info("✅ Sessão HTTP limpa na desconexão")
     except Exception as e:
         logger.error(f"Erro ao fechar sessão HTTP na desconexão: {e}")
     
-    # Limpeza de memória
+    # Limpeza completa de recursos
     try:
+        # Limpar active_games
+        active_games.clear()
+        
+        # Limpeza de memória agressiva
         import gc
-        gc.collect()
-    except:
-        pass
+        collected = gc.collect()
+        logger.info(f"🧹 Limpeza na desconexão: {collected} objetos removidos")
+    except Exception as e:
+        logger.error(f"Erro na limpeza geral: {e}")
 
 @bot.event
 async def on_resumed():
     logger.info("🔄 BOT RECONECTADO AO DISCORD!")
     
-    # Recriar sessão HTTP
+    # Garantir que a sessão HTTP anterior foi fechada
     try:
+        await cleanup_http_session()
+        # Aguardar um pouco antes de criar nova sessão
+        await asyncio.sleep(1)
         await get_http_session()
+        logger.info("✅ Nova sessão HTTP criada na reconexão")
     except Exception as e:
         logger.error(f"Erro ao recriar sessão HTTP na reconexão: {e}")
     
@@ -992,7 +1061,8 @@ async def on_resumed():
                 f"🎉 Bot reconectou ao Discord com sucesso!\n"
                 f"**Tempo:** <t:{int(datetime.datetime.now().timestamp())}:F>\n"
                 f"**Status:** ✅ Totalmente operacional\n"
-                f"**Latência:** {round(bot.latency * 1000, 2)}ms",
+                f"**Latência:** {round(bot.latency * 1000, 2)}ms\n"
+                f"**Sessão HTTP:** ✅ Nova sessão criada",
                 color=0x00ff00
             )
             await channel.send(embed=embed)
@@ -6210,7 +6280,7 @@ async def on_command_error(ctx, error):
 async def start_bot():
     """Sistema de inicialização ULTRA robusto com restart real"""
     reconnect_count = 0
-    max_reconnects = 20  # Mais tentativas
+    max_reconnects = 15  # Tentativas otimizadas
     critical_error_count = 0
     max_critical_errors = 3
 
@@ -6218,9 +6288,11 @@ async def start_bot():
         try:
             logger.info(f"🚀 Iniciando RXbot... (Tentativa {reconnect_count + 1}/{max_reconnects})")
 
-            # Limpeza prévia de memória
+            # Limpeza prévia completa
+            await cleanup_http_session()
             import gc
             gc.collect()
+            await asyncio.sleep(0.5)  # Aguardar limpeza
 
             # Verificar token antes de tentar conectar
             token = os.getenv('TOKEN')
@@ -6327,7 +6399,8 @@ async def start_bot():
 
     # Fechar sessão HTTP antes de finalizar
     try:
-        await close_http_session()
+        await cleanup_http_session()
+        logger.info("🧹 Limpeza final de sessão HTTP concluída")
     except Exception as e:
         logger.error(f"Erro ao fechar sessão HTTP: {e}")
 
@@ -6351,13 +6424,14 @@ async def start_bot():
     logger.error("💀 Iniciando RESTART FORÇADO do sistema...")
 
     try:
-        # Fechar sessão HTTP primeiro
-        await close_http_session()
+        # Fechar sessão HTTP primeiro com limpeza forçada
+        await cleanup_http_session()
+        logger.info("🧹 Sessão HTTP limpa no restart forçado")
 
         # Fechar completamente o bot
         if not bot.is_closed():
             await bot.close()
-        await asyncio.sleep(5)
+        await asyncio.sleep(3)
 
         # Limpar tudo
         bot.clear()
