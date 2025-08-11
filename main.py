@@ -146,10 +146,9 @@ async def get_http_session():
                 use_dns_cache=True,
                 keepalive_timeout=15,
                 enable_cleanup_closed=True,
-                force_close=True,
-                conn_timeout=10
+                force_close=True
             )
-            timeout = aiohttp.ClientTimeout(total=20, connect=8)
+            timeout = aiohttp.ClientTimeout(total=20, connect=10)
             http_session = aiohttp.ClientSession(
                 connector=connector, 
                 timeout=timeout,
