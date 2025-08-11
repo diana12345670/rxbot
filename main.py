@@ -78,35 +78,8 @@ except ImportError:
     zipfile = None
 
 
-# Sistema de monitoramento de saúde do bot
+# Sistema de monitoramento simplificado
 last_heartbeat = datetime.datetime.now()
-heartbeat_interval = 300  # 5 minutos
-
-async def health_monitor():
-    """Monitor de saúde do bot"""
-    global last_heartbeat
-
-    while True:
-        try:
-            await asyncio.sleep(heartbeat_interval)
-
-            current_time = datetime.datetime.now()
-            time_since_heartbeat = (current_time - last_heartbeat).total_seconds()
-
-            if time_since_heartbeat > heartbeat_interval * 2:  # 10 minutos sem heartbeat
-                logger.warning("⚠️ Bot pode estar com problemas de conectividade")
-
-                # Tentar ping simples
-                if bot.is_ready():
-                    last_heartbeat = current_time
-                    logger.info("💓 Heartbeat restaurado")
-                else:
-                    logger.error("💔 Bot não está ready - possível problema crítico")
-
-        except Exception as e:
-            logger.error(f"Erro no monitor de saúde: {e}")
-            await asyncio.sleep(60)
-
 
 try:
     import tarfile
@@ -916,12 +889,12 @@ async def on_ready():
             check_reminders.start()
             check_giveaways.start()
 
-            # Iniciar monitor de saúde
-            asyncio.create_task(health_monitor())
-            global last_heartbeat
-            last_heartbeat = datetime.datetime.now()
+            # Iniciar monitor de saúde (removido para otimização)
+            # asyncio.create_task(health_monitor())
+            # global last_heartbeat
+            # last_heartbeat = datetime.datetime.now()
 
-            logger.info("✅ Background tasks e monitor de saúde iniciados")
+            logger.info("✅ Background tasks iniciados")
         except Exception as e:
             logger.error(f"Erro ao iniciar background tasks: {e}")
 
@@ -1031,7 +1004,6 @@ async def on_reaction_add(reaction, user):
 
     message = reaction.message
 
-    # Sistema de tickets
     if message.id in active_games:
         game_data = active_games[message.id]
 
@@ -2296,9 +2268,9 @@ async def diagnostico_completo(ctx):
             cursor.execute('SELECT COUNT(*) FROM giveaways')
             giveaway_count = cursor.fetchone()[0]
             conn.close()
-        resultados.append(f"✅ **Database:** {user_count} users, {ticket_count} tickets, {giveaway_count} sorteios")
+        resultados.append("✅ **Database:** Funcionando - " + str(user_count) + " users, " + str(ticket_count) + " tickets, " + str(giveaway_count) + " sorteios")
     except Exception as e:
-        resultados.append(f"❌ **Database:** {str(e)[:50]}...")
+        resultados.append("❌ **Database:** Erro - " + str(e)[:50] + "...")
 
     # 2. Teste Keep-alive
     try:
@@ -2309,7 +2281,7 @@ async def diagnostico_completo(ctx):
             else:
                 resultados.append(f"⚠️ **Keep-alive:** Status {response.status}")
     except Exception as e:
-        resultados.append(f"❌ **Keep-alive:** {str(e)[:50]}...")
+        resultados.append("❌ **Keep-alive:** Erro - " + str(e)[:50] + "...")
 
     # 3. Teste Memória
     try:
@@ -2318,7 +2290,7 @@ async def diagnostico_completo(ctx):
         cpu = psutil.cpu_percent()
         resultados.append(f"✅ **Sistema:** RAM {memory.percent}%, CPU {cpu}%")
     except Exception as e:
-        resultados.append(f"⚠️ **Sistema:** Dados não disponíveis")
+        resultados.append("⚠️ **Sistema:** Dados não disponíveis")
 
     # 4. Teste Conexão Discord
     latency = round(bot.latency * 1000, 2)
@@ -2339,9 +2311,9 @@ async def diagnostico_completo(ctx):
         running_tasks.append("Giveaways")
 
     if len(running_tasks) >= 3:
-        resultados.append(f"✅ **Tasks:** {len(running_tasks)}/4 ativos")
+        resultados.append("✅ **Tasks:** " + str(len(running_tasks)) + "/4 ativos")
     else:
-        resultados.append(f"⚠️ **Tasks:** {len(running_tasks)}/4 ativos")
+        resultados.append("⚠️ **Tasks:** " + str(len(running_tasks)) + "/4 ativos")
 
     # 6. Teste Arquivos Críticos
     import os
@@ -2354,7 +2326,7 @@ async def diagnostico_completo(ctx):
     if arquivos_ok == len(arquivos_criticos):
         resultados.append("✅ **Arquivos:** Todos presentes")
     else:
-        resultados.append(f"⚠️ **Arquivos:** {arquivos_ok}/{len(arquivos_criticos)} encontrados")
+        resultados.append("⚠️ **Arquivos:** " + str(arquivos_ok) + "/" + str(len(arquivos_criticos)) + " encontrados")
 
     # Análise final
     sucessos = len([r for r in resultados if r.startswith("✅")])
@@ -2486,7 +2458,7 @@ async def teste_completo(ctx):
         running_tasks.append("Giveaways")
 
     if running_tasks:
-        resultados.append(f"✅ **Background Tasks:** {len(running_tasks)} ativos - {', '.join(running_tasks)}")
+        resultados.append("✅ **Background Tasks:** " + str(len(running_tasks)) + " ativos - " + ', '.join(running_tasks))
     else:
         resultados.append("❌ **Background Tasks:** Nenhum ativo")
 
@@ -2497,9 +2469,9 @@ async def teste_completo(ctx):
     response_time = round((end - start) * 1000, 2)
 
     if latency < 200:
-        resultados.append(f"✅ **Latência:** {latency}ms - Excelente")
+        resultados.append("✅ **Latência:** " + str(latency) + "ms - Excelente")
     else:
-        resultados.append(f"⚠️ **Latência:** {latency}ms - Alta")
+        resultados.append("⚠️ **Latência:** " + str(latency) + "ms - Alta")
 
     # Montar embed final
     sucesso = len([r for r in resultados if r.startswith("✅")])
@@ -5655,7 +5627,7 @@ async def performance_monitor(ctx):
             f"""**💻 Sistema:**
 • **CPU:** {cpu_percent}%
 • **RAM:** {memory.percent}% ({memory.used // 1024 // 1024} MB / {memory.total // 1024 // 1024} MB)
-• **Disco:** {disk.percent}% ({disk.used // 1024 // 1024 // 1024} GB / {disk.total // 1024 // 1024 // 1024} GB)
+• **Disco:** {disk.percent}% ({disk.used // 1024 // 10// 1024 // 1024} GB / {disk.total // 1024 // 1024 // 1024} GB)
 
 **🤖 Bot RX:**
 • **Uso RAM:** {bot_memory:.1f} MB
@@ -6169,6 +6141,8 @@ async def on_command_error(ctx, error):
             pass
 
 # Sistemas de manutenção de conexão removidos para economizar recursos
+
+# Sistemas de restart automático removidos para economizar recursos
 
 async def start_bot():
     """Sistema de inicialização ULTRA robusto com restart real"""
