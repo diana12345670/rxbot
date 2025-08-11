@@ -85,24 +85,24 @@ heartbeat_interval = 300  # 5 minutos
 async def health_monitor():
     """Monitor de saúde do bot"""
     global last_heartbeat
-    
+
     while True:
         try:
             await asyncio.sleep(heartbeat_interval)
-            
+
             current_time = datetime.datetime.now()
             time_since_heartbeat = (current_time - last_heartbeat).total_seconds()
-            
+
             if time_since_heartbeat > heartbeat_interval * 2:  # 10 minutos sem heartbeat
                 logger.warning("⚠️ Bot pode estar com problemas de conectividade")
-                
+
                 # Tentar ping simples
                 if bot.is_ready():
                     last_heartbeat = current_time
                     logger.info("💓 Heartbeat restaurado")
                 else:
                     logger.error("💔 Bot não está ready - possível problema crítico")
-            
+
         except Exception as e:
             logger.error(f"Erro no monitor de saúde: {e}")
             await asyncio.sleep(60)
@@ -895,17 +895,17 @@ async def on_ready():
             backup_database.start()
             check_reminders.start()
             check_giveaways.start()
-            
+
             # Iniciar monitor de saúde
             asyncio.create_task(health_monitor())
             global last_heartbeat
             last_heartbeat = datetime.datetime.now()
-            
+
             logger.info("✅ Background tasks e monitor de saúde iniciados")
         except Exception as e:
             logger.error(f"Erro ao iniciar background tasks: {e}")
 
-    # Sistemas de proteção 24/7 removidos para economizar recursos no Railway
+    # Sistemas de proteção 24/7 removidos para economizar recursos
 
     # Set initial status com retry
     try:
@@ -970,7 +970,7 @@ async def on_resumed():
 @bot.event
 async def on_error(event, *args, **kwargs):
     logger.error(f"🚨 Erro crítico no evento {event}: {traceback.format_exc()}")
-    
+
     try:
         channel = bot.get_channel(CHANNEL_ID_ALERTA)
         if channel:
@@ -1280,10 +1280,10 @@ async def on_reaction_add(reaction, user):
                     )
 
                     await message.edit(embed=final_embed)
-                    
+
                     # Log do fechamento
                     logger.info(f"Ticket fechado: {message.channel.name} por {closer.name if closer else 'Unknown'}")
-                    
+
                     # Notificar em canal de logs se existir
                     try:
                         log_channel = discord.utils.get(message.guild.channels, name="logs-tickets")
@@ -1303,7 +1303,7 @@ async def on_reaction_add(reaction, user):
                     # Aguardar e deletar canal
                     await asyncio.sleep(5)
                     await message.channel.delete(reason=f"Ticket fechado por {closer.name if closer else 'Unknown'}")
-                    
+
                     # Limpar dados
                     if message.id in active_games:
                         del active_games[message.id]
@@ -1418,7 +1418,7 @@ async def on_reaction_add(reaction, user):
                 await reaction.remove(user)
             except:
                 pass
-            
+
             # Enviar mensagem de erro temporária
             try:
                 error_embed = create_embed(
@@ -1457,7 +1457,7 @@ async def on_reaction_add(reaction, user):
                 'closer': user.id,
                 'created_at': datetime.datetime.now().timestamp()
             }
-            
+
             # Auto-cancelar após 30 segundos
             await asyncio.sleep(30)
             if confirm_msg.id in active_games:
@@ -1471,7 +1471,7 @@ async def on_reaction_add(reaction, user):
                     del active_games[confirm_msg.id]
                 except:
                     pass
-                    
+
         except Exception as e:
             logger.error(f"Erro ao criar confirmação de fechamento: {e}")
             error_embed = create_embed(
@@ -1547,6 +1547,7 @@ async def on_member_join(member):
         user_data = get_user_data(member.id)
         if not user_data:
             update_user_data(member.id)
+            user_data = get_user_data(member.id)
 
         # Mensagens de boas-vindas variadas
         welcome_messages = [
@@ -1915,7 +1916,7 @@ async def perfil(ctx, user: discord.Member = None):
     """Ver perfil completo do usuário"""
     global_stats['commands_used'] += 1
     target = user or ctx.author
-    
+
     try:
         user_data = get_user_data(target.id)
         if not user_data:
@@ -1924,10 +1925,10 @@ async def perfil(ctx, user: discord.Member = None):
 
         coins, xp, level, rep, bank = user_data[1], user_data[2], user_data[3], user_data[4], user_data[5]
         total_money = coins + bank
-        
+
         # Obter rank
         rank_id, rank_data = get_user_rank(xp)
-        
+
         # Obter título personalizado se existir
         custom_title = ""
         if user_data and len(user_data) > 11:
@@ -1966,9 +1967,9 @@ async def perfil(ctx, user: discord.Member = None):
 
         embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
         embed.set_footer(text=f"Use RXinventario para ver itens | Posição no ranking: #{await get_user_position(target.id, ctx.guild.id)}")
-        
+
         await ctx.send(embed=embed)
-        
+
     except Exception as e:
         logger.error(f"Erro no comando perfil: {e}")
         embed = create_embed("❌ Erro", "Erro ao carregar perfil. Tente novamente.", color=0xff0000)
@@ -1979,7 +1980,7 @@ async def level_info(ctx, user: discord.Member = None):
     """Ver informações detalhadas de level e XP"""
     global_stats['commands_used'] += 1
     target = user or ctx.author
-    
+
     try:
         user_data = get_user_data(target.id)
         if not user_data:
@@ -1989,16 +1990,16 @@ async def level_info(ctx, user: discord.Member = None):
             xp, level = user_data[2], user_data[3]
 
         current_rank_id, current_rank = get_user_rank(xp)
-        
+
         # Calcular XP para próximo level
         next_level_xp = (level ** 2) * 100
         current_level_xp = ((level - 1) ** 2) * 100
         xp_for_next = next_level_xp - xp
-        
+
         # Progresso para próximo rank
         next_rank_id = current_rank_id + 1 if current_rank_id < 12 else 12
         next_rank = RANK_SYSTEM.get(next_rank_id, RANK_SYSTEM[12])
-        
+
         if current_rank_id < 12:
             rank_xp_needed = next_rank["xp"] - xp
             rank_progress = ((xp - current_rank["xp"]) / (next_rank["xp"] - current_rank["xp"])) * 100
@@ -2020,10 +2021,10 @@ async def level_info(ctx, user: discord.Member = None):
             f"• XP por mensagem: {XP_PER_MESSAGE}",
             color=current_rank['color']
         )
-        
+
         embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
         await ctx.send(embed=embed)
-        
+
     except Exception as e:
         logger.error(f"Erro no comando level: {e}")
         embed = create_embed("❌ Erro", "Erro ao carregar informações de level.", color=0xff0000)
@@ -2033,20 +2034,20 @@ async def level_info(ctx, user: discord.Member = None):
 async def top_users(ctx):
     """Ranking geral do servidor"""
     global_stats['commands_used'] += 1
-    
+
     try:
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             # Top XP
             cursor.execute('SELECT user_id, xp, level FROM users ORDER BY xp DESC LIMIT 10')
             top_xp = cursor.fetchall()
-            
+
             # Top Coins
             cursor.execute('SELECT user_id, coins, bank FROM users ORDER BY (coins + bank) DESC LIMIT 10')
             top_coins = cursor.fetchall()
-            
+
             conn.close()
 
         embed = create_embed(
@@ -2081,7 +2082,7 @@ async def top_users(ctx):
 
         embed.set_footer(text=f"Sua posição: #{await get_user_position(ctx.author.id, ctx.guild.id)} | Use RXleaderboard para ver mais")
         await ctx.send(embed=embed)
-        
+
     except Exception as e:
         logger.error(f"Erro no comando top: {e}")
         embed = create_embed("❌ Erro", "Erro ao carregar rankings.", color=0xff0000)
@@ -2115,7 +2116,7 @@ async def member_count(ctx):
     total = guild.member_count
     humans = len([m for m in guild.members if not m.bot])
     bots = len([m for m in guild.members if m.bot])
-    
+
     online = len([m for m in guild.members if m.status == discord.Status.online])
     idle = len([m for m in guild.members if m.status == discord.Status.idle])
     dnd = len([m for m in guild.members if m.status == discord.Status.dnd])
@@ -2134,10 +2135,10 @@ async def member_count(ctx):
         f"• Offline: {offline:,}",
         color=0x7289da
     )
-    
+
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
-    
+
     await ctx.send(embed=embed)
 
 @bot.command(name='roles', aliases=['cargos'])
@@ -2145,25 +2146,25 @@ async def list_roles(ctx):
     """Lista todos os cargos do servidor"""
     global_stats['commands_used'] += 1
     guild = ctx.guild
-    
+
     roles = sorted(guild.roles, key=lambda r: r.position, reverse=True)
-    
+
     # Dividir em páginas se necessário
     roles_text = ""
     for role in roles[:20]:  # Limite de 20 cargos
         if role.name != "@everyone":
             member_count = len(role.members)
             roles_text += f"**{role.name}** - {member_count} membros\n"
-    
+
     embed = create_embed(
         f"🎭 Cargos do {guild.name}",
         f"**Total:** {len(guild.roles)} cargos\n\n{roles_text}",
         color=0x7289da
     )
-    
+
     if len(guild.roles) > 20:
         embed.set_footer(text=f"Mostrando apenas os primeiros 20 cargos de {len(guild.roles)}")
-    
+
     await ctx.send(embed=embed)
 
 @bot.command(name='channels', aliases=['canais'])
@@ -2171,12 +2172,12 @@ async def list_channels(ctx):
     """Lista todos os canais do servidor"""
     global_stats['commands_used'] += 1
     guild = ctx.guild
-    
+
     text_channels = len(guild.text_channels)
     voice_channels = len(guild.voice_channels)
     categories = len(guild.categories)
     total = len(guild.channels)
-    
+
     embed = create_embed(
         f"📁 Canais do {guild.name}",
         f"**📊 Resumo:**\n"
@@ -2189,14 +2190,14 @@ async def list_channels(ctx):
         (f"\n... e mais {text_channels - 10}" if text_channels > 10 else ""),
         color=0x7289da
     )
-    
+
     await ctx.send(embed=embed)
 
 @bot.command(name='version', aliases=['versao'])
 async def bot_version(ctx):
     """Informações da versão do bot"""
     global_stats['commands_used'] += 1
-    
+
     embed = create_embed(
         "🤖 RXbot - Informações de Versão",
         f"""**🔖 Versão:** 2.1.0 (Estável Otimizada)
@@ -2219,7 +2220,7 @@ async def bot_version(ctx):
 • Sistemas: Tickets, Economia, Ranks, IA""",
         color=0x00ff00
     )
-    
+
     await ctx.send(embed=embed)
 
 @bot.command(name='id')
@@ -2227,7 +2228,7 @@ async def get_id(ctx, user: discord.Member = None):
     """Mostra o ID do usuário"""
     global_stats['commands_used'] += 1
     target = user or ctx.author
-    
+
     embed = create_embed(
         f"🆔 ID de {target.display_name}",
         f"**ID do usuário:** `{target.id}`\n"
@@ -2235,7 +2236,7 @@ async def get_id(ctx, user: discord.Member = None):
         f"**Menção:** {target.mention}",
         color=0x7289da
     )
-    
+
     embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
     await ctx.send(embed=embed)
 
@@ -2245,31 +2246,31 @@ async def teste_inventario(ctx):
     """Testa o sistema de inventário"""
     try:
         user_id = ctx.author.id
-        
+
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             # Verificar se usuário existe
             cursor.execute('SELECT user_id, inventory FROM users WHERE user_id = ?', (user_id,))
             result = cursor.fetchone()
-            
+
             if not result:
                 embed = create_embed("❌ Usuário não encontrado", "Criando dados do usuário...", color=0xff6600)
                 await ctx.send(embed=embed)
-                
+
                 # Criar usuário
                 cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
                 conn.commit()
-                
+
                 cursor.execute('SELECT user_id, inventory FROM users WHERE user_id = ?', (user_id,))
                 result = cursor.fetchone()
-            
+
             user_id_db, inventory_data = result
             inventory = json.loads(inventory_data) if inventory_data else {}
-            
+
             conn.close()
-        
+
         embed = create_embed(
             "🔧 Teste de Inventário",
             f"""**✅ Diagnóstico completo:**
@@ -2285,9 +2286,9 @@ async def teste_inventario(ctx):
 **💡 Dica:** Se você comprou itens e não aparecem, use este comando para diagnosticar.""",
             color=0x00ff00 if inventory else 0xffaa00
         )
-        
+
         await ctx.send(embed=embed)
-        
+
     except Exception as e:
         logger.error(f"Erro no teste de inventário: {e}")
         embed = create_embed("❌ Erro no teste", f"Erro: {str(e)}", color=0xff0000)
@@ -2808,15 +2809,15 @@ Mencione o bot para conversar!
 **Formato do sorteio:**
 `Título | Prêmio | Duração | Vencedores`
 
-**Para Todos:**
-• `RXsorteios` - Ver sorteios ativos
-• `RXgiveaways` - Lista de sorteios
-• Reaja com 🎉 para participar!
-
 **Exemplo:**
 `RXcriarsorteio iPhone 15 | iPhone novo | 24h | 1`
 
-**Durações aceitas:** 30m, 2h, 1d, 7d""",
+**Durações aceitas:** 30m, 2h, 1d, 7d
+
+**Para Todos:**
+• `RXsorteios` - Ver sorteios ativos
+• `RXgiveaways` - Lista de sorteios
+• Reaja com 🎉 para participar!""",
             color=0xffd700
         )
         await ctx.send(embed=embed)
@@ -3507,7 +3508,7 @@ async def crime(ctx):
                 ''', (ctx.author.id, ctx.guild.id, 'crime_success', ganho, f"Crime bem-sucedido: {crime['nome']}"))
 
                 embed = create_embed(
-                    f"🎭 Crime Bem-Sucedido!",
+                    "🎭 Crime Bem-Sucedido!",
                     f"**Crime:** {crime['emoji']} {crime['nome']}\n"
                     f"**Ganho:** {ganho:,} moedas\n"
                     f"**Novo saldo:** {new_coins:,} moedas\n\n"
@@ -4175,7 +4176,7 @@ async def loja(ctx):
             inline=True
         )
 
-    embed.set_footer(text="💡 Use RXinventario para ver seus itens | RXusar <id> para usar")
+    embed.set_footer(text=f"Use RXinventario para ver seus itens | RXusar <id> para usar itens")
     await ctx.send(embed=embed)
 
 @bot.command(name='comprar', aliases=['buy'])
@@ -4261,12 +4262,12 @@ async def inventario(ctx, user: discord.Member = None):
     """Ver inventário de itens"""
     global_stats['commands_used'] += 1
     target = user or ctx.author
-    
+
     try:
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             # Buscar dados do usuário diretamente
             cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (target.id,))
             result = cursor.fetchone()
@@ -4294,7 +4295,7 @@ async def inventario(ctx, user: discord.Member = None):
 
         total_valor = 0
         items_added = 0
-        
+
         for item_id, quantidade in inventory.items():
             try:
                 item_id_int = int(item_id)
@@ -4325,12 +4326,12 @@ async def inventario(ctx, user: discord.Member = None):
             value=f"{total_valor:,} moedas",
             inline=False
         )
-        
+
         embed.set_footer(text=f"Use RXloja para ver itens disponíveis | Use RXusar <id> para usar itens")
         embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
 
         await ctx.send(embed=embed)
-        
+
     except Exception as e:
         logger.error(f"Erro no comando inventario: {e}")
         embed = create_embed("❌ Erro", "Erro ao carregar inventário. Tente novamente.", color=0xff0000)
@@ -4436,7 +4437,7 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
         # Notificar receptor
         try:
             dm_embed = create_embed(
-                f"🎁 Item Recebido!",
+                "🎁 Item Recebido!",
                 f"Você recebeu **{quantidade}x {item['emoji']} {item['nome']}** de {ctx.author.mention}!\n\n"
                 f"**Descrição:** {item['descricao']}\n"
                 f"Use `RXinventario` para ver seus itens!",
@@ -4854,7 +4855,7 @@ async def set_custom_title(ctx, *, titulo=None):
 
     user_data = get_user_data(ctx.author.id)
     if not user_data:
-        embed = create_embed("❌ Erro", "Dados do usuário não encontrado�s!", color=0xff0000)
+        embed = create_embed("❌ Erro", "Dados do usuário não encontrados!", color=0xff0000)
         await ctx.send(embed=embed)
         return
 
@@ -4903,7 +4904,7 @@ async def base64_encode(ctx, *, texto=None):
         embed = create_embed("❌ Texto necessário", "Use: `RXbase64 Seu texto aqui`", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     try:
         encoded = base64.b64encode(texto.encode('utf-8')).decode('utf-8')
         embed = create_embed(
@@ -4923,11 +4924,11 @@ async def generate_hash(ctx, *, texto=None):
         embed = create_embed("❌ Texto necessário", "Use: `RXhash Seu texto aqui`", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     try:
         md5_hash = hashlib.md5(texto.encode('utf-8')).hexdigest()
         sha256_hash = hashlib.sha256(texto.encode('utf-8')).hexdigest()
-        
+
         embed = create_embed(
             "🔐 Hash do Texto",
             f"**Texto:** {texto}\n**MD5:** `{md5_hash}`\n**SHA256:** `{sha256_hash[:32]}...`",
@@ -4945,12 +4946,12 @@ async def text_to_binary(ctx, *, texto=None):
         embed = create_embed("❌ Texto necessário", "Use: `RXbin Seu texto aqui`", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     try:
         binary = ' '.join(format(ord(char), '08b') for char in texto)
         if len(binary) > 1900:
             binary = binary[:1900] + "..."
-        
+
         embed = create_embed(
             "🔢 Conversão para Binário",
             f"**Texto:** {texto}\n**Binário:** `{binary}`",
@@ -4968,7 +4969,7 @@ async def text_to_hex(ctx, *, texto=None):
         embed = create_embed("❌ Texto necessário", "Use: `RXhex Seu texto aqui`", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     try:
         hex_text = texto.encode('utf-8').hex()
         embed = create_embed(
@@ -4988,7 +4989,7 @@ async def reverse_text(ctx, *, texto=None):
         embed = create_embed("❌ Texto necessário", "Use: `RXreverse Seu texto aqui`", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     reversed_text = texto[::-1]
     embed = create_embed(
         "🔄 Texto Invertido",
@@ -5004,7 +5005,7 @@ async def text_uppercase(ctx, *, texto=None):
         embed = create_embed("❌ Texto necessário", "Use: `RXuppercase Seu texto aqui`", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     upper_text = texto.upper()
     embed = create_embed(
         "🔤 TEXTO EM MAIÚSCULAS",
@@ -5020,7 +5021,7 @@ async def text_lowercase(ctx, *, texto=None):
         embed = create_embed("❌ Texto necessário", "Use: `RXlowercase Seu texto aqui`", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     lower_text = texto.lower()
     embed = create_embed(
         "🔤 texto em minúsculas",
@@ -5036,7 +5037,7 @@ async def text_capitalize(ctx, *, texto=None):
         embed = create_embed("❌ Texto necessário", "Use: `RXcapitalize seu texto aqui`", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     capitalized_text = texto.capitalize()
     embed = create_embed(
         "🔤 Texto Capitalizado",
@@ -5052,18 +5053,18 @@ async def generate_password(ctx, tamanho: int = 12):
         embed = create_embed("❌ Tamanho inválido", "Use entre 4 e 50 caracteres", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     try:
         characters = string.ascii_letters + string.digits + "!@#$%^&*"
         password = ''.join(secrets.choice(characters) for _ in range(tamanho))
-        
+
         embed = create_embed(
             "🔐 Senha Gerada",
             f"**Tamanho:** {tamanho} caracteres\n**Senha:** `{password}`\n\n"
             f"⚠️ **Guarde em local seguro!**",
             color=0x00ff00
         )
-        
+
         # Tentar enviar por DM também
         try:
             await ctx.author.send(embed=embed)
@@ -5075,7 +5076,7 @@ async def generate_password(ctx, tamanho: int = 12):
             await ctx.send(embed=public_embed, delete_after=10)
         except:
             await ctx.send(embed=embed, delete_after=30)
-            
+
     except Exception as e:
         embed = create_embed("❌ Erro", f"Erro ao gerar senha: {e}", color=0xff0000)
         await ctx.send(embed=embed)
@@ -5085,12 +5086,12 @@ async def generate_qr(ctx, *, texto=None):
     """Gerar QR Code (placeholder)"""
     if not texto:
         embed = create_embed("❌ Texto necessário", "Use: `RXqr Seu texto aqui`", color=0xff0000)
-        await ctx.se�nd(embed=embed)
+        await ctx.send(embed=embed)
         return
-    
+
     # Usar serviço online para QR code
     qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=400x400&data={quote(texto)}"
-    
+
     embed = create_embed(
         "📱 QR Code Gerado",
         f"**Texto:** {texto}\n[Clique aqui para ver o QR Code]({qr_url})",
@@ -5103,9 +5104,9 @@ async def generate_qr(ctx, *, texto=None):
 async def account_creation_time(ctx, user: discord.Member = None):
     """Data de criação da conta"""
     target = user or ctx.author
-    
+
     created_timestamp = int(target.created_at.timestamp())
-    
+
     embed = create_embed(
         f"📅 Criação da conta de {target.display_name}",
         f"**Conta criada em:** <t:{created_timestamp}:F>\n"
@@ -5113,7 +5114,7 @@ async def account_creation_time(ctx, user: discord.Member = None):
         f"**Timestamp:** {created_timestamp}",
         color=0x7289da
     )
-    
+
     embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
     await ctx.send(embed=embed)
 
@@ -5125,12 +5126,12 @@ async def warn_user(ctx, user: discord.Member, *, motivo="Sem motivo especificad
         embed = create_embed("❌ Impossível", "Você não pode se advertir!", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     if user.top_role >= ctx.author.top_role:
         embed = create_embed("❌ Sem permissão", "Você não pode advertir este usuário!", color=0xff0000)
         await ctx.send(embed=embed)
         return
-    
+
     try:
         # Buscar warns atuais
         user_data = get_user_data(user.id)
@@ -5139,25 +5140,25 @@ async def warn_user(ctx, user: discord.Member, *, motivo="Sem motivo especificad
             current_warns = 0
         else:
             current_warns = user_data[15] if len(user_data) > 15 else 0
-        
+
         new_warns = current_warns + 1
-        
+
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             # Atualizar warns
             cursor.execute('UPDATE users SET warnings = ? WHERE user_id = ?', (new_warns, user.id))
-            
+
             # Registrar no log de moderação
             cursor.execute('''
                 INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
                 VALUES (?, ?, ?, ?, ?)
             ''', (ctx.guild.id, user.id, ctx.author.id, 'warn', motivo))
-            
+
             conn.commit()
             conn.close()
-        
+
         embed = create_embed(
             "⚠️ Advertência Aplicada",
             f"**Usuário:** {user.mention}\n"
@@ -5167,7 +5168,7 @@ async def warn_user(ctx, user: discord.Member, *, motivo="Sem motivo especificad
             color=0xff6600
         )
         await ctx.send(embed=embed)
-        
+
         # Notificar usuário
         try:
             dm_embed = create_embed(
@@ -5181,7 +5182,7 @@ async def warn_user(ctx, user: discord.Member, *, motivo="Sem motivo especificad
             await user.send(embed=dm_embed)
         except:
             pass
-            
+
     except Exception as e:
         logger.error(f"Erro ao aplicar warn: {e}")
         embed = create_embed("❌ Erro", "Erro ao aplicar advertência!", color=0xff0000)
@@ -5191,24 +5192,24 @@ async def warn_user(ctx, user: discord.Member, *, motivo="Sem motivo especificad
 async def check_warns(ctx, user: discord.Member = None):
     """Ver advertências de um usuário"""
     target = user or ctx.author
-    
+
     try:
         user_data = get_user_data(target.id)
         if not user_data:
             warns = 0
         else:
             warns = user_data[15] if len(user_data) > 15 else 0
-        
+
         embed = create_embed(
             f"⚠️ Advertências de {target.display_name}",
             f"**Total de advertências:** {warns}\n"
             f"**Status:** {'🔴 Muitas advertências' if warns >= 5 else '🟡 Algumas advertências' if warns >= 3 else '🟢 Poucas advertências'}",
             color=0xff0000 if warns >= 5 else 0xff6600 if warns >= 3 else 0x00ff00
         )
-        
+
         embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
         await ctx.send(embed=embed)
-        
+
     except Exception as e:
         logger.error(f"Erro ao verificar warns: {e}")
         embed = create_embed("❌ Erro", "Erro ao verificar advertências!", color=0xff0000)
@@ -5309,7 +5310,7 @@ async def add_saldo(ctx, user: discord.Member, amount: int):
         embed = create_embed(
             "✅ Saldo Adicionado!",
             f"**Usuário:** {user.mention}\n"
-            f"**Valor adicionado:** �{amount:,} moedas\n"
+            f"**Valor adicionado:** {amount:,} moedas\n"
             f"**Saldo anterior:** {current_coins:,} moedas\n"
             f"**Novo saldo:** {new_coins:,} moedas\n"
             f"**Administrador:** {ctx.author.mention}",
@@ -5542,7 +5543,7 @@ async def listar_eventos_clan(ctx):
             conn.close()
 
         if not eventos:
-            embed� = create_embed(
+            embed = create_embed(
                 "⚔️ Nenhum evento ativo",
                 "Não há eventos de clan ativos no momento.\nAdministradores podem criar com `RXcriareventoclan`",
                 color=0xffaa00
@@ -5754,7 +5755,7 @@ async def jokenpo(ctx, escolha=None):
     )
     await ctx.send(embed=embed)
 
-@bot.command(name='dado', aliases=['dice']�)
+@bot.command(name='dado', aliases=['dice'])
 async def dice(ctx, lados: int = 6):
     """Rola um dado"""
     if lados < 2 or lados > 100:
@@ -6003,7 +6004,7 @@ async def server_info(ctx):
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
 
-  �  await ctx.send(embed=embed)
+    await ctx.send(embed=embed)
 
 @bot.command(name='userinfo', aliases=['uinfo'])
 async def user_info(ctx, user: discord.Member = None):
@@ -6224,20 +6225,20 @@ async def start_bot():
                     if not bot.is_closed():
                         await bot.close()
                     await asyncio.sleep(3)
-                    
+
                     # Recriar o bot se necessário
                     if bot.is_closed():
                         logger.info("🔨 Recriando instância do bot...")
                         bot.clear()
                         await asyncio.sleep(2)
                 except Exception as restart_error:
-      �              logger.error(f"Erro ao reiniciar bot: {restart_error}")
+                    logger.error(f"Erro ao reiniciar bot: {restart_error}")
 
             # Iniciar o bot com timeout aumentado
             try:
                 logger.info("🌐 Conectando ao Discord...")
                 await asyncio.wait_for(bot.start(token), timeout=90.0)
-                
+
                 # Se chegou até aqui, sucesso!
                 logger.info("✅ Bot conectado com sucesso!")
                 reconnect_count = 0  # Reset counter on success
@@ -6272,7 +6273,7 @@ async def start_bot():
             logger.error(f"🔗 Conexão fechada: {e}")
             reconnect_count += 1
             critical_error_count += 1
-            
+
             # Fechar bot antes de tentar reconectar
             try:
                 if not bot.is_closed():
@@ -6280,7 +6281,7 @@ async def start_bot():
                 await asyncio.sleep(5)
             except:
                 pass
-                
+
             wait_time = 20  # Reconectar rapidamente para connection closed
             logger.info(f"🔄 Reconectando em {wait_time} segundos...")
             await asyncio.sleep(wait_time)
@@ -6289,7 +6290,7 @@ async def start_bot():
             logger.error(f"❌ Erro inesperado: {e}")
             logger.error(f"🔍 Tipo do erro: {type(e)}")
             logger.error(f"🔍 Traceback: {traceback.format_exc()}")
-            
+
             reconnect_count += 1
             critical_error_count += 1
 
@@ -6311,8 +6312,8 @@ async def start_bot():
 
     # Se chegou aqui, todas as tentativas falharam
     logger.error("🚨 Máximo de tentativas atingido. ERRO CRÍTICO!")
-    
-    # Notificar no canal de alerta se possível
+
+    # Notificar canal de alerta se possível
     try:
         if not bot.is_closed():
             channel = bot.get_channel(CHANNEL_ID_ALERTA)
@@ -6330,45 +6331,45 @@ async def start_bot():
 
     # RESTART FORÇADO - Última tentativa
     logger.error("💀 Iniciando RESTART FORÇADO do sistema...")
-    
+
     try:
         # Fechar completamente o bot
         if not bot.is_closed():
             await bot.close()
         await asyncio.sleep(5)
-        
+
         # Limpar tudo
         bot.clear()
         import gc
         gc.collect()
-        
+
         logger.info("🔄 REINICIANDO BOT COMPLETAMENTE...")
-        
+
         # Tentar uma última vez com novo loop
         token = os.getenv('TOKEN')
         if token:
             await asyncio.sleep(10)  # Aguardar antes do restart final
-            
+
             # Recursão controlada - uma única tentativa de restart completo
             if critical_error_count < max_critical_errors:
                 logger.info("🆘 Tentativa de restart recursivo...")
                 await start_bot()
             else:
                 logger.error("💥 FALHA CRÍTICA TOTAL - Sistema não consegue se recuperar")
-                
+
     except Exception as restart_error:
         logger.error(f"💥 FALHA NO RESTART FORÇADO: {restart_error}")
         logger.error("🚨 SISTEMA EM ESTADO CRÍTICO IRRECUPERÁVEL")
 
 
-# Funções de keep-alive removidas para economizar recursos no Railway
+# Funções de keep-alive removidos para economizar recursos
 
-# Sistemas de restart automático removidos para economizar recursos no Railway
+# Sistemas de restart automático removidos para economizar recursos
 
 if __name__ == "__main__":
     max_restarts = 5
     restart_count = 0
-    
+
     while restart_count < max_restarts:
         try:
             # Verificar token
@@ -6382,37 +6383,37 @@ if __name__ == "__main__":
 
             # Iniciar bot com sistema robusto
             asyncio.run(start_bot())
-            
+
             # Se chegou aqui, o bot foi fechado normalmente
-            logger.info("✅ Bot finalizado normalmente")
+            logger.info("✅ Bot finalizado normally")
             break
 
         except KeyboardInterrupt:
             logger.info("🛑 Bot interrompido pelo usuário")
             break
-            
+
         except asyncio.CancelledError:
             logger.info("🔄 Task cancelada - tentando restart...")
             restart_count += 1
-            
+
         except Exception as e:
             logger.error(f"🚨 Erro fatal na inicialização: {e}")
             logger.error(f"🔍 Traceback: {traceback.format_exc()}")
-            
+
             restart_count += 1
-            
+
             if restart_count < max_restarts:
                 wait_time = 30 * restart_count
                 logger.info(f"🔄 Tentando restart automático em {wait_time}s...")
                 time.sleep(wait_time)
-                
+
                 # Limpeza de memória antes do restart
                 import gc
                 gc.collect()
             else:
                 logger.error("💀 Máximo de restarts atingido. Encerrando...")
                 sys.exit(1)
-    
+
     if restart_count >= max_restarts:
         logger.error("💥 Sistema falhou após múltiplos restarts!")
         sys.exit(1)
