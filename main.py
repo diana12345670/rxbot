@@ -154,6 +154,23 @@ bot = commands.Bot(
     strip_after_prefix=True
 )
 
+# Sessão HTTP global para evitar vazamentos
+http_session = None
+
+async def get_http_session():
+    """Obter sessão HTTP reutilizável"""
+    global http_session
+    if http_session is None or http_session.closed:
+        http_session = aiohttp.ClientSession()
+    return http_session
+
+async def close_http_session():
+    """Fechar sessão HTTP adequadamente"""
+    global http_session
+    if http_session and not http_session.closed:
+        await http_session.close()
+        http_session = None
+
 # Database connection pool to avoid locking issues
 import threading
 db_lock = threading.Lock()
@@ -859,6 +876,9 @@ async def on_ready():
     logger.info(f"🤖 RXbot está online! Conectado como {bot.user}")
     logger.info(f"📊 Conectado em {len(bot.guilds)} servidores")
     logger.info(f"👥 Servindo {len(set(bot.get_all_members()))} usuários únicos")
+
+    # Inicializar sessão HTTP
+    await get_http_session()
 
     try:
         channel = bot.get_channel(CHANNEL_ID_ALERTA)
@@ -2325,13 +2345,12 @@ async def diagnostico_completo(ctx):
 
     # 2. Teste Keep-alive
     try:
-        import aiohttp
-        async with aiohttp.ClientSession() as session:
-            async with session.get('http://0.0.0.0:8080/ping', timeout=5) as response:
-                if response.status == 200:
-                    resultados.append("✅ **Keep-alive:** Porta 8080 ativa")
-                else:
-                    resultados.append(f"⚠️ **Keep-alive:** Status {response.status}")
+        session = await get_http_session()
+        async with session.get('http://0.0.0.0:8080/ping', timeout=5) as response:
+            if response.status == 200:
+                resultados.append("✅ **Keep-alive:** Porta 8080 ativa")
+            else:
+                resultados.append(f"⚠️ **Keep-alive:** Status {response.status}")
     except Exception as e:
         resultados.append(f"❌ **Keep-alive:** {str(e)[:50]}...")
 
@@ -2448,13 +2467,12 @@ async def teste_completo(ctx):
 
     # 2. Teste Keep-alive
     try:
-        import aiohttp
-        async with aiohttp.ClientSession() as session:
-            async with session.get('http://0.0.0.0:8080/ping', timeout=5) as response:
-                if response.status == 200:
-                    resultados.append("✅ **Keep-alive:** Ativo - Porta 8080")
-                else:
-                    resultados.append("⚠️ **Keep-alive:** Problema - Status " + str(response.status))
+        session = await get_http_session()
+        async with session.get('http://0.0.0.0:8080/ping', timeout=5) as response:
+            if response.status == 200:
+                resultados.append("✅ **Keep-alive:** Ativo - Porta 8080")
+            else:
+                resultados.append("⚠️ **Keep-alive:** Problema - Status " + str(response.status))
     except Exception as e:
         resultados.append("❌ **Keep-alive:** Erro - " + str(e))
 
@@ -6313,6 +6331,12 @@ async def start_bot():
     # Se chegou aqui, todas as tentativas falharam
     logger.error("🚨 Máximo de tentativas atingido. ERRO CRÍTICO!")
 
+    # Fechar sessão HTTP antes de finalizar
+    try:
+        await close_http_session()
+    except Exception as e:
+        logger.error(f"Erro ao fechar sessão HTTP: {e}")
+
     # Notificar canal de alerta se possível
     try:
         if not bot.is_closed():
@@ -6333,6 +6357,9 @@ async def start_bot():
     logger.error("💀 Iniciando RESTART FORÇADO do sistema...")
 
     try:
+        # Fechar sessão HTTP primeiro
+        await close_http_session()
+
         # Fechar completamente o bot
         if not bot.is_closed():
             await bot.close()
