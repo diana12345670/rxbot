@@ -954,6 +954,17 @@ async def on_ready():
 async def on_disconnect():
     logger.error("🚨 BOT DESCONECTADO DO DISCORD!")
 
+    # Fechar qualquer sessão aiohttp aberta para evitar aviso do Railway
+    try:
+        import aiohttp
+        for obj in list(globals().values()):
+            if isinstance(obj, aiohttp.ClientSession) and not obj.closed:
+                await obj.close()
+                logger.info("✅ Sessão aiohttp fechada com sucesso")
+    except Exception as e:
+        logger.error(f"Erro ao fechar sessão aiohttp: {e}")
+
+
     # Fechar sessão HTTP PRIMEIRO para evitar warnings
     try:
         await close_http_session()
