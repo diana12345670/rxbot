@@ -953,6 +953,14 @@ async def on_ready():
 @bot.event
 async def on_disconnect():
     logger.error("🚨 BOT DESCONECTADO DO DISCORD!")
+
+    # Fechar sessão HTTP PRIMEIRO para evitar warnings
+    try:
+        await close_http_session()
+        logger.info("✅ Sessão HTTP fechada adequadamente")
+    except Exception as e:
+        logger.error(f"Erro ao fechar sessão HTTP: {e}")
+
     try:
         # Tentar notificar antes de perder conexão totalmente
         channel = bot.get_channel(CHANNEL_ID_ALERTA)
@@ -1403,11 +1411,55 @@ async def on_reaction_add(reaction, user):
                 await message.edit(embed=embed)
                 del active_games[message.id]
 
-    # Sistema de fechar tickets - MODIFICADO: QUALQUER PESSOA PODE FECHAR
+    # Sistema de fechar tickets - CORRIGIDO E MELHORADO
     if str(reaction.emoji) == "🔒" and hasattr(message.channel, 'name') and message.channel.name.startswith('ticket-'):
-        # REMOVIDO: Verificação de permissões - agora qualquer pessoa pode fechar
-        # Permite que qualquer usuário que reagir com 🔒 possa fechar o ticket
-        pass  # Continua direto para o processo de fechamento
+        # Verificar se usuário tem permissão OU é o criador do ticket
+        has_permission = False
+        is_creator = False
+
+        # Verificar permissões de forma mais segura
+        try:
+            member = message.guild.get_member(user.id)
+            if member:
+                has_permission = (member.guild_permissions.manage_channels or 
+                                member.guild_permissions.administrator or
+                                any(role.name.lower() in ['admin', 'mod', 'staff', 'moderador', 'administrador'] for role in member.roles))
+        except Exception as e:
+            logger.error(f"Erro ao verificar permissões: {e}")
+
+        try:
+            # Verificar se é o criador do ticket
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('SELECT creator_id FROM tickets WHERE channel_id = ?', (message.channel.id,))
+                result = cursor.fetchone()
+                if result and result[0] == user.id:
+                    is_creator = True
+                conn.close()
+        except Exception as e:
+            logger.error(f"Erro ao verificar criador do ticket: {e}")
+
+        if not (has_permission or is_creator):
+            # Remover a reação do usuário não autorizado
+            try:
+                await reaction.remove(user)
+            except:
+                pass
+
+            # Enviar mensagem de erro temporária
+            try:
+                error_embed = create_embed(
+                    "❌ Sem permissão",
+                    "Apenas staff ou o criador do ticket podem fechá-lo!",
+                    color=0xff0000
+                )
+                temp_msg = await message.channel.send(embed=error_embed)
+                await asyncio.sleep(5)
+                await temp_msg.delete()
+            except:
+                pass
+            return
 
         # Confirmar fechamento
         confirm_embed = create_embed(
@@ -1415,7 +1467,6 @@ async def on_reaction_add(reaction, user):
             f"**{user.mention}** deseja fechar este ticket?\n\n"
             f"**⚠️ Esta ação é irreversível!**\n"
             f"O canal será **DELETADO** permanentemente!\n\n"
-            f"💡 **Novo sistema:** Qualquer pessoa pode fechar tickets!\n"
             f"Reaja com ✅ para confirmar ou ❌ para cancelar.\n"
             f"**Você tem 30 segundos para decidir.**",
             color=0xff6b6b
@@ -2811,7 +2862,7 @@ Mencione o bot para conversar!
 ❓ Dúvida geral | 🛠️ Suporte técnico | 👑 Tier
 
 **🔧 Gerenciar Tickets:**
-• Reaja com 🔒 para fechar ticket (qualquer pessoa pode fechar)
+• Reaja com 🔒 para fechar ticket
 • `RXadduser <@user>` - Adicionar usuário ao ticket
 • `RXremoveuser <@user>` - Remover usuário do ticket
 
@@ -3505,7 +3556,7 @@ async def crime(ctx):
                 ''', (ctx.author.id, ctx.guild.id, 'crime_fail', -perda, f"Crime falhou: {crime['nome']}"))
 
                 embed = create_embed(
-                    f"🚔 Crime Falhou!",
+                    "🚔 Crime Falhou!",
                     f"**Crime:** {crime['emoji']} {crime['nome']}\n"
                     f"**Multa:** {perda:,} moedas\n"
                     f"**Novo saldo:** {new_coins:,} moedas\n\n"
@@ -5508,7 +5559,7 @@ async def listar_eventos_clan(ctx):
             cursor = conn.cursor()
 
             cursor.execute('''
-                SELECT clan1, clan2, event_type, bet_amount, end_time, participants, status
+                SELECT clan1, clan2, event_type, bet_amount, participants, status
                 FROM clan_events
                 WHERE guild_id = ? AND status = 'active'
                 ORDER BY end_time
@@ -6169,6 +6220,8 @@ async def on_command_error(ctx, error):
             pass
 
 # Sistemas de manutenção de conexão removidos para economizar recursos
+
+# Sistemas de restart automático removidos para economizar recursos
 
 async def start_bot():
     """Sistema de inicialização ULTRA robusto com restart real"""
