@@ -118,13 +118,16 @@ intents.reactions = True
 intents.voice_states = True
 intents.typing = True
 
-# Bot configuration
+# Bot configuration com configurações robustas
 bot = commands.Bot(
     command_prefix=['RX', 'rx', '!', '.', '>', '<', '?', 'bot ', 'BOT ', 'Bot '],
     intents=intents,
     help_command=None,
     case_insensitive=True,
-    strip_after_prefix=True
+    strip_after_prefix=True,
+    heartbeat_timeout=60.0,  # Timeout do heartbeat
+    guild_ready_timeout=5.0,  # Timeout para guild ready
+    max_messages=1000  # Limitar cache de mensagens
 )
 
 # Sessão HTTP global para evitar vazamentos
@@ -134,15 +137,30 @@ async def get_http_session():
     """Obter sessão HTTP reutilizável"""
     global http_session
     if http_session is None or http_session.closed:
-        http_session = aiohttp.ClientSession()
+        connector = aiohttp.TCPConnector(
+            limit=100,
+            limit_per_host=30,
+            ttl_dns_cache=300,
+            use_dns_cache=True,
+            keepalive_timeout=30,
+            enable_cleanup_closed=True
+        )
+        timeout = aiohttp.ClientTimeout(total=30, connect=10)
+        http_session = aiohttp.ClientSession(connector=connector, timeout=timeout)
     return http_session
 
 async def close_http_session():
     """Fechar sessão HTTP adequadamente"""
     global http_session
     if http_session and not http_session.closed:
-        await http_session.close()
-        http_session = None
+        try:
+            await http_session.close()
+            # Aguardar um pouco para garantir que tudo seja fechado
+            await asyncio.sleep(0.1)
+        except Exception as e:
+            logger.error(f"Erro ao fechar sessão HTTP: {e}")
+        finally:
+            http_session = None
 
 # Database connection pool to avoid locking issues
 import threading
@@ -555,6 +573,26 @@ async def update_status():
     except Exception as e:
         logger.error(f"Erro no update_status: {e}")
 
+@tasks.loop(minutes=10)
+async def cleanup_resources():
+    """Limpeza periódica de recursos"""
+    try:
+        # Limpeza de memória
+        import gc
+        collected = gc.collect()
+        if collected > 0:
+            logger.info(f"🧹 Limpeza automática: {collected} objetos removidos da memória")
+        
+        # Verificar se a sessão HTTP está funcionando
+        global http_session
+        if http_session and http_session.closed:
+            logger.warning("⚠️ Sessão HTTP estava fechada - recriando...")
+            http_session = None
+            await get_http_session()
+            
+    except Exception as e:
+        logger.error(f"Erro na limpeza de recursos: {e}")
+
 @tasks.loop(hours=6)
 async def backup_database():
     """Backup automático do banco de dados"""
@@ -888,11 +926,7 @@ async def on_ready():
             backup_database.start()
             check_reminders.start()
             check_giveaways.start()
-
-            # Iniciar monitor de saúde (removido para otimização)
-            # asyncio.create_task(health_monitor())
-            # global last_heartbeat
-            # last_heartbeat = datetime.datetime.now()
+            cleanup_resources.start()
 
             logger.info("✅ Background tasks iniciados")
         except Exception as e:
@@ -926,24 +960,30 @@ async def on_ready():
 @bot.event
 async def on_disconnect():
     logger.error("🚨 BOT DESCONECTADO DO DISCORD!")
+    
+    # Fechar sessão HTTP para evitar vazamentos
     try:
-        # Tentar notificar antes de perder conexão totalmente
-        channel = bot.get_channel(CHANNEL_ID_ALERTA)
-        if channel:
-            embed = create_embed(
-                "🚨 Desconexão Detectada",
-                f"❌ O bot foi **desconectado** do Discord!\n"
-                f"🔄 Sistema de reconexão automática ativado...\n"
-                f"⏰ Timestamp: <t:{int(datetime.datetime.now().timestamp())}:F>",
-                color=0xff6600
-            )
-            await channel.send(embed=embed)
+        await close_http_session()
     except Exception as e:
-        logger.error(f"Erro ao enviar alerta de desconexão: {e}")
+        logger.error(f"Erro ao fechar sessão HTTP na desconexão: {e}")
+    
+    # Limpeza de memória
+    try:
+        import gc
+        gc.collect()
+    except:
+        pass
 
 @bot.event
 async def on_resumed():
     logger.info("🔄 BOT RECONECTADO AO DISCORD!")
+    
+    # Recriar sessão HTTP
+    try:
+        await get_http_session()
+    except Exception as e:
+        logger.error(f"Erro ao recriar sessão HTTP na reconexão: {e}")
+    
     try:
         channel = bot.get_channel(CHANNEL_ID_ALERTA)
         if channel:
@@ -963,6 +1003,13 @@ async def on_resumed():
 @bot.event
 async def on_error(event, *args, **kwargs):
     logger.error(f"🚨 Erro crítico no evento {event}: {traceback.format_exc()}")
+    
+    # Limpeza automática em caso de erro
+    try:
+        import gc
+        gc.collect()
+    except:
+        pass
 
     try:
         channel = bot.get_channel(CHANNEL_ID_ALERTA)
@@ -977,6 +1024,22 @@ async def on_error(event, *args, **kwargs):
             await channel.send(embed=embed)
     except:
         pass
+
+# Evento para monitorar problemas de socket/gateway
+@bot.event 
+async def on_socket_response(msg):
+    """Monitorar respostas do gateway para detectar problemas"""
+    if msg.get('op') == 9:  # Invalid session
+        logger.warning("⚠️ Sessão inválida detectada - reconectando...")
+    elif msg.get('op') == 7:  # Reconnect
+        logger.warning("⚠️ Gateway solicitou reconexão...")
+        # Limpeza preventiva
+        try:
+            await close_http_session()
+            import gc
+            gc.collect()
+        except:
+            pass
 
 # Sistema de reconexão automática removido para economizar recursos
 
