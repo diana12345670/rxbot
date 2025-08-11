@@ -77,7 +77,6 @@ try:
 except ImportError:
     zipfile = None
 
-# Configuração otimizada para Railway
 
 # Sistema de monitoramento de saúde do bot
 last_heartbeat = datetime.datetime.now()
@@ -891,12 +890,12 @@ async def on_ready():
                 f"• Servidores: {len(bot.guilds)}\n"
                 f"• Usuários: {len(set(bot.get_all_members()))}\n"
                 f"• Latência: {round(bot.latency * 1000, 2)}ms\n"
-                f"• Versão: 2.1.0 (Estável Otimizada)\n\n"
-                f"**💡 Sistema Otimizado:**\n"
-                f"• Otimizado para Railway\n"
-                f"• Sistemas de backup automático (6h)\n"
-                f"• Performance otimizada\n"
-                f"• Estável e confiável\n\n"
+                f"• Versão: 2.1.0 (Estável)\n\n"
+                f"**🛡️ Sistemas ativos:**\n"
+                f"• ✅ Auto-ping\n"
+                f"• ✅ Keep-alive\n"
+                f"• ✅ Monitor de saúde\n"
+                f"• ✅ Sistema anti-crash\n\n"
                 f"**Data:** <t:{int(datetime.datetime.now().timestamp())}:F>",
                 color=0x00ff00
             )
@@ -1049,7 +1048,7 @@ async def on_reaction_add(reaction, user):
         if game_data['type'] == 'ticket_creation':
             emoji_to_motivo = {
                 "🐛": "Bug/Erro no bot",
-                "💰": "Problema com economia",
+                "💰": "Problema com economia", 
                 "⚖️": "Denúncia/Moderação",
                 "💡": "Sugestão/Ideia",
                 "❓": "Dúvida geral",
@@ -1278,7 +1277,7 @@ async def on_reaction_add(reaction, user):
                             conn = get_db_connection()
                             cursor = conn.cursor()
                             cursor.execute('''
-                                UPDATE tickets
+                                UPDATE tickets 
                                 SET status = 'closed', closed_by = ?
                                 WHERE channel_id = ?
                             ''', (closer_id, message.channel.id))
@@ -1351,12 +1350,12 @@ async def on_reaction_add(reaction, user):
             elif str(reaction.emoji) == "❌":
                 try:
                     cancel_embed = create_embed(
-                        "❌ Fechamento Cancelado",
+                        "❌ Fechamento Cancelado", 
                         f"O fechamento do ticket foi cancelado por {user.mention}.\n"
                         f"O ticket permanece **aberto** e funcional.",
                         color=0xffaa00
                     )
-                    await message.edit(cancel_embed)
+                    await message.edit(embed=cancel_embed)
                     if message.id in active_games:
                         del active_games[message.id]
                 except Exception as e:
@@ -1404,55 +1403,11 @@ async def on_reaction_add(reaction, user):
                 await message.edit(embed=embed)
                 del active_games[message.id]
 
-    # Sistema de fechar tickets - CORRIGIDO E MELHORADO
+    # Sistema de fechar tickets - MODIFICADO: QUALQUER PESSOA PODE FECHAR
     if str(reaction.emoji) == "🔒" and hasattr(message.channel, 'name') and message.channel.name.startswith('ticket-'):
-        # Verificar se usuário tem permissão OU é o criador do ticket
-        has_permission = False
-        is_creator = False
-
-        # Verificar permissões de forma mais segura
-        try:
-            member = message.guild.get_member(user.id)
-            if member:
-                has_permission = (member.guild_permissions.manage_channels or
-                                member.guild_permissions.administrator or
-                                any(role.name.lower() in ['admin', 'mod', 'staff', 'moderador', 'administrador'] for role in member.roles))
-        except Exception as e:
-            logger.error(f"Erro ao verificar permissões: {e}")
-
-        try:
-            # Verificar se é o criador do ticket
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute('SELECT creator_id FROM tickets WHERE channel_id = ?', (message.channel.id,))
-                result = cursor.fetchone()
-                if result and result[0] == user.id:
-                    is_creator = True
-                conn.close()
-        except Exception as e:
-            logger.error(f"Erro ao verificar criador do ticket: {e}")
-
-        if not (has_permission or is_creator):
-            # Remover a reação do usuário não autorizado
-            try:
-                await reaction.remove(user)
-            except:
-                pass
-
-            # Enviar mensagem de erro temporária
-            try:
-                error_embed = create_embed(
-                    "❌ Sem permissão",
-                    "Apenas staff ou o criador do ticket podem fechá-lo!",
-                    color=0xff0000
-                )
-                temp_msg = await message.channel.send(embed=error_embed)
-                await asyncio.sleep(5)
-                await temp_msg.delete()
-            except:
-                pass
-            return
+        # REMOVIDO: Verificação de permissões - agora qualquer pessoa pode fechar
+        # Permite que qualquer usuário que reagir com 🔒 possa fechar o ticket
+        pass  # Continua direto para o processo de fechamento
 
         # Confirmar fechamento
         confirm_embed = create_embed(
@@ -1460,6 +1415,7 @@ async def on_reaction_add(reaction, user):
             f"**{user.mention}** deseja fechar este ticket?\n\n"
             f"**⚠️ Esta ação é irreversível!**\n"
             f"O canal será **DELETADO** permanentemente!\n\n"
+            f"💡 **Novo sistema:** Qualquer pessoa pode fechar tickets!\n"
             f"Reaja com ✅ para confirmar ou ❌ para cancelar.\n"
             f"**Você tem 30 segundos para decidir.**",
             color=0xff6b6b
@@ -1961,7 +1917,7 @@ async def perfil(ctx, user: discord.Member = None):
         # Status emoji
         status_emoji = {
             discord.Status.online: "🟢",
-            discord.Status.idle: "🟡",
+            discord.Status.idle: "🟡", 
             discord.Status.dnd: "🔴",
             discord.Status.offline: "⚫"
         }
@@ -2084,7 +2040,7 @@ async def top_users(ctx):
             if user:
                 rank_id, rank_data = get_user_rank(xp)
                 medal = ["🥇", "🥈", "🥉", "4º", "5º"][i]
-                xp_text += f"{medal} **{user.display_name}** - {rank_data['emoji']} Lv.{level} ({xp:,} XP)\n"
+                xp_text += f"{medal} {user.display_name} - {rank_data['emoji']} Lv.{level} ({xp:,} XP)\n"
 
         if xp_text:
             embed.add_field(name="⭐ Top XP/Level", value=xp_text, inline=True)
@@ -2096,7 +2052,7 @@ async def top_users(ctx):
             if user:
                 total = coins + bank
                 medal = ["🥇", "🥈", "🥉", "4º", "5º"][i]
-                coins_text += f"{medal} **{user.display_name}** - {total:,} moedas\n"
+                coins_text += f"{medal} {user.display_name} - {total:,} moedas\n"
 
         if coins_text:
             embed.add_field(name="💰 Top Economia", value=coins_text, inline=True)
@@ -2206,7 +2162,7 @@ async def list_channels(ctx):
         f"• 💬 Texto: {text_channels}\n"
         f"• 🔊 Voz: {voice_channels}\n"
         f"• 📁 Categorias: {categories}\n\n"
-        f"**💬 Canais de texto:**\n" +
+        f"**💬 Canais de texto:**\n" + 
         "\n".join([f"• {channel.mention}" for channel in guild.text_channels[:10]]) +
         (f"\n... e mais {text_channels - 10}" if text_channels > 10 else ""),
         color=0x7289da
@@ -2232,7 +2188,7 @@ async def bot_version(ctx):
 • ✅ Sistema de fechamento de tickets melhorado
 • ✅ Comando RXinventario corrigido
 • ✅ Comandos faltando adicionados
-• ✅ Otimizado para Railway
+• ✅ Economia de recursos no Railway
 • ✅ Sistema de keep-alive otimizado
 
 **📊 Estatísticas:**
@@ -2554,7 +2510,7 @@ async def teste_completo(ctx):
         cor = 0x00ff00
         status = "🎉 SISTEMA 100% FUNCIONAL!"
     elif erros <= 2:
-        cor = 0xffaa00
+        cor = 0xffaa00  
         status = "⚠️ Sistema funcional com avisos"
     else:
         cor = 0xff0000
@@ -2566,7 +2522,7 @@ async def teste_completo(ctx):
 
 **📈 Resumo:**
 • ✅ Sucessos: {sucesso}
-• ⚠️ Avisos: {avisos}
+• ⚠️ Avisos: {avisos}  
 • ❌ Erros: {erros}
 
 **📋 Detalhes:**
@@ -2723,7 +2679,7 @@ Mencione o bot para conversar!
 • `RXranklist` - Lista todos os ranks
 • `RXleaderboard [tipo]` - Ranking do servidor
 • `RXlb xp` - Top XP/Rank
-• `RXlb coins` - Top Economia
+• `RXlb coins` - Top Economia  
 • `RXlb rep` - Top Reputação
 • `RXlevel [@user]` - Ver nível e XP
 • `RXtop` - Ranking geral
@@ -2766,7 +2722,7 @@ Mencione o bot para conversar!
             "📊 Comandos de Informações",
             """**Usuário:**
 • `RXperfil [@user]` - Ver perfil completo
-• `RXavatar [@user]` - Ver avatar em alta resolução
+• `RXavatar [@user]` - Ver avatar em alta resolução  
 • `RXuserinfo <@user>` - Info detalhada do usuário
 • `RXid [@user]` - Ver ID do usuário
 • `RXcreatetime [@user]` - Data de criação da conta
@@ -2855,7 +2811,7 @@ Mencione o bot para conversar!
 ❓ Dúvida geral | 🛠️ Suporte técnico | 👑 Tier
 
 **🔧 Gerenciar Tickets:**
-• Reaja com 🔒 para fechar ticket
+• Reaja com 🔒 para fechar ticket (qualquer pessoa pode fechar)
 • `RXadduser <@user>` - Adicionar usuário ao ticket
 • `RXremoveuser <@user>` - Remover usuário do ticket
 
@@ -2965,7 +2921,7 @@ Mencione o bot para conversar!
 
 **Tipos de Eventos:**
 • Battle Royale
-• Team Deathmatch
+• Team Deathmatch  
 • King of the Hill
 • Capture the Flag
 • Tournament
@@ -3174,16 +3130,18 @@ async def user_rank(ctx, user: discord.Member = None):
 
     embed = create_embed(
         f"{current_rank['emoji']} Rank de {target.display_name}{custom_title}",
-        f"**🏆 Rank Atual:** {current_rank['name']} (#{current_rank_id})\n"
-        f"**⭐ Level:** {level}\n"
-        f"**💫 XP Total:** {xp:,}\n\n"
-        f"**📊 Progresso para próximo rank:**\n"
-        f"{progress_bar} {progress:.1f}%\n"
-        f"**{next_rank['emoji']} Próximo:** {next_rank['name']}\n"
-        f"**💪 XP Necessário:** {xp_needed:,}\n\n"
-        f"**🎯 Estatísticas:**\n"
-        f"• Mensagens para próximo rank: ~{xp_needed // XP_PER_MESSAGE:,}\n"
-        f"• Posição no servidor: #{await get_user_position(target.id, ctx.guild.id)}",
+        f"""**🏆 Rank Atual:** {current_rank['name']} (#{current_rank_id})
+**⭐ Level:** {level}
+**💫 XP Total:** {xp:,}
+
+**📊 Progresso para próximo rank:**
+{progress_bar} {progress:.1f}%
+**{next_rank['emoji']} Próximo:** {next_rank['name']}
+**💪 XP Necessário:** {xp_needed:,}
+
+**🎯 Estatísticas:**
+• Mensagens para próximo rank: ~{xp_needed // XP_PER_MESSAGE:,}
+• Posição no servidor: #{await get_user_position(target.id, ctx.guild.id)}""",
         color=current_rank["color"]
     )
 
@@ -3305,7 +3263,7 @@ async def depositar(ctx, amount: int):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, bank = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET coins = ?, bank = ? WHERE user_id = ?', 
                           (coins - amount, bank + amount, ctx.author.id))
             conn.commit()
             conn.close()
@@ -3353,7 +3311,7 @@ async def sacar(ctx, amount: int):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, bank = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET coins = ?, bank = ? WHERE user_id = ?', 
                           (coins + amount, bank - amount, ctx.author.id))
             conn.commit()
             conn.close()
@@ -3678,28 +3636,28 @@ async def leaderboard(ctx, tipo='xp'):
 
             if tipo.lower() in ['xp', 'rank', 'nivel']:
                 cursor.execute('''
-                    SELECT user_id, xp, level FROM users
+                    SELECT user_id, xp, level FROM users 
                     ORDER BY xp DESC LIMIT 15
                 ''')
                 title = "🏆 Top XP/Rank do Servidor"
                 field_name = "Ranking por XP"
             elif tipo.lower() in ['coins', 'money', 'dinheiro']:
                 cursor.execute('''
-                    SELECT user_id, coins, bank FROM users
+                    SELECT user_id, coins, bank FROM users 
                     ORDER BY (coins + bank) DESC LIMIT 15
                 ''')
                 title = "💰 Top Economia do Servidor"
                 field_name = "Ranking por Dinheiro"
             elif tipo.lower() in ['rep', 'reputacao']:
                 cursor.execute('''
-                    SELECT user_id, reputation FROM users
+                    SELECT user_id, reputation FROM users 
                     ORDER BY reputation DESC LIMIT 15
                 ''')
                 title = "⭐ Top Reputação do Servidor"
                 field_name = "Ranking por Reputação"
             else:
                 cursor.execute('''
-                    SELECT user_id, xp, level FROM users
+                    SELECT user_id, xp, level FROM users 
                     ORDER BY xp DESC LIMIT 15
                 ''')
                 title = "🏆 Top XP/Rank do Servidor"
@@ -3747,7 +3705,7 @@ async def leaderboard(ctx, tipo='xp'):
         if leaderboard_text:
             embed.add_field(name=field_name, value=leaderboard_text[:1024], inline=False)
 
-        embed.set_footer(text=f"Use RXleaderboard xp/coins/rep • Posição de {ctx.author.display_name}: #{await get_user_position(ctx.author.id, ctx.guild.id)}")
+        embed.set_footer(text=f"Use: RXleaderboard xp/coins/rep • Posição de {ctx.author.display_name}: #{await get_user_position(ctx.author.id, ctx.guild.id)}")
         await ctx.send(embed=embed)
 
     except Exception as e:
@@ -3907,7 +3865,7 @@ async def list_giveaways(ctx):
         )
 
         for giveaway in giveaways[:5]:
-            title, prize, end_time_str, winners_count, participants_json = giveaway
+            title, prize, end_time_str, winners_count, participants_json, _ = giveaway  # Ignorar status e created_at
             participants = json.loads(participants_json) if participants_json else []
 
             embed.add_field(
@@ -4177,7 +4135,7 @@ async def loja(ctx):
 
     raridade_cores = {
         "Comum": "⚪",
-        "Incomum": "🟢",
+        "Incomum": "🟢", 
         "Raro": "🔵",
         "Épico": "🟣",
         "Lendário": "🟡"
@@ -4385,7 +4343,7 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
     if str(item_id) not in sender_inventory or sender_inventory[str(item_id)] < quantidade:
         item_name = LOJA_ITENS[item_id]['nome']
         embed = create_embed(
-            "❌ Item insuficiente",
+            "❌ Item insuficiente", 
             f"Você não tem {quantidade}x **{item_name}** suficientes!\n"
             f"Você tem apenas: {sender_inventory.get(str(item_id), 0)}",
             color=0xff0000
@@ -4421,9 +4379,9 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
                 receiver_inventory[str(item_id)] = quantidade
 
             # Atualizar banco de dados
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', 
                           (json.dumps(sender_inventory), ctx.author.id))
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', 
                           (json.dumps(receiver_inventory), user.id))
 
             # Registrar transações
@@ -4587,7 +4545,7 @@ async def ver_efeitos(ctx, user: discord.Member = None):
 
     # Verificar Tickets Prioritários
     priority_tickets = settings.get('priority_tickets', 0)
-    if priority_    if priority_tickets > 0:
+    if priority_tickets > 0:
         efeitos_ativos.append(f"🎫 **Tickets Prioritários:** {priority_tickets} usos disponíveis")
 
     # Verificar Habilidades Especiais
@@ -5426,7 +5384,7 @@ async def criar_evento_clan(ctx, *, dados_evento=None):
 
 **Tipos disponíveis:**
 • Battle Royale
-• Team Deathmatch
+• Team Deathmatch  
 • King of the Hill
 • Capture the Flag
 • Tournament
@@ -5639,7 +5597,7 @@ async def finalizar_evento_clan(ctx, evento_id: int, clan_vencedor: str):
 
             # Marcar como finalizado
             cursor.execute('''
-                UPDATE clan_events
+                UPDATE clan_events 
                 SET status = 'finished', winner_clan = ?
                 WHERE id = ?
             ''', (clan_vencedor, evento_id))
@@ -6002,7 +5960,7 @@ async def server_info(ctx):
 
 **👥 Membros ({guild.member_count}):**
 • 🟢 Online: {online}
-• 🟡 Ausente: {idle}
+• 🟡 Ausente: {idle}  
 • 🔴 Ocupado: {dnd}
 • ⚫ Offline: {offline}
 
@@ -6040,7 +5998,7 @@ async def user_info(ctx, user: discord.Member = None):
     # Status emoji
     status_emoji = {
         discord.Status.online: "🟢",
-        discord.Status.idle: "🟡",
+        discord.Status.idle: "🟡", 
         discord.Status.dnd: "🔴",
         discord.Status.offline: "⚫"
     }
@@ -6079,7 +6037,7 @@ async def avatar(ctx, user: discord.Member = None):
     global_stats['commands_used'] += 1
     target = user or ctx.author
 
-    avatar_url = avatar_url = target.avatar.url if target.avatar else target.default_avatar.url
+    avatar_url = target.avatar.url if target.avatar else target.default_avatar.url
 
     embed = create_embed(
         f"🖼️ Avatar de {target.display_name}",
@@ -6437,7 +6395,7 @@ if __name__ == "__main__":
                 import gc
                 gc.collect()
             else:
-                logger.error("💥 Máximo de restarts atingido. Encerrando...")
+                logger.error("💀 Máximo de restarts atingido. Encerrando...")
                 sys.exit(1)
 
     if restart_count >= max_restarts:
