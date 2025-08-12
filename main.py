@@ -1025,7 +1025,7 @@ async def update_user_data(user_id, **kwargs):
         # Check if user exists
         result = await db_manager.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
         if not result:
-            await db_manager.execute('INSERT INTO users (user_id) VALUES (?)', (user_id,))
+            await db_manager.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
 
         # Batch update fields
         updates = []
@@ -1787,7 +1787,6 @@ async def handle_coin_rain_reaction(reaction, user, message):
             break
 
 # ============ COMANDOS FALTANDO RESTAURADOS ============
-
 @bot.command(name='perfil', aliases=['profile'])
 async def perfil(ctx, user: discord.Member = None):
     """Ver perfil completo do usuário"""
@@ -2148,15 +2147,15 @@ async def teste_inventario(ctx):
         embed = create_embed(
             "🔧 Teste de Inventário",
             f"""**✅ Diagnóstico completo:**
-            
+
             **👤 Usuário ID:** {user_id}
             **💾 No banco:** {user_id_db}
             **📦 Dados do inventário:** {inventory_data or 'NULL'}
             **📝 Inventário processado:** {inventory}
             **🔢 Total de itens:** {len(inventory)}
-            
+
             **🎯 Status:** {'✅ Funcionando' if inventory_data is not None else '⚠️ Inventário vazio'}
-            
+
             **💡 Dica:** Se você comprou itens e não aparecem, use este comando para diagnosticar.""",
             color=0x00ff00 if inventory else 0xffaa00
         )
@@ -2259,20 +2258,20 @@ async def diagnostico_completo(ctx):
     embed_final = create_embed(
         "🏥 Diagnóstico Completo - Resultado",
         f"""**{status}**
-        
+
         **📊 Resumo:**
         • ✅ OK: {sucessos}
         • ⚠️ Avisos: {avisos}
         • ❌ Erros: {erros}
-        
+
         **📋 Detalhes:**
         """ + "\n".join(resultados) + f"""
-        
+
         **📈 Performance:**
         • Uptime: {format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds()))}
         • Comandos: {global_stats['commands_used']:,}
         • Mensagens: {global_stats['messages_processed']:,}
-        
+
         **🔧 Recomendações:**
         • Monitore regularmente com este comando
         • Mantenha backups atualizados
@@ -2395,15 +2394,15 @@ async def teste_completo(ctx):
     embed_final = create_embed(
         "📊 Resultado do Teste Completo",
         f"""**{status}**
-        
+
         **📈 Resumo:**
         • ✅ Sucessos: {sucesso}
         • ⚠️ Avisos: {avisos}  
         • ❌ Erros: {erros}
-        
+
         **📋 Detalhes:**
         """ + "\n".join(resultados) + f"""
-        
+
         **⏱️ Uptime:** {format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds()))}
         **💾 Comandos executados:** {global_stats['commands_used']:,}
         **📨 Mensagens processadas:** {global_stats['messages_processed']:,}""",
@@ -2430,7 +2429,7 @@ async def ping(ctx):
         f"""**Latência da API:** {api_latency}ms
         **Tempo de resposta:** {response_time}ms
         **Status:** {'🟢 Excelente' if api_latency < 100 else '🟡 Bom' if api_latency < 200 else '🔴 Lento'}
-        
+
         **Uptime:** {format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds()))}""",
         color=0x00ff00 if api_latency < 100 else 0xffaa00 if api_latency < 200 else 0xff0000
     )
@@ -2828,12 +2827,12 @@ async def clear_messages(ctx, amount: int = 10):
         f"""**⚠️ ATENÇÃO: Ação Irreversível**
 
         **Você está prestes a deletar {amount} mensagens!**
-        
+
         **📍 Canal:** {ctx.channel.mention}
         **👤 Moderador:** {ctx.author.mention}
         **📊 Quantidade:** {amount} mensagens
-        
-        **Deseja realmente continuar?**""",
+
+        **Deseja realmente continuar?""",
         color=0xff6b6b
     )
 
@@ -2868,14 +2867,14 @@ async def ban_member(ctx, member: discord.Member, *, reason="Sem motivo especifi
         f"""**🚨 AÇÃO EXTREMAMENTE GRAVE**
 
         **Você está prestes a BANIR um membro!**
-        
+
         **👤 Usuário:** {member.mention} ({member.name}#{member.discriminator})
         **🛡️ Moderador:** {ctx.author.mention}
         **📝 Motivo:** {reason}
-        
+
         **⚠️ Esta ação é IRREVERSÍVEL!**
         **Tem certeza que deseja continuar?**
-        
+
         Reaja com ✅ para confirmar ou ❌ para cancelar""",
         color=0xff0000
     )
@@ -2912,7 +2911,7 @@ async def balance(ctx, user: discord.Member = None):
         f"""**💵 Dinheiro:** {coins:,} moedas
         **🏦 Banco:** {bank:,} moedas
         **💎 Total:** {total:,} moedas
-        
+
         *Use `RXdaily` para ganhar moedas diárias!*""",
         color=0xffd700
     )
@@ -2954,7 +2953,7 @@ async def daily(ctx):
         "🎁 Recompensa Diária!",
         f"""**Recompensa:** {DAILY_REWARD:,} moedas
         **Novo saldo:** {new_coins:,} moedas
-        
+
         🔥 *Continue coletando diariamente!*""",
         color=0x00ff00
     )
@@ -3002,12 +3001,12 @@ async def user_rank(ctx, user: discord.Member = None):
         f"""**🏆 Rank Atual:** {current_rank['name']} (#{current_rank_id})
         **⭐ Level:** {level}
         **💫 XP Total:** {xp:,}
-        
+
         **📊 Progresso para próximo rank:**
         {progress_bar} {progress:.1f}%
         **{next_rank['emoji']} Próximo:** {next_rank['name']}
         **💪 XP Necessário:** {xp_needed:,}
-        
+
         **🎯 Estatísticas:**
         • Mensagens para próximo rank: ~{xp_needed // XP_PER_MESSAGE:,}
         • Posição no servidor: #{await get_user_position(target.id, ctx.guild.id)}""",
@@ -3432,7 +3431,7 @@ async def weekly(ctx):
         "🎁 Recompensa Semanal!",
         f"""**Recompensa:** {WEEKLY_REWARD:,} moedas
         **Novo saldo:** {new_coins:,} moedas
-        
+
         🔥 *Continue coletando semanalmente!*""",
         color=0x00ff00
     )
@@ -3475,7 +3474,7 @@ async def monthly(ctx):
         "🎁 Recompensa Mensal!",
         f"""**Recompensa:** {MONTHLY_REWARD:,} moedas
         **Novo saldo:** {new_coins:,} moedas
-        
+
         🔥 *Continue coletando mensalmente!*""",
         color=0x00ff00
     )
@@ -3650,7 +3649,7 @@ async def create_giveaway(ctx, *, giveaway_data=None):
             **Vencedores:** {winners_count}
             **Termina:** <t:{int(end_time.timestamp())}:R>
             **Criado por:** {ctx.author.mention}
-            
+
             Reaja com 🎉 para participar!""",
             color=0xffd700
         )
@@ -4057,7 +4056,7 @@ async def inventario(ctx, user: discord.Member = None):
 
     try:
         inventory_data = await db_manager.execute('SELECT inventory FROM users WHERE user_id = ?', (target.id,))
-        
+
         if not inventory_data:
             await update_user_data(target.id)
             embed = create_embed("📦 Inventário vazio", f"{target.display_name} ainda não tem itens!", color=0xffaa00)
@@ -4293,18 +4292,18 @@ async def sistema_troca(ctx, user: discord.Member):
         "🔄 Sistema de Troca Segura",
         f"""**Iniciando troca entre:**
         **👤 {ctx.author.mention}** ↔️ **👤 {user.mention}**
-        
+
         **📋 Como funciona:**
         1️⃣ Ambos escolhem itens para oferecer
         2️⃣ Sistema mostra a proposta completa
         3️⃣ Ambos confirmam a troca
         4️⃣ Itens são transferidos automaticamente
-        
+
         **⚠️ Regras:**
         • A troca é **irreversível** após confirmação
         • Ambos devem concordar com os termos
         • Sistema 100% seguro - sem roubos
-        
+
         **🔥 {user.mention}, você aceita negociar?**
         Reaja com ✅ para aceitar ou ❌ para recusar""",
         color=0x7289da
@@ -4411,7 +4410,7 @@ async def usar_item(ctx, item_id: int = None):
     # Buscar inventário diretamente do banco
     try:
         inventory_data = await db_manager.execute('SELECT inventory FROM users WHERE user_id = ?', (ctx.author.id,))
-        
+
         if not inventory_data:
             embed = create_embed("❌ Dados não encontrados", "Você não tem dados de usuário!", color=0xff0000)
             await ctx.send(embed=embed)
@@ -4612,10 +4611,10 @@ async def usar_item(ctx, item_id: int = None):
             # Log do uso
             logger.info(f"Item usado: {ctx.author.name} usou {item['nome']} (ID: {item_id})")
 
-    except Exception as e:
-        logger.error(f"Erro ao usar item {item_id}: {e}")
-        embed = create_embed("❌ Erro", "Erro ao usar item! Contate um administrador.", color=0xff0000)
-        await ctx.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Erro ao usar item {item_id}: {e}")
+            embed = create_embed("❌ Erro", "Erro ao usar item! Contate um administrador.", color=0xff0000)
+            await ctx.send(embed=embed)
 
 # Comando para definir título personalizado
 @bot.command(name='settitle', aliases=['definirtitulo'])
@@ -4672,1223 +4671,6 @@ async def set_custom_title(ctx, *, titulo=None):
         logger.error(f"Erro ao definir título: {e}")
         embed = create_embed("❌ Erro", "Erro ao definir título!", color=0xff0000)
         await ctx.send(embed=embed)
-
-# ============ MAIS COMANDOS FALTANDO ============
-@bot.command(name='base64', aliases=['b64'])
-async def base64_encode(ctx, *, texto=None):
-    """Converter texto para base64"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXbase64 Seu texto aqui`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        encoded = base64.b64encode(texto.encode('utf-8')).decode('utf-8')
-        embed = create_embed(
-            "🔐 Codificação Base64",
-            f"**Texto original:** {texto}\n**Base64:** `{encoded}`",
-            color=0x00ff00
-        )
-        await ctx.send(embed=embed)
-    except Exception as e:
-        embed = create_embed("❌ Erro", f"Erro ao codificar: {e}", color=0xff0000)
-        await ctx.send(embed=embed)
-
-@bot.command(name='hash', aliases=['md5'])
-async def generate_hash(ctx, *, texto=None):
-    """Gerar hash MD5 de um texto"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXhash Seu texto aqui`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        md5_hash = hashlib.md5(texto.encode('utf-8')).hexdigest()
-        sha256_hash = hashlib.sha256(texto.encode('utf-8')).hexdigest()
-
-        embed = create_embed(
-            "🔐 Hash do Texto",
-            f"**Texto:** {texto}\n**MD5:** `{md5_hash}`\n**SHA256:** `{sha256_hash[:32]}...`",
-            color=0x00ff00
-        )
-        await ctx.send(embed=embed)
-    except Exception as e:
-        embed = create_embed("❌ Erro", f"Erro ao gerar hash: {e}", color=0xff0000)
-        await ctx.send(embed=embed)
-
-@bot.command(name='bin', aliases=['binario'])
-async def text_to_binary(ctx, *, texto=None):
-    """Converter texto para binário"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXbin Seu texto aqui`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        binary = ' '.join(format(ord(char), '08b') for char in texto)
-        if len(binary) > 1900:
-            binary = binary[:1900] + "..."
-
-        embed = create_embed(
-            "🔢 Conversão para Binário",
-            f"**Texto:** {texto}\n**Binário:** `{binary}`",
-            color=0x00ff00
-        )
-        await ctx.send(embed=embed)
-    except Exception as e:
-        embed = create_embed("❌ Erro", f"Erro na conversão: {e}", color=0xff0000)
-        await ctx.send(embed=embed)
-
-@bot.command(name='hex', aliases=['hexadecimal'])
-async def text_to_hex(ctx, *, texto=None):
-    """Converter texto para hexadecimal"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXhex Seu texto aqui`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        hex_text = texto.encode('utf-8').hex()
-        embed = create_embed(
-            "🔢 Convers    "Hexadecimal",
-            f"**Texto:** {texto}\n**Hexadecimal:** `{hex_text}`",
-            color=0x00ff00
-        )
-        await ctx.send(embed=embed)
-    except Exception as e:
-        embed = create_embed("❌ Erro", f"Erro na conversão: {e}", color=0xff0000)
-        await ctx.send(embed=embed)
-
-@bot.command(name='reverse', aliases=['inverter'])
-async def reverse_text(ctx, *, texto=None):
-    """Inverter texto"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXreverse Seu texto aqui`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    reversed_text = texto[::-1]
-    embed = create_embed(
-        "🔄 Texto Invertido",
-        f"**Original:** {texto}\n**Invertido:** {reversed_text}",
-        color=0x00ff00
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='uppercase', aliases=['maiuscula'])
-async def text_uppercase(ctx, *, texto=None):
-    """Converter texto para maiúsculas"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXuppercase Seu texto aqui`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    upper_text = texto.upper()
-    embed = create_embed(
-        "🔤 TEXTO EM MAIÚSCULAS",
-        f"**Original:** {texto}\n**Maiúsculas:** {upper_text}",
-        color=0x00ff00
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='lowercase', aliases=['minuscula'])
-async def text_lowercase(ctx, *, texto=None):
-    """Converter texto para minúsculas"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXlowercase Seu texto aqui`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    lower_text = texto.lower()
-    embed = create_embed(
-        "🔤 texto em minúsculas",
-        f"**Original:** {texto}\n**Minúsculas:** {lower_text}",
-        color=0x00ff00
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='capitalize', aliases=['capitalizar'])
-async def text_capitalize(ctx, *, texto=None):
-    """Capitalizar primeira letra"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXcapitalize seu texto aqui`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    capitalized_text = texto.capitalize()
-    embed = create_embed(
-        "🔤 Texto Capitalizado",
-        f"**Original:** {texto}\n**Capitalizado:** {capitalized_text}",
-        color=0x00ff00
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='password', aliases=['senha'])
-async def generate_password(ctx, tamanho: int = 12):
-    """Gerar senha segura"""
-    if tamanho < 4 or tamanho > 50:
-        embed = create_embed("❌ Tamanho inválido", "Use entre 4 e 50 caracteres", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        characters = string.ascii_letters + string.digits + "!@#$%^&*"
-        password = ''.join(secrets.choice(characters) for _ in range(tamanho))
-
-        embed = create_embed(
-            "🔐 Senha Gerada",
-            f"**Tamanho:** {tamanho} caracteres\n**Senha:** `{password}`\n\n"
-            f"⚠️ **Guarde em local seguro!**",
-            color=0x00ff00
-        )
-
-        # Tentar enviar por DM também
-        try:
-            await ctx.author.send(embed=embed)
-            public_embed = create_embed(
-                "✅ Senha enviada!",
-                f"Sua senha de {tamanho} caracteres foi enviada por DM para segurança!",
-                color=0x00ff00
-            )
-            await ctx.send(embed=public_embed, delete_after=10)
-        except:
-            await ctx.send(embed=embed, delete_after=30)
-
-    except Exception as e:
-        embed = create_embed("❌ Erro", f"Erro ao gerar senha: {e}", color=0xff0000)
-        await ctx.send(embed=embed)
-
-@bot.command(name='qr')
-async def generate_qr(ctx, *, texto=None):
-    """Gerar QR Code"""
-    if not texto:
-        embed = create_embed("❌ Texto necessário", "Use: `RXqr Seu texto aqui`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    # Usar serviço online para QR code
-    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=400x400&data={quote(texto)}"
-
-    embed = create_embed(
-        "📱 QR Code Gerado",
-        f"**Texto:** {texto}\n[Clique aqui para ver o QR Code]({qr_url})",
-        color=0x00ff00
-    )
-    embed.set_image(url=qr_url)
-    await ctx.send(embed=embed)
-
-@bot.command(name='createtime', aliases=['tempocriacaotime'])
-async def account_creation_time(ctx, user: discord.Member = None):
-    """Data de criação da conta"""
-    target = user or ctx.author
-
-    created_timestamp = int(target.created_at.timestamp())
-
-    embed = create_embed(
-        f"📅 Criação da conta de {target.display_name}",
-        f"**Conta criada em:** <t:{created_timestamp}:F>\n"
-        f"**Há:** <t:{created_timestamp}:R>\n"
-        f"**Timestamp:** {created_timestamp}",
-        color=0x7289da
-    )
-
-    embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
-    await ctx.send(embed=embed)
-
-@bot.command(name='warn', aliases=['advertir'])
-@commands.has_permissions(manage_messages=True)
-async def warn_user(ctx, user: discord.Member, *, motivo="Sem motivo especificado"):
-    """Dar advertência a um usuário"""
-    if user == ctx.author:
-        embed = create_embed("❌ Impossível", "Você não pode se advertir!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    if user.top_role >= ctx.author.top_role:
-        embed = create_embed("❌ Sem permissão", "Você não pode advertir este usuário!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        # Buscar warns atuais
-        user_data = await get_user_data(user.id)
-        if not user_data:
-            await update_user_data(user.id)
-            current_warns = 0
-        else:
-            current_warns = user_data[15] if len(user_data) > 15 else 0
-
-        new_warns = current_warns + 1
-
-        async with db_manager._lock:
-            conn = await db_manager.get_connection()
-            cursor = conn.cursor()
-
-            # Atualizar warns
-            cursor.execute('UPDATE users SET warnings = ? WHERE user_id = ?', (new_warns, user.id))
-
-            # Registrar no log de moderação
-            await db_manager.execute('''
-                INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (ctx.guild.id, user.id, ctx.author.id, 'warn', motivo))
-
-            conn.commit()
-            conn.close()
-
-        embed = create_embed(
-            "⚠️ Advertência Aplicada",
-            f"**Usuário:** {user.mention}\n"
-            f"**Motivo:** {motivo}\n"
-            f"**Moderador:** {ctx.author.mention}\n"
-            f"**Total de warns:** {new_warns}",
-            color=0xff6600
-        )
-        await ctx.send(embed=embed)
-
-        # Notificar usuário
-        try:
-            dm_embed = create_embed(
-                "⚠️ Você recebeu uma advertência",
-                f"**Servidor:** {ctx.guild.name}\n"
-                f"**Motivo:** {motivo}\n"
-                f"**Moderador:** {ctx.author.name}\n"
-                f"**Total de advertências:** {new_warns}",
-                color=0xff6600
-            )
-            await user.send(embed=dm_embed)
-        except:
-            pass
-
-    except Exception as e:
-        logger.error(f"Erro ao aplicar warn: {e}")
-        embed = create_embed("❌ Erro", "Erro ao aplicar advertência!", color=0xff0000)
-        await ctx.send(embed=embed)
-
-@bot.command(name='warns', aliases=['warnings'])
-async def check_warns(ctx, user: discord.Member = None):
-    """Ver advertências de um usuário"""
-    target = user or ctx.author
-
-    try:
-        user_data = await get_user_data(target.id)
-        if not user_data:
-            warns = 0
-        else:
-            warns = user_data[15] if len(user_data) > 15 else 0
-
-        embed = create_embed(
-            f"⚠️ Advertências de {target.display_name}",
-            f"**Total de advertências:** {warns}\n"
-            f"**Status:** {'🔴 Muitas advertências' if warns >= 5 else '🟡 Algumas advertências' if warns >= 3 else '🟢 Poucas advertências'}",
-            color=0xff0000 if warns >= 5 else 0xff6600 if warns >= 3 else 0x00ff00
-        )
-
-        embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
-        await ctx.send(embed=embed)
-
-    except Exception as e:
-        logger.error(f"Erro ao verificar warns: {e}")
-        embed = create_embed("❌ Erro", "Erro ao verificar advertências!", color=0xff0000)
-        await ctx.send(embed=embed)
-
-@bot.command(name='kick', aliases=['expulsar'])
-@commands.has_permissions(kick_members=True)
-async def kick_member(ctx, member: discord.Member, *, reason="Sem motivo especificado"):
-    """Expulsar um membro"""
-    if member == ctx.author:
-        embed = create_embed("❌ Impossível", "Você não pode se expulsar!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    if member.top_role >= ctx.author.top_role:
-        embed = create_embed("❌ Sem permissão", "Você não pode expulsar este membro!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        # Notificar antes de expulsar
-        try:
-            dm_embed = create_embed(
-                "👢 Você foi expulso",
-                f"**Servidor:** {ctx.guild.name}\n"
-                f"**Motivo:** {reason}\n"
-                f"**Moderador:** {ctx.author.name}",
-                color=0xff6600
-            )
-            await member.send(embed=dm_embed)
-        except:
-            pass
-
-        await member.kick(reason=reason)
-
-        embed = create_embed(
-            "👢 Membro Expulso!",
-            f"**Usuário:** {member.name}#{member.discriminator}\n"
-            f"**Motivo:** {reason}\n"
-            f"**Moderador:** {ctx.author.mention}",
-            color=0xff6600
-        )
-        await ctx.send(embed=embed)
-
-        # Log da moderação
-        try:
-            await db_manager.execute('''
-                INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (ctx.guild.id, member.id, ctx.author.id, 'kick', reason))
-        except Exception as e:
-            logger.error(f"Erro ao salvar log de moderação: {e}")
-
-    except Exception as e:
-        logger.error(f"Erro ao expulsar membro: {e}")
-        embed = create_embed("❌ Erro", f"Erro ao expulsar membro: {str(e)[:100]}", color=0xff0000)
-        await ctx.send(embed=embed)
-
-# ============ COMANDOS DE ADMINISTRAÇÃO AVANÇADOS ============
-@bot.command(name='addsaldo', aliases=['addcoins', 'addmoney'])
-@commands.has_permissions(administrator=True)
-async def add_saldo(ctx, user: discord.Member, amount: int):
-    """[ADMIN] Adicionar saldo a um usuário"""
-    if amount <= 0:
-        embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        user_data = await get_user_data(user.id)
-        if not user_data:
-            await update_user_data(user.id)
-            current_coins = 50
-        else:
-            current_coins = user_data[1]
-
-        new_coins = current_coins + amount
-
-        async with db_manager._lock:
-            conn = await db_manager.get_connection()
-            cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user.id))
-
-            # Registrar transação
-            await db_manager.execute('''
-                INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (user.id, ctx.guild.id, 'admin_add', amount, f"Saldo adicionado por {ctx.author.name}"))
-
-            conn.commit()
-            conn.close()
-
-        embed = create_embed(
-            "✅ Saldo Adicionado!",
-            f"**Usuário:** {user.mention}\n"
-            f"**Valor adicionado:** {amount:,} moedas\n"
-            f"**Saldo anterior:** {current_coins:,} moedas\n"
-            f"**Novo saldo:** {new_coins:,} moedas\n"
-            f"**Administrador:** {ctx.author.mention}",
-            color=0x00ff00
-        )
-        await ctx.send(embed=embed)
-
-        # Notificar usuário
-        try:
-            dm_embed = create_embed(
-                "💰 Saldo Recebido!",
-                f"Um administrador adicionou **{amount:,} moedas** à sua conta!\n"
-                f"**Novo saldo:** {new_coins:,} moedas",
-                color=0x00ff00
-            )
-            await user.send(embed=dm_embed)
-        except:
-            pass
-
-    except Exception as e:
-        logger.error(f"Erro ao adicionar saldo: {e}")
-        embed = create_embed("❌ Erro", "Erro ao adicionar saldo!", color=0xff0000)
-        await ctx.send(embed=embed)
-
-@bot.command(name='removesaldo', aliases=['removecoins', 'removemoney'])
-@commands.has_permissions(administrator=True)
-async def remove_saldo(ctx, user: discord.Member, amount: int):
-    """[ADMIN] Remover saldo de um usuário"""
-    if amount <= 0:
-        embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        user_data = await get_user_data(user.id)
-        if not user_data:
-            embed = create_embed("❌ Usuário não encontrado", "Este usuário não está no banco de dados!", color=0xff0000)
-            await ctx.send(embed=embed)
-            return
-
-        current_coins = user_data[1]
-
-        if current_coins < amount:
-            embed = create_embed(
-                "❌ Saldo insuficiente",
-                f"{user.mention} só tem {current_coins:,} moedas!\nNão é possível remover {amount:,} moedas.",
-                color=0xff0000
-            )
-            await ctx.send(embed=embed)
-            return
-
-        new_coins = max(0, current_coins - amount)
-
-        async with db_manager._lock:
-            conn = await db_manager.get_connection()
-            cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user.id))
-
-            # Registrar transação
-            await db_manager.execute('''
-                INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (user.id, ctx.guild.id, 'admin_remove', -amount, f"Saldo removido por {ctx.author.name}"))
-
-            conn.commit()
-            conn.close()
-
-        embed = create_embed(
-            "✅ Saldo Removido!",
-            f"**Usuário:** {user.mention}\n"
-            f"**Valor removido:** {amount:,} moedas\n"
-            f"**Saldo anterior:** {current_coins:,} moedas\n"
-            f"**Novo saldo:** {new_coins:,} moedas\n"
-            f"**Administrador:** {ctx.author.mention}",
-            color=0xff6b6b
-        )
-        await ctx.send(embed=embed)
-
-    except Exception as e:
-        logger.error(f"Erro ao remover saldo: {e}")
-        embed = create_embed("❌ Erro", "Erro ao remover saldo!", color=0xff0000)
-        await ctx.send(embed=embed)
-
-# ============ SISTEMA DE EVENTOS E BATALHAS DE CLANS ============
-@bot.command(name='criareventoclan', aliases=['createclanevent'])
-@commands.has_permissions(administrator=True)
-async def criar_evento_clan(ctx, *, dados_evento=None):
-    """[ADMIN] Criar evento de batalha entre clans"""
-    if not dados_evento:
-        embed = create_embed(
-            "⚔️ Como criar evento de clan",
-            """**Formato:** `clan1 vs clan2 | tipo | aposta | duração`
-
-**Exemplo:**
-`RXcriareventoclan XCLAN vs GSN | Battle Royale | 5000 | 2h`
-
-**Tipos disponíveis:**
-• Battle Royale
-• Team Deathmatch  
-• King of the Hill
-• Capture the Flag
-• Tournament
-
-**Durações:** 30m, 1h, 2h, 6h, 12h, 1d""",
-            color=0x7289da
-        )
-        await ctx.send(embed=embed)
-        return
-
-    parts = [part.strip() for part in dados_evento.split('|')]
-    if len(parts) < 4:
-        embed = create_embed(
-            "❌ Formato incorreto",
-            "Use: `clan1 vs clan2 | tipo | aposta | duração`",
-            color=0xff0000
-        )
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        # Parsear dados
-        clans_vs = parts[0].split(' vs ')
-        if len(clans_vs) != 2:
-            embed = create_embed("❌ Formato de clans inválido", "Use: `CLAN1 vs CLAN2`", color=0xff0000)
-            await ctx.send(embed=embed)
-            return
-
-        clan1 = clans_vs[0].strip().upper()
-        clan2 = clans_vs[1].strip().upper()
-        tipo_evento = parts[1]
-        aposta = int(parts[2])
-        duracao_str = parts[3]
-
-        # Parse duração
-        time_units = {'m': 60, 'h': 3600, 'd': 86400}
-        unit = duracao_str[-1].lower()
-
-        if unit not in time_units:
-            embed = create_embed("❌ Duração inválida", "Use: m (minutos), h (horas), d (dias)", color=0xff0000)
-            await ctx.send(embed=embed)
-            return
-
-        amount = int(duracao_str[:-1])
-        seconds = amount * time_units[unit]
-        end_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-
-        # Criar embed do evento
-        embed = create_embed(
-            f"⚔️ EVENTO DE CLAN: {clan1} vs {clan2}",
-            f"""**🎮 Tipo:** {tipo_evento}
-            **💰 Aposta:** {aposta:,} moedas por participante
-            **⏰ Duração:** {duracao_str}
-            **🏁 Termina:** <t:{int(end_time.timestamp())}:R>
-            **👑 Criado por:** {ctx.author.mention}
-            
-            **📋 Como participar:**
-            Membros dos clans {clan1} e {clan2} podem reagir com:
-            ⚔️ - Para participar da batalha
-            🏆 - Para apostar no seu clan
-            
-            **⚠️ Regras:**
-            • Apenas membros dos clans podem participar
-            • Aposta é obrigatória para participar
-            • Resultado será decidido por votação ou admin
-            • Prêmio vai para o clan vencedor""",
-            color=0xff6600
-        )
-
-        evento_msg = await ctx.send(embed=embed)
-        await evento_msg.add_reaction("⚔️")
-        await evento_msg.add_reaction("🏆")
-
-        # Salvar evento no banco
-        try:
-            await db_manager.execute('''
-                INSERT INTO clan_events (guild_id, creator_id, clan1, clan2, event_type, bet_amount, end_time, message_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (ctx.guild.id, ctx.author.id, clan1, clan2, tipo_evento, aposta, end_time, evento_msg.id))
-
-            logger.info(f"Evento de clan criado: {clan1} vs {clan2}")
-
-        except Exception as e:
-            logger.error(f"Erro ao salvar evento de clan: {e}")
-
-    except ValueError:
-        embed = create_embed("❌ Valores inválidos", "Verificar aposta (número) e duração!", color=0xff0000)
-        await ctx.send(embed=embed)
-
-@bot.command(name='eventosclan', aliases=['clanevents'])
-async def listar_eventos_clan(ctx):
-    """Ver eventos de clan ativos"""
-    try:
-        eventos = await db_manager.execute('''
-            SELECT clan1, clan2, event_type, bet_amount, participants, end_time
-            FROM clan_events
-            WHERE guild_id = ? AND status = 'active'
-            ORDER BY end_time
-        ''', (ctx.guild.id,))
-
-        if not eventos:
-            embed = create_embed(
-                "⚔️ Nenhum evento ativo",
-                "Não há eventos de clan ativos no momento.\nAdministradores podem criar com `RXcriareventoclan`",
-                color=0xffaa00
-            )
-            await ctx.send(embed=embed)
-            return
-
-        embed = create_embed(
-            "⚔️ Eventos de Clan Ativos",
-            f"Encontrados {len(eventos)} evento(s) ativo(s):",
-            color=0xff6600
-        )
-
-        for evento in eventos[:5]:
-            clan1, clan2, event_type, bet_amount, participants_json, end_time_str = evento
-            participants = json.loads(participants_json) if participants_json else []
-
-            embed.add_field(
-                name=f"⚔️ {clan1} vs {clan2}",
-                value=f"**🎮 Tipo:** {event_type}\n"
-                      f"**💰 Aposta:** {bet_amount:,} moedas\n"
-                      f"**👥 Participantes:** {len(participants)}\n"
-                      f"**⏰ Termina:** <t:{int(datetime.datetime.fromisoformat(end_time_str).timestamp())}:R>",
-                inline=False
-            )
-
-        await ctx.send(embed=embed)
-
-    except Exception as e:
-        logger.error(f"Erro ao listar eventos de clan: {e}")
-
-@bot.command(name='finalizareventoclan', aliases=['endclanevent'])
-@commands.has_permissions(administrator=True)
-async def finalizar_evento_clan(ctx, evento_id: int, clan_vencedor: str):
-    """[ADMIN] Finalizar evento de clan"""
-    try:
-        evento = await db_manager.execute('''
-            SELECT clan1, clan2, bet_amount, participants, bets, message_id
-            FROM clan_events
-            WHERE id = ? AND guild_id = ? AND status = 'active'
-        ''', (evento_id, ctx.guild.id))
-
-        if not evento:
-            embed = create_embed("❌ Evento não encontrado", "Evento não existe ou já foi finalizado!", color=0xff0000)
-            await ctx.send(embed=embed)
-            return
-
-        clan1, clan2, bet_amount, participants_json, bets_json, message_id = evento[0]
-        clan_vencedor = clan_vencedor.upper()
-
-        if clan_vencedor not in [clan1, clan2]:
-            embed = create_embed("❌ Clan inválido", f"Use {clan1} ou {clan2}", color=0xff0000)
-            await ctx.send(embed=embed)
-            return
-
-        participants = json.loads(participants_json) if participants_json else []
-        bets = json.loads(bets_json) if bets_json else {}
-
-        # Calcular prêmios
-        vencedores = [p for p in participants if bets.get(str(p), {}).get('clan') == clan_vencedor]
-        premio_total = len(participants) * bet_amount
-        premio_individual = premio_total // len(vencedores) if vencedores else 0
-
-        # Distribuir prêmios
-        for user_id in vencedores:
-            user_data = await get_user_data(user_id)
-            if user_data:
-                new_coins = user_data[1] + premio_individual + bet_amount  # Devolver aposta + prêmio
-                await db_manager.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user_id))
-
-        # Marcar como finalizado
-        await db_manager.execute('''
-            UPDATE clan_events 
-            SET status = 'finished', winner_clan = ?
-            WHERE id = ?
-        ''', (clan_vencedor, evento_id))
-
-        embed = create_embed(
-            f"🏆 {clan_vencedor} VENCEU!",
-            f"**Evento #{evento_id} finalizado!**\n\n"
-            f"**Clan Vencedor:** {clan_vencedor}\n"
-            f"**Vencedores:** {len(vencedores)} participantes\n"
-            f"**Prêmio individual:** {premio_individual:,} moedas\n"
-            f"**Total distribuído:** {premio_total:,} moedas\n"
-            f"**Finalizado por:** {ctx.author.mention}",
-            color=0xffd700
-        )
-        await ctx.send(embed=embed)
-
-    except Exception as e:
-        logger.error(f"Erro ao finalizar evento: {e}")
-        embed = create_embed("❌ Erro", "Erro ao finalizar evento!", color=0xff0000)
-        await ctx.send(embed=embed)
-
-# ============ SISTEMA DE MONITORAMENTO ============
-@bot.command(name='performance', aliases=['perf', 'monitor'])
-@commands.has_permissions(administrator=True)
-async def performance_monitor(ctx):
-    """[ADMIN] Monitor de performance do sistema"""
-    try:
-        if psutil is None:
-            embed = create_embed(
-                "⚠️ Psutil não disponível",
-                "Módulo psutil não está instalado. Mostrando informações básicas.",
-                color=0xffaa00
-            )
-            await ctx.send(embed=embed)
-            return
-
-        # Informações do sistema
-        memory = psutil.virtual_memory()
-        disk = psutil.disk_usage('/')
-        cpu_percent = psutil.cpu_percent()
-
-        # Informações do processo do bot
-        process = psutil.Process()
-        bot_memory = process.memory_info().rss / 1024 / 1024  # MB
-        bot_cpu = process.cpu_percent()
-
-        # Calcular uptime
-        uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
-
-        embed = create_embed(
-            "📊 Monitor de Performance",
-            f"""**💻 Sistema:**
-            • **CPU:** {cpu_percent}%
-            • **RAM:** {memory.percent}% ({memory.used // 1024 // 1024} MB / {memory.total // 1024 // 1024} MB)
-            • **Disco:** {disk.percent}% ({disk.used // 1024 // 1024 // 1024} GB / {disk.total // 1024 // 1024 // 1024} GB)
-
-            **🤖 Bot RX:**
-            • **Uso RAM:** {bot_memory:.1f} MB
-            • **Uso CPU:** {bot_cpu}%
-            • **Uptime:** {format_time(uptime_seconds)}
-            • **Latência:** {round(bot.latency * 1000, 2)}ms
-
-            **📈 Estatísticas:**
-            • **Servidores:** {len(bot.guilds):,}
-            • **Usuários:** {len(set(bot.get_all_members())):,}
-            • **Comandos/hora:** {global_stats['commands_used'] * 3600 // max(uptime_seconds, 1):,}
-            • **Msgs/minuto:** {global_stats['messages_processed'] * 60 // max(uptime_seconds, 1):,}
-
-            **🔄 Keep-alive:**
-            • Auto-ping: ✅ A cada 60s
-            • External: ✅ A cada 4min
-            • Heartbeat: ✅ A cada 3min""",
-            color=0x00ff00 if cpu_percent < 70 and memory.percent < 80 else 0xffaa00 if cpu_percent < 90 else 0xff0000
-        )
-
-        await ctx.send(embed=embed)
-
-    except ImportError:
-        embed = create_embed(
-            "⚠️ Psutil não disponível",
-            "Instale psutil para monitoramento completo:\n`pip install psutil`",
-            color=0xffaa00
-        )
-        await ctx.send(embed=embed)
-    except Exception as e:
-        embed = create_embed("❌ Erro", f"Erro ao obter dados: {e}", color=0xff0000)
-        await ctx.send(embed=embed)
-
-# ============ JOGOS E DIVERSÃO ============
-@bot.command(name='jokenpo', aliases=['pedrapapeltesoura'])
-async def jokenpo(ctx, escolha=None):
-    """Joga pedra, papel ou tesoura"""
-    if not escolha:
-        embed = create_embed("❌ Escolha necessária", "Use: `RXjokenpo pedra|papel|tesoura`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    escolhas = ['pedra', 'papel', 'tesoura']
-    emojis = {'pedra': '🪨', 'papel': '📄', 'tesoura': '✂️'}
-
-    escolha = escolha.lower()
-    if escolha not in escolhas:
-        embed = create_embed("❌ Escolha inválida", "Use: pedra, papel ou tesoura", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    bot_escolha = random.choice(escolhas)
-
-    if escolha == bot_escolha:
-        resultado = "Empate!"
-        color = 0xffaa00
-    elif (escolha == 'pedra' and bot_escolha == 'tesoura') or \
-         (escolha == 'papel' and bot_escolha == 'pedra') or \
-         (escolha == 'tesoura' and bot_escolha == 'papel'):
-        resultado = "Você ganhou! 🎉"
-        color = 0x00ff00
-    else:
-        resultado = "Você perdeu! 😢"
-        color = 0xff0000
-
-    embed = create_embed(
-        "🎮 Jokenpô",
-        f"**Você:** {emojis[escolha]} {escolha.capitalize()}\n"
-        f"**Bot:** {emojis[bot_escolha]} {bot_escolha.capitalize()}\n\n"
-        f"**Resultado:** {resultado}",
-        color=color
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='dado', aliases=['dice'])
-async def dice(ctx, lados: int = 6):
-    """Rola um dado"""
-    if lados < 2 or lados > 100:
-        embed = create_embed("❌ Número inválido", "Use entre 2 e 100 lados", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    resultado = random.randint(1, lados)
-    embed = create_embed(
-        f"🎲 Dado de {lados} lados",
-        f"**Resultado:** {resultado}",
-        color=0x7289da
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='moeda', aliases=['coin'])
-async def coin_flip(ctx):
-    """Cara ou coroa"""
-    resultado = random.choice(['Cara', 'Coroa'])
-    emoji = '🪙' if resultado == 'Cara' else '🥇'
-
-    embed = create_embed(
-        "🪙 Cara ou Coroa",
-        f"**Resultado:** {emoji} {resultado}!",
-        color=0xffd700
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='piada', aliases=['joke'])
-async def piada(ctx):
-    """Conta uma piada"""
-    piadas = [
-        "Por que os pássaros voam para o sul no inverno? Porque é longe demais para ir andando!",
-        "O que a impressora falou para a outra impressora? Essa folha é sua ou é impressão minha?",
-        "Por que o livro de matemática estava triste? Porque tinha muitos problemas!",
-        "O que o pato disse para a pata? Vem quá!",
-        "Por que os programadores preferem dark mode? Porque light atrai bugs!"
-    ]
-
-    piada = random.choice(piadas)
-    embed = create_embed("😂 Piada do RXbot", piada, color=0xffaa00)
-    await ctx.send(embed=embed)
-
-@bot.command(name='enquete', aliases=['poll'])
-async def poll(ctx, *, pergunta=None):
-    """Cria uma enquete"""
-    if not pergunta:
-        embed = create_embed("❌ Pergunta necessária", "Use: `RXenquete Gostam do bot?`", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    embed = create_embed("📊 Enquete", pergunta, color=0x7289da)
-    message = await ctx.send(embed=embed)
-
-    await message.add_reaction("👍")
-    await message.add_reaction("👎")
-    await message.add_reaction("🤷")
-
-@bot.command(name='lembrete', aliases=['reminder', 'lembrar'])
-async def create_reminder(ctx, tempo=None, *, texto=None):
-    """Criar um lembrete"""
-    if not tempo or not texto:
-        embed = create_embed(
-            "⏰ Como usar lembretes",
-            """**Formato:** `RXlembrete <tempo> <texto>`
-
-**Exemplos:**
-• `RXlembrete 30m Verificar email`
-• `RXlembrete 2h Reunião importante`
-• `RXlembrete 1d Aniversário do João`
-
-**Tempos aceitos:** m (minutos), h (horas), d (dias)""",
-            color=0x7289da
-        )
-        await ctx.send(embed=embed)
-        return
-
-    # Parse tempo
-    time_units = {'m': 60, 'h': 3600, 'd': 86400}
-    unit = tempo[-1].lower()
-
-    if unit not in time_units:
-        embed = create_embed("❌ Tempo inválido", "Use: m (minutos), h (horas), d (dias)", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    try:
-        amount = int(tempo[:-1])
-        seconds = amount * time_units[unit]
-        remind_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-
-        # Salvar no banco
-        await db_manager.execute('''
-            INSERT INTO reminders (user_id, guild_id, channel_id, reminder_text, remind_time)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (ctx.author.id, ctx.guild.id, ctx.channel.id, texto, remind_time))
-
-        embed = create_embed(
-            "✅ Lembrete Criado!",
-            f"**Texto:** {texto}\n"
-            f"**Quando:** <t:{int(remind_time.timestamp())}:F>\n"
-            f"**Em:** <t:{int(remind_time.timestamp())}:R>",
-            color=0x00ff00
-        )
-        await ctx.send(embed=embed)
-
-    except ValueError:
-        embed = create_embed("❌ Número inválido", "Use números válidos: 30m, 2h, 1d", color=0xff0000)
-        await ctx.send(embed=embed)
-
-@bot.command(name='status', aliases=['sistema'])
-async def sistema_status(ctx):
-    """Status completo do sistema"""
-    global_stats['commands_used'] += 1
-
-    uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
-
-    embed = create_embed(
-        "🔧 Status do Sistema RXbot",
-        f"""**⚡ Sistema Principal:**
-        • Status: 🟢 Online e Estável
-        • Uptime: {format_time(uptime_seconds)}
-        • Latência: {round(bot.latency * 1000, 2)}ms
-
-        **💡 Sistema Otimizado:**
-        • Removidos sistemas de keep-alive 24/7
-        • Sem anti-hibernação automática
-        • Economia de recursos no Railway
-
-        **📊 Estatísticas:**
-        • Servidores: {len(bot.guilds)}
-        • Usuários: {len(set(bot.get_all_members()))}
-        • Comandos executados: {global_stats['commands_used']:,}
-        • Mensagens processadas: {global_stats['messages_processed']:,}
-
-        **🔋 Economia de Recursos:**
-        • Bot só consome quando ativo
-        • Sem sistemas de monitoramento 24/7
-        • Redução significativa no uso do Railway""",
-        color=0x00ff00
-    )
-
-    await ctx.send(embed=embed)
-
-@bot.command(name='uptime')
-async def uptime(ctx):
-    """Mostra o tempo que o bot está online"""
-    global_stats['commands_used'] += 1
-
-    uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
-
-    embed = create_embed(
-        "⏱️ Uptime do RXbot",
-        f"""**⏰ Tempo online:** {format_time(uptime_seconds)}
-        **🚀 Iniciado em:** <t:{int(global_stats['uptime_start'].timestamp())}:F>
-        **💬 Status:** 🟢 Online e estável
-        **💬 Comandos executados:** {global_stats['commands_used']:,}
-        **📨 Mensagens processadas:** {global_stats['messages_processed']:,}
-        
-        **💡 Otimizado para Railway:**
-        • Sem sistemas de keep-alive 24/7
-        • Economia de recursos ativa
-        • Backup automático (6h)""",
-        color=0x00ff00
-    )
-
-    await ctx.send(embed=embed)
-
-@bot.command(name='stats', aliases=['estatisticas'])
-async def bot_stats(ctx):
-    """Estatísticas completas do bot"""
-    global_stats['commands_used'] += 1
-
-    uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
-
-    # Contar usuários únicos
-    unique_users = len(set(bot.get_all_members()))
-
-    embed = create_embed(
-        f"📊 Estatísticas do RXbot",
-        f"""**🤖 Bot Info:**
-        • **Nome:** {bot.user.name}#{bot.user.discriminator}
-        • **ID:** {bot.user.id}
-        • **Uptime:** {format_time(uptime_seconds)}
-
-        **📈 Números:**
-        • **Servidores:** {len(bot.guilds):,}
-        • **Usuários únicos:** {unique_users:,}
-        • **Canais totais:** {len(list(bot.get_all_channels())):,}
-        • **Comandos executados:** {global_stats['commands_used']:,}
-        • **Mensagens processadas:** {global_stats['messages_processed']:,}
-
-        **🌐 Sistema:**
-        • **Latência:** {round(bot.latency * 1000, 2)}ms
-        • **Python:** {platform.python_version()}
-        • **Discord.py:** {discord.__version__}
-        • **Plataforma:** {platform.system()} {platform.release()}""",
-        color=0x7289da
-    )
-
-    await ctx.send(embed=embed)
-
-@bot.command(name='serverinfo', aliases=['infoserver'])
-async def server_info(ctx):
-    """Informações do servidor"""
-    global_stats['commands_used'] += 1
-    guild = ctx.guild
-
-    # Contar membros por status
-    online = len([m for m in guild.members if m.status == discord.Status.online])
-    idle = len([m for m in guild.members if m.status == discord.Status.idle])
-    dnd = len([m for m in guild.members if m.status == discord.Status.dnd])
-    offline = len([m for m in guild.members if m.status == discord.Status.offline])
-
-    embed = create_embed(
-        f"📋 Informações - {guild.name}",
-        f"""**🏠 Servidor:**
-        • **Nome:** {guild.name}
-        • **ID:** {guild.id}
-        • **Criado:** <t:{int(guild.created_at.timestamp())}:F>
-        • **Dono:** {guild.owner.mention if guild.owner else 'Desconhecido'}
-
-        **👥 Membros ({guild.member_count}):**
-        • 🟢 Online: {online}
-        • 🟡 Ausente: {idle}  
-        • 🔴 Ocupado: {dnd}
-        • ⚫ Offline: {offline}
-
-        **📊 Canais ({len(guild.channels)}):**
-        • 💬 Texto: {len(guild.text_channels)}
-        • 🔊 Voz: {len(guild.voice_channels)}
-        • 📁 Categorias: {len(guild.categories)}
-
-        **🎭 Outros:**
-        • **Cargos:** {len(guild.roles)}
-        • **Emojis:** {len(guild.emojis)}
-        • **Boost:** Nível {guild.premium_tier} ({guild.premium_subscription_count} boosts)""",
-        color=0x7289da
-    )
-
-    if guild.icon:
-        embed.set_thumbnail(url=guild.icon.url)
-
-    await ctx.send(embed=embed)
-
-@bot.command(name='userinfo', aliases=['uinfo'])
-async def user_info(ctx, user: discord.Member = None):
-    """Informações detalhadas do usuário"""
-    global_stats['commands_used'] += 1
-    target = user or ctx.author
-
-    # Buscar dados do usuário no banco
-    user_data = await get_user_data(target.id)
-    if user_data:
-        coins, xp, level, rep, bank = user_data[1], user_data[2], user_data[3], user_data[4], user_data[5]
-        warnings = user_data[15]
-    else:
-        coins, xp, level, rep, bank, warnings = 0, 0, 1, 0, 0, 0
-
-    # Status emoji
-    status_emoji = {
-        discord.Status.online: "🟢",
-        discord.Status.idle: "🟡", 
-        discord.Status.dnd: "🔴",
-        discord.Status.offline: "⚫"
-    }
-
-    embed = create_embed(
-        f"👤 {target.display_name}",
-        f"""**📋 Informações Básicas:**
-        • **Nome:** {target.name}#{target.discriminator}
-        • **ID:** {target.id}
-        • **Status:** {status_emoji.get(target.status, '❓')} {target.status.name.title()}
-        • **Criado:** <t:{int(target.created_at.timestamp())}:R>
-        • **Entrou:** <t:{int(target.joined_at.timestamp())}:R>
-
-        **🎮 Gaming:**
-        • **Level:** {level}
-        • **XP:** {xp:,}
-        • **Reputação:** {rep}
-
-        **💰 Economia:**
-        • **Carteira:** {coins:,} moedas
-        • **Banco:** {bank:,} moedas
-        • **Total:** {coins + bank:,} moedas
-
-        **⚖️ Moderação:**
-        • **Advertências:** {warnings}
-        • **Cargo mais alto:** {target.top_role.name}""",
-        color=target.color if target.color != discord.Color.default() else 0x7289da
-    )
-
-    embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
-    await ctx.send(embed=embed)
-
-@bot.command(name='avatar', aliases=['av'])
-async def avatar(ctx, user: discord.Member = None):
-    """Mostra o avatar do usuário em alta resolução"""
-    global_stats['commands_used'] += 1
-    target = user or ctx.author
-
-    avatar_url = target.avatar.url if target.avatar else target.default_avatar.url
-
-    embed = create_embed(
-        f"🖼️ Avatar de {target.display_name}",
-        f"[Clique aqui para ver em alta resolução]({avatar_url}?size=1024)",
-        color=target.color if target.color != discord.Color.default() else 0x7289da
-    )
-
-    embed.set_image(url=f"{avatar_url}?size=512")
-    await ctx.send(embed=embed)
-
-# Error handling MELHORADO com auto-recuperação
-@bot.event
-async def on_command_error(ctx, error):
-    try:
-        if isinstance(error, commands.CommandNotFound):
-            command_name = ctx.message.content.split()[0][2:].lower()
-            similar_commands = ['ping', 'ajuda', 'saldo', 'rank', 'daily']
-            suggestion = None
-
-            for cmd in similar_commands:
-                if command_name in cmd or cmd in command_name:
-                    suggestion = cmd
-                    break
-
-            if suggestion:
-                embed = create_embed(
-                    "❓ Comando não encontrado",
-                    f"Você quis dizer `RX{suggestion}`?\nUse `RXajuda` para ver todos os comandos.",
-                    color=0xffaa00
-                )
-                await ctx.send(embed=embed, delete_after=8)
-            return
-
-        elif isinstance(error, commands.MissingRequiredArgument):
-            embed = create_embed(
-                "❌ Argumento obrigatório",
-                f"Você esqueceu de fornecer: `{error.param.name}`\n"
-                f"Use `RXajuda` para ver os comandos.",
-                color=0xff0000
-            )
-            await ctx.send(embed=embed, delete_after=10)
-
-        elif isinstance(error, commands.MissingPermissions):
-            embed = create_embed(
-                "❌ Sem permissão",
-                "Você não tem permissão para executar este comando!",
-                color=0xff0000
-            )
-            await ctx.send(embed=embed, delete_after=8)
-
-        elif isinstance(error, commands.BotMissingPermissions):
-            embed = create_embed(
-                "❌ Bot sem permissão",
-                f"Eu preciso das seguintes permissões: {', '.join(error.missing_permissions)}",
-                color=0xff0000
-            )
-            await ctx.send(embed=embed, delete_after=10)
-
-        elif isinstance(error, commands.CommandOnCooldown):
-            embed = create_embed(
-                "⏰ Comando em cooldown",
-                f"Aguarde {error.retry_after:.1f} segundos para usar novamente.",
-                color=0xff6b6b
-            )
-            await ctx.send(embed=embed, delete_after=5)
-
-        elif isinstance(error, (discord.HTTPException, aiohttp.ClientError)):
-            logger.warning(f"Erro HTTP/Network (não crítico): {error}")
-            # NÃO reiniciar o bot, apenas avisar
-            try:
-                channel = bot.get_channel(CHANNEL_ID_ALERTA)
-                if channel:
-                    embed = create_embed(
-                        "⚠️ Problema de Rede",
-                        f"Erro de conectividade detectado mas bot continua funcionando: {str(error)[:100]}",
-                        color=0xffaa00
-                    )
-                    await channel.send(embed=embed)
-            except:
-                pass
-
-        else:
-            logger.error(f"Erro inesperado no comando {ctx.command}: {error}")
-
-            try:
-                embed = create_embed(
-                    "❌ Erro interno",
-                    "Ocorreu um erro interno. A equipe foi notificada.",
-                    color=0xff0000
-                )
-                await ctx.send(embed=embed, delete_after=8)
-            except:
-                pass
-
-    except Exception as handler_error:
-        logger.error(f"Erro no error handler: {handler_error}")
-        try:
-            await ctx.send("❌ Erro interno do bot.", delete_after=5)
-        except:
-            pass
 
 # ============ MAIS COMANDOS FALTANDO ============
 @bot.command(name='base64', aliases=['b64'])
@@ -6454,12 +5236,12 @@ async def criar_evento_clan(ctx, *, dados_evento=None):
             **⏰ Duração:** {duracao_str}
             **🏁 Termina:** <t:{int(end_time.timestamp())}:R>
             **👑 Criado por:** {ctx.author.mention}
-            
+
             **📋 Como participar:**
             Membros dos clans {clan1} e {clan2} podem reagir com:
             ⚔️ - Para participar da batalha
             🏆 - Para apostar no seu clan
-            
+
             **⚠️ Regras:**
             • Apenas membros dos clans podem participar
             • Aposta é obrigatória para participar
@@ -6862,7 +5644,7 @@ async def uptime(ctx):
         **💬 Status:** 🟢 Online e estável
         **💬 Comandos executados:** {global_stats['commands_used']:,}
         **📨 Mensagens processadas:** {global_stats['messages_processed']:,}
-        
+
         **💡 Otimizado para Railway:**
         • Sem sistemas de keep-alive 24/7
         • Economia de recursos ativa
@@ -7102,6 +5884,10 @@ async def on_command_error(ctx, error):
 
     except Exception as handler_error:
         logger.error(f"Erro no error handler: {handler_error}")
+        try:
+            await ctx.send("❌ Erro interno do bot.", delete_after=5)
+        except:
+            pass
 
 # If __name__ == "__main__": block
 if __name__ == "__main__":
