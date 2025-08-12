@@ -168,8 +168,12 @@ async def close_http_session():
     """Fechar sessão HTTP adequadamente"""
     global http_session
     if http_session and not http_session.closed:
-        await http_session.close()
-        http_session = None
+        try:
+            await http_session.close()
+            http_session = None
+        except Exception as e:
+            logger.warning(f"⚠️ Sessão HTTP não pôde ser fechada normalmente: {e}")
+            http_session = None  # Marcar como None mesmo com erro
 
 # Database connection pool to avoid locking issues
 import threading
@@ -954,23 +958,13 @@ async def on_ready():
 async def on_disconnect():
     logger.error("🚨 BOT DESCONECTADO DO DISCORD!")
 
-    # Fechar qualquer sessão aiohttp aberta para evitar aviso do Railway
-    try:
-        import aiohttp
-        for obj in list(globals().values()):
-            if isinstance(obj, aiohttp.ClientSession) and not obj.closed:
-                await obj.close()
-                logger.info("✅ Sessão aiohttp fechada com sucesso")
-    except Exception as e:
-        logger.error(f"Erro ao fechar sessão aiohttp: {e}")
-
-
-    # Fechar sessão HTTP PRIMEIRO para evitar warnings
+    # Fechar sessão HTTP - apenas avisar se houver erro
     try:
         await close_http_session()
         logger.info("✅ Sessão HTTP fechada adequadamente")
     except Exception as e:
-        logger.error(f"Erro ao fechar sessão HTTP: {e}")
+        logger.warning(f"⚠️ Aviso: Não foi possível fechar sessão HTTP: {e}")
+        logger.info("🔄 Sessão HTTP será limpa automaticamente pelo sistema")
 
     try:
         # Tentar notificar antes de perder conexão totalmente
@@ -6352,11 +6346,12 @@ async def start_bot():
     # Se chegou aqui, todas as tentativas falharam
     logger.error("🚨 Máximo de tentativas atingido. ERRO CRÍTICO!")
 
-    # Fechar sessão HTTP antes de finalizar
+    # Fechar sessão HTTP antes de finalizar - sem falhar por isso
     try:
         await close_http_session()
     except Exception as e:
-        logger.error(f"Erro ao fechar sessão HTTP: {e}")
+        logger.warning(f"⚠️ Aviso: Sessão HTTP não fechada adequadamente: {e}")
+        logger.info("🔄 Sistema continuará normalmente")
 
     # Notificar canal de alerta se possível
     try:
@@ -6378,8 +6373,11 @@ async def start_bot():
     logger.error("💀 Iniciando RESTART FORÇADO do sistema...")
 
     try:
-        # Fechar sessão HTTP primeiro
-        await close_http_session()
+        # Tentar fechar sessão HTTP - não falhar se não conseguir
+        try:
+            await close_http_session()
+        except Exception as e:
+            logger.warning(f"⚠️ Sessão HTTP não fechada no restart: {e}")
 
         # Fechar completamente o bot
         if not bot.is_closed():
