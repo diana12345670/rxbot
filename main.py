@@ -1,5 +1,6 @@
 CHANNEL_ID_ALERTA = 1402658677923774615
 CHANNEL_ID_TESTE_TIER = 1400162532055846932
+
 import discord
 from discord.ext import commands, tasks
 import asyncio
@@ -35,22 +36,14 @@ import base64
 import tempfile
 import shutil
 import hmac
+import weakref
+from contextlib import asynccontextmanager
 
-# Imports opcionais que podem não estar disponíveis
+# Imports opcionais com fallback seguro
 try:
     import psutil
 except ImportError:
     psutil = None
-
-try:
-    import xml.etree.ElementTree as ET
-except ImportError:
-    ET = None
-
-try:
-    import yaml
-except ImportError:
-    yaml = None
 
 try:
     import locale
@@ -62,69 +55,7 @@ try:
 except ImportError:
     pytz = None
 
-try:
-    import zlib
-except ImportError:
-    zlib = None
-
-try:
-    import gzip
-except ImportError:
-    gzip = None
-
-try:
-    import zipfile
-except ImportError:
-    zipfile = None
-
-
-# Sistema de monitoramento de saúde do bot
-last_heartbeat = datetime.datetime.now()
-heartbeat_interval = 300  # 5 minutos
-
-async def health_monitor():
-    """Monitor de saúde do bot"""
-    global last_heartbeat
-
-    while True:
-        try:
-            await asyncio.sleep(heartbeat_interval)
-
-            current_time = datetime.datetime.now()
-            time_since_heartbeat = (current_time - last_heartbeat).total_seconds()
-
-            if time_since_heartbeat > heartbeat_interval * 2:  # 10 minutos sem heartbeat
-                logger.warning("⚠️ Bot pode estar com problemas de conectividade")
-
-                # Tentar ping simples
-                if bot.is_ready():
-                    last_heartbeat = current_time
-                    logger.info("💓 Heartbeat restaurado")
-                else:
-                    logger.error("💔 Bot não está ready - possível problema crítico")
-
-        except Exception as e:
-            logger.error(f"Erro no monitor de saúde: {e}")
-            await asyncio.sleep(60)
-
-
-try:
-    import tarfile
-except ImportError:
-    tarfile = None
-
-try:
-    import mimetypes
-except ImportError:
-    mimetypes = None
-
-try:
-    import email.utils
-except ImportError:
-    pass
-# Sistemas de keep-alive removidos para economizar recursos no Railway
-
-# Configuração do logging avançado
+# Configuração do logging otimizada
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -154,260 +85,322 @@ bot = commands.Bot(
     strip_after_prefix=True
 )
 
-# Sessão HTTP global para evitar vazamentos
-http_session = None
+# Sistema HTTP melhorado com gerenciamento adequado
+class HTTPSessionManager:
+    def __init__(self):
+        self._session = None
+        self._lock = asyncio.Lock()
+        self._closed = False
 
-async def get_http_session():
-    """Obter sessão HTTP reutilizável"""
-    global http_session
-    if http_session is None or http_session.closed:
-        http_session = aiohttp.ClientSession()
-    return http_session
+    async def get_session(self):
+        async with self._lock:
+            if self._session is None or self._session.closed:
+                connector = aiohttp.TCPConnector(
+                    limit=100,
+                    limit_per_host=30,
+                    ttl_dns_cache=300,
+                    use_dns_cache=True,
+                    enable_cleanup_closed=True
+                )
+                timeout = aiohttp.ClientTimeout(total=30)
+                self._session = aiohttp.ClientSession(
+                    connector=connector,
+                    timeout=timeout
+                )
+                self._closed = False
+            return self._session
 
-async def close_http_session():
-    """Fechar sessão HTTP adequadamente"""
-    global http_session
-    if http_session and not http_session.closed:
-        await http_session.close()
-        http_session = None
+    async def close(self):
+        async with self._lock:
+            if self._session and not self._session.closed:
+                await self._session.close()
+                self._closed = True
+                self._session = None
 
-# Database connection pool to avoid locking issues
-import threading
-db_lock = threading.Lock()
+    async def __aenter__(self):
+        return await self.get_session()
 
-def get_db_connection():
-    """Get database connection with proper handling"""
-    return sqlite3.connect('rxbot.db', timeout=30.0, check_same_thread=False)
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        # Não fechar aqui, deixar para cleanup manual
+        pass
 
-# Database setup with proper error handling
-def init_database():
-    """Initialize database with proper error handling"""
-    with db_lock:
-        conn = None
+# Instância global do gerenciador HTTP
+http_manager = HTTPSessionManager()
+
+# Sistema de Database melhorado com locks assíncronos
+class DatabaseManager:
+    def __init__(self):
+        self._lock = asyncio.Lock()
+        self._connection_pool = {}
+        self._max_connections = 10
+
+    async def get_connection(self):
+        async with self._lock:
+            thread_id = threading.get_ident()
+            if thread_id not in self._connection_pool:
+                conn = sqlite3.connect('rxbot.db', timeout=15.0, check_same_thread=False)
+                conn.execute('PRAGMA journal_mode=WAL')
+                conn.execute('PRAGMA synchronous=NORMAL')
+                conn.execute('PRAGMA cache_size=10000')
+                conn.execute('PRAGMA temp_store=memory')
+                self._connection_pool[thread_id] = conn
+            return self._connection_pool[thread_id]
+
+    async def execute(self, query, params=None):
+        conn = await self.get_connection()
+        async with self._lock:
+            try:
+                cursor = conn.cursor()
+                if params:
+                    cursor.execute(query, params)
+                else:
+                    cursor.execute(query)
+                conn.commit()
+                return cursor.fetchall()
+            except Exception as e:
+                conn.rollback()
+                raise e
+
+    async def close_all(self):
+        async with self._lock:
+            for conn in self._connection_pool.values():
+                try:
+                    conn.close()
+                except:
+                    pass
+            self._connection_pool.clear()
+
+# Instância global do gerenciador de banco
+db_manager = DatabaseManager()
+
+# Sistema de monitoramento de saúde do bot
+last_heartbeat = datetime.datetime.now()
+heartbeat_interval = 300  # 5 minutos
+
+async def health_monitor():
+    """Monitor de saúde do bot otimizado"""
+    global last_heartbeat
+
+    while not bot.is_closed():
         try:
-            conn = get_db_connection()
-            cursor = conn.cursor()
+            await asyncio.sleep(heartbeat_interval)
 
-            # Tabela de tickets
-            cursor.execute('''CREATE TABLE IF NOT EXISTS tickets (
-                ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                creator_id INTEGER,
-                channel_id INTEGER,
-                status TEXT DEFAULT 'open',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                closed_by INTEGER,
-                reason TEXT
-            )''')
+            current_time = datetime.datetime.now()
+            time_since_heartbeat = (current_time - last_heartbeat).total_seconds()
 
-            # User economy and stats
-            cursor.execute('''CREATE TABLE IF NOT EXISTS users (
-                user_id INTEGER PRIMARY KEY,
-                coins INTEGER DEFAULT 50,
-                xp INTEGER DEFAULT 0,
-                level INTEGER DEFAULT 1,
-                reputation INTEGER DEFAULT 0,
-                bank INTEGER DEFAULT 0,
-                last_daily DATE,
-                last_weekly DATE,
-                last_monthly DATE,
-                inventory TEXT DEFAULT '{}',
-                achievements TEXT DEFAULT '[]',
-                settings TEXT DEFAULT '{}',
-                join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                total_messages INTEGER DEFAULT 0,
-                voice_time INTEGER DEFAULT 0,
-                warnings INTEGER DEFAULT 0
-            )''')
+            if time_since_heartbeat > heartbeat_interval * 2:
+                logger.warning("⚠️ Bot pode estar com problemas de conectividade")
 
-            # Guild settings
-            cursor.execute('''CREATE TABLE IF NOT EXISTS guilds (
-                guild_id INTEGER PRIMARY KEY,
-                name TEXT,
-                prefix TEXT DEFAULT 'RX',
-                welcome_channel INTEGER,
-                goodbye_channel INTEGER,
-                log_channel INTEGER,
-                mute_role INTEGER,
-                auto_role INTEGER,
-                settings TEXT DEFAULT '{}',
-                economy_settings TEXT DEFAULT '{}',
-                moderation_settings TEXT DEFAULT '{}'
-            )''')
-
-            # Events system
-            cursor.execute('''CREATE TABLE IF NOT EXISTS events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                creator_id INTEGER,
-                title TEXT,
-                description TEXT,
-                start_time TIMESTAMP,
-                end_time TIMESTAMP,
-                max_participants INTEGER DEFAULT 0,
-                participants TEXT DEFAULT '[]',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status TEXT DEFAULT 'active'
-            )''')
-
-            # Moderation logs
-            cursor.execute('''CREATE TABLE IF NOT EXISTS moderation_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                user_id INTEGER,
-                moderator_id INTEGER,
-                action TEXT,
-                reason TEXT,
-                duration INTEGER,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-
-            # Economy transactions
-            cursor.execute('''CREATE TABLE IF NOT EXISTS transactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                guild_id INTEGER,
-                type TEXT,
-                amount INTEGER,
-                description TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-
-            # Message logs (simplified)
-            cursor.execute('''CREATE TABLE IF NOT EXISTS message_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                channel_id INTEGER,
-                user_id INTEGER,
-                message_id INTEGER,
-                content TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-
-            # Custom commands
-            cursor.execute('''CREATE TABLE IF NOT EXISTS custom_commands (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                command_name TEXT,
-                response TEXT,
-                creator_id INTEGER,
-                uses INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-
-            # Sistema de Clans
-            cursor.execute('''CREATE TABLE IF NOT EXISTS clans (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                name TEXT,
-                tag TEXT,
-                leader_id INTEGER,
-                description TEXT,
-                members TEXT DEFAULT '[]',
-                level INTEGER DEFAULT 1,
-                xp INTEGER DEFAULT 0,
-                wins INTEGER DEFAULT 0,
-                losses INTEGER DEFAULT 0,
-                treasury INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-
-            # Desafios entre Clans
-            cursor.execute('''CREATE TABLE IF NOT EXISTS clan_challenges (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                challenger_clan_id INTEGER,
-                challenged_clan_id INTEGER,
-                challenger_user_id INTEGER,
-                challenge_type TEXT,
-                bet_amount INTEGER DEFAULT 0,
-                status TEXT DEFAULT 'pending',
-                start_time TIMESTAMP,
-                end_time TIMESTAMP,
-                winner_clan_id INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-
-            # Reminders
-            cursor.execute('''CREATE TABLE IF NOT EXISTS reminders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                guild_id INTEGER,
-                channel_id INTEGER,
-                reminder_text TEXT,
-                remind_time TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-
-            # Sistema de sorteios
-            cursor.execute('''CREATE TABLE IF NOT EXISTS giveaways (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                channel_id INTEGER,
-                creator_id INTEGER,
-                title TEXT,
-                prize TEXT,
-                winners_count INTEGER DEFAULT 1,
-                end_time TIMESTAMP,
-                message_id INTEGER,
-                participants TEXT DEFAULT '[]',
-                status TEXT DEFAULT 'active',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-
-            # Auto-moderation rules
-            cursor.execute('''CREATE TABLE IF NOT EXISTS auto_mod_rules (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                rule_type TEXT,
-                rule_data TEXT,
-                punishment TEXT,
-                enabled INTEGER DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-
-            # Tabela de eventos de clan
-            cursor.execute('''CREATE TABLE IF NOT EXISTS clan_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                creator_id INTEGER,
-                clan1 TEXT,
-                clan2 TEXT,
-                event_type TEXT,
-                bet_amount INTEGER,
-                end_time TIMESTAMP,
-                message_id INTEGER,
-                participants TEXT DEFAULT '[]',
-                bets TEXT DEFAULT '{}',
-                status TEXT DEFAULT 'active',
-                winner_clan TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-
-            # Tabela de feedback de tickets
-            cursor.execute('''CREATE TABLE IF NOT EXISTS ticket_feedback (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticket_channel_id INTEGER,
-                user_id INTEGER,
-                feedback_text TEXT,
-                notas TEXT,
-                media_nota INTEGER,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-
-            conn.commit()
-            logger.info("✅ Database initialized successfully!")
+                if bot.is_ready():
+                    last_heartbeat = current_time
+                    logger.info("💓 Heartbeat restaurado")
+                else:
+                    logger.error("💔 Bot não está ready - possível problema crítico")
 
         except Exception as e:
-            logger.error(f"❌ Database initialization failed: {e}")
-        finally:
-            if conn:
-                conn.close()
+            logger.error(f"Erro no monitor de saúde: {e}")
+            await asyncio.sleep(60)
 
-# Sistemas de monitoramento anti-hibernação removidos para economizar recursos
+# Database setup otimizado
+async def init_database():
+    """Initialize database with async support"""
+    try:
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS tickets (
+            ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER,
+            creator_id INTEGER,
+            channel_id INTEGER,
+            status TEXT DEFAULT 'open',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            closed_by INTEGER,
+            reason TEXT
+        )''')
 
-# Initialize database
-init_database()
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            coins INTEGER DEFAULT 50,
+            xp INTEGER DEFAULT 0,
+            level INTEGER DEFAULT 1,
+            reputation INTEGER DEFAULT 0,
+            bank INTEGER DEFAULT 0,
+            last_daily DATE,
+            last_weekly DATE,
+            last_monthly DATE,
+            inventory TEXT DEFAULT '{}',
+            achievements TEXT DEFAULT '[]',
+            settings TEXT DEFAULT '{}',
+            join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            total_messages INTEGER DEFAULT 0,
+            voice_time INTEGER DEFAULT 0,
+            warnings INTEGER DEFAULT 0
+        )''')
+
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS guilds (
+            guild_id INTEGER PRIMARY KEY,
+            name TEXT,
+            prefix TEXT DEFAULT 'RX',
+            welcome_channel INTEGER,
+            goodbye_channel INTEGER,
+            log_channel INTEGER,
+            mute_role INTEGER,
+            auto_role INTEGER,
+            settings TEXT DEFAULT '{}',
+            economy_settings TEXT DEFAULT '{}',
+            moderation_settings TEXT DEFAULT '{}'
+        )''')
+
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER,
+            creator_id INTEGER,
+            title TEXT,
+            description TEXT,
+            start_time TIMESTAMP,
+            end_time TIMESTAMP,
+            max_participants INTEGER DEFAULT 0,
+            participants TEXT DEFAULT '[]',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status TEXT DEFAULT 'active'
+        )''')
+
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS moderation_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER,
+            user_id INTEGER,
+            moderator_id INTEGER,
+            action TEXT,
+            reason TEXT,
+            duration INTEGER,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            guild_id INTEGER,
+            type TEXT,
+            amount INTEGER,
+            description TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS message_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER,
+            channel_id INTEGER,
+            user_id INTEGER,
+            message_id INTEGER,
+            content TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS custom_commands (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER,
+            command_name TEXT,
+            response TEXT,
+            creator_id INTEGER,
+            uses INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS clans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER,
+            name TEXT,
+            tag TEXT,
+            leader_id INTEGER,
+            description TEXT,
+            members TEXT DEFAULT '[]',
+            level INTEGER DEFAULT 1,
+            xp INTEGER DEFAULT 0,
+            wins INTEGER DEFAULT 0,
+            losses INTEGER DEFAULT 0,
+            treasury INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS clan_challenges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER,
+            challenger_clan_id INTEGER,
+            challenged_clan_id INTEGER,
+            challenger_user_id INTEGER,
+            challenge_type TEXT,
+            bet_amount INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'pending',
+            start_time TIMESTAMP,
+            end_time TIMESTAMP,
+            winner_clan_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS reminders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            guild_id INTEGER,
+            channel_id INTEGER,
+            reminder_text TEXT,
+            remind_time TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS giveaways (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER,
+            channel_id INTEGER,
+            creator_id INTEGER,
+            title TEXT,
+            prize TEXT,
+            winners_count INTEGER DEFAULT 1,
+            end_time TIMESTAMP,
+            message_id INTEGER,
+            participants TEXT DEFAULT '[]',
+            status TEXT DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS auto_mod_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER,
+            rule_type TEXT,
+            rule_data TEXT,
+            punishment TEXT,
+            enabled INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS clan_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER,
+            creator_id INTEGER,
+            clan1 TEXT,
+            clan2 TEXT,
+            event_type TEXT,
+            bet_amount INTEGER,
+            end_time TIMESTAMP,
+            message_id INTEGER,
+            participants TEXT DEFAULT '[]',
+            bets TEXT DEFAULT '{}',
+            status TEXT DEFAULT 'active',
+            winner_clan TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        await db_manager.execute('''CREATE TABLE IF NOT EXISTS ticket_feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticket_channel_id INTEGER,
+            user_id INTEGER,
+            feedback_text TEXT,
+            notas TEXT,
+            media_nota INTEGER,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        logger.info("✅ Database initialized successfully!")
+
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}")
 
 # Global variables for bot state
 global_stats = {
@@ -419,12 +412,39 @@ global_stats = {
     'total_channels': 0
 }
 
-# Memory system for AI conversations - EXPANDIDO
+# Memory system for AI conversations otimizado
 conversation_memory = defaultdict(lambda: deque(maxlen=50))
 user_personalities = defaultdict(dict)
 
-# Active games and sessions
-active_games = {}
+# Sistema de jogos ativos thread-safe
+class ThreadSafeDict:
+    def __init__(self):
+        self._data = {}
+        self._lock = asyncio.Lock()
+
+    async def get(self, key, default=None):
+        async with self._lock:
+            return self._data.get(key, default)
+
+    async def set(self, key, value):
+        async with self._lock:
+            self._data[key] = value
+
+    async def delete(self, key):
+        async with self._lock:
+            if key in self._data:
+                del self._data[key]
+
+    async def __contains__(self, key):
+        async with self._lock:
+            return key in self._data
+
+    async def items(self):
+        async with self._lock:
+            return list(self._data.items())
+
+# Active games thread-safe
+active_games = ThreadSafeDict()
 music_queues = defaultdict(list)
 voice_clients = {}
 
@@ -559,7 +579,7 @@ class AdvancedAI:
 
 ai_system = AdvancedAI()
 
-# Background tasks
+# Background tasks melhorados
 @tasks.loop(minutes=5)
 async def update_status():
     """Atualiza status do bot periodicamente"""
@@ -589,12 +609,10 @@ async def backup_database():
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_name = f"backup_rxbot_{timestamp}.db"
 
-        with db_lock:
-            conn = get_db_connection()
-            backup_conn = sqlite3.connect(backup_name)
-            conn.backup(backup_conn)
-            conn.close()
-            backup_conn.close()
+        conn = await db_manager.get_connection()
+        backup_conn = sqlite3.connect(backup_name)
+        conn.backup(backup_conn)
+        backup_conn.close()
 
         logger.info(f"✅ Backup criado: {backup_name}")
     except Exception as e:
@@ -604,35 +622,30 @@ async def backup_database():
 async def check_reminders():
     """Verifica lembretes"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
+        now = datetime.datetime.now()
+        reminders = await db_manager.execute(
+            'SELECT * FROM reminders WHERE remind_time <= ?', (now,)
+        )
 
-            now = datetime.datetime.now()
-            cursor.execute('SELECT * FROM reminders WHERE remind_time <= ?', (now,))
-            reminders = cursor.fetchall()
+        for reminder in reminders:
+            reminder_id, user_id, guild_id, channel_id, text, remind_time, created_at = reminder
 
-            for reminder in reminders:
-                reminder_id, user_id, guild_id, channel_id, text, remind_time, created_at = reminder
+            try:
+                channel = bot.get_channel(channel_id)
+                user = bot.get_user(user_id)
 
-                try:
-                    channel = bot.get_channel(channel_id)
-                    user = bot.get_user(user_id)
+                if channel and user:
+                    embed = create_embed(
+                        "⏰ Lembrete!",
+                        f"**{user.mention}** você pediu para eu lembrar:\n\n{text}",
+                        color=0xffaa00
+                    )
+                    await channel.send(embed=embed)
 
-                    if channel and user:
-                        embed = create_embed(
-                            "⏰ Lembrete!",
-                            f"**{user.mention}** você pediu para eu lembrar:\n\n{text}",
-                            color=0xffaa00
-                        )
-                        await channel.send(embed=embed)
+                await db_manager.execute('DELETE FROM reminders WHERE id = ?', (reminder_id,))
+            except Exception as e:
+                logger.error(f"Erro ao enviar lembrete {reminder_id}: {e}")
 
-                    cursor.execute('DELETE FROM reminders WHERE id = ?', (reminder_id,))
-                except Exception as e:
-                    logger.error(f"Erro ao enviar lembrete {reminder_id}: {e}")
-
-            conn.commit()
-            conn.close()
     except Exception as e:
         logger.error(f"Erro check_reminders: {e}")
 
@@ -640,124 +653,102 @@ async def check_reminders():
 async def check_giveaways():
     """Verifica sorteios que terminaram"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
+        now = datetime.datetime.now()
+        finished_giveaways = await db_manager.execute('''
+            SELECT * FROM giveaways 
+            WHERE status = 'active' AND end_time <= ?
+        ''', (now,))
 
-            now = datetime.datetime.now()
-            cursor.execute('''
-                SELECT * FROM giveaways 
-                WHERE status = 'active' AND end_time <= ?
-            ''', (now,))
+        for giveaway in finished_giveaways:
+            giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, participants_json, status, created_at = giveaway
 
-            finished_giveaways = cursor.fetchall()
+            try:
+                channel = bot.get_channel(channel_id)
+                if not channel:
+                    continue
 
-            for giveaway in finished_giveaways:
-                giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, participants_json, status, created_at = giveaway
+                message = await channel.fetch_message(message_id)
+                if not message:
+                    continue
 
-                try:
-                    channel = bot.get_channel(channel_id)
-                    if not channel:
-                        continue
+                # Obter participantes das reações
+                participants = []
+                for reaction in message.reactions:
+                    if str(reaction.emoji) == "🎉":
+                        async for user in reaction.users():
+                            if not user.bot:
+                                participants.append(user.id)
 
-                    message = await channel.fetch_message(message_id)
-                    if not message:
-                        continue
+                if len(participants) < winners_count:
+                    winners = participants
+                else:
+                    winners = random.sample(participants, winners_count)
 
-                    # Obter participantes das reações
-                    participants = []
-                    for reaction in message.reactions:
-                        if str(reaction.emoji) == "🎉":
-                            async for user in reaction.users():
-                                if not user.bot:
-                                    participants.append(user.id)
+                # Anunciar vencedores
+                if winners:
+                    winner_mentions = [f"<@{winner_id}>" for winner_id in winners]
+                    embed = create_embed(
+                        f"🎉 Sorteio Finalizado: {title}",
+                        f"**Prêmio:** {prize}\n"
+                        f"**Vencedor(es):** {', '.join(winner_mentions)}\n"
+                        f"**Participantes:** {len(participants)}",
+                        color=0xffd700
+                    )
+                else:
+                    embed = create_embed(
+                        f"😢 Sorteio Cancelado: {title}",
+                        f"**Prêmio:** {prize}\n"
+                        f"**Motivo:** Nenhum participante válido",
+                        color=0xff6b6b
+                    )
 
-                    if len(participants) < winners_count:
-                        winners = participants
-                    else:
-                        winners = random.sample(participants, winners_count)
+                await channel.send(embed=embed)
 
-                    # Anunciar vencedores
-                    if winners:
-                        winner_mentions = [f"<@{winner_id}>" for winner_id in winners]
-                        embed = create_embed(
-                            f"🎉 Sorteio Finalizado: {title}",
-                            f"**Prêmio:** {prize}\n"
-                            f"**Vencedor(es):** {', '.join(winner_mentions)}\n"
-                            f"**Participantes:** {len(participants)}",
-                            color=0xffd700
-                        )
-                    else:
-                        embed = create_embed(
-                            f"😢 Sorteio Cancelado: {title}",
-                            f"**Prêmio:** {prize}\n"
-                            f"**Motivo:** Nenhum participante válido",
-                            color=0xff6b6b
-                        )
+                # Marcar como finalizado
+                await db_manager.execute('UPDATE giveaways SET status = ? WHERE id = ?', ('finished', giveaway_id))
 
-                    await channel.send(embed=embed)
+            except Exception as e:
+                logger.error(f"Erro ao finalizar sorteio {giveaway_id}: {e}")
 
-                    # Marcar como finalizado
-                    cursor.execute('UPDATE giveaways SET status = ? WHERE id = ?', ('finished', giveaway_id))
-
-                except Exception as e:
-                    logger.error(f"Erro ao finalizar sorteio {giveaway_id}: {e}")
-
-            conn.commit()
-            conn.close()
     except Exception as e:
         logger.error(f"Erro check_giveaways: {e}")
 
-# Utility functions with proper database handling
-def get_user_data(user_id):
-    """Get user data with proper error handling"""
+# Utility functions otimizadas
+async def get_user_data(user_id):
+    """Get user data with async support"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
-            data = cursor.fetchone()
-            conn.close()
-            return data
+        result = await db_manager.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+        return result[0] if result else None
     except Exception as e:
         logger.error(f"Error getting user data: {e}")
         return None
 
-def update_user_data(user_id, **kwargs):
-    """Update user data with proper error handling"""
-    conn = None
+async def update_user_data(user_id, **kwargs):
+    """Update user data with async support"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
+        # Check if user exists
+        result = await db_manager.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
+        if not result:
+            await db_manager.execute('INSERT INTO users (user_id) VALUES (?)', (user_id,))
 
-            # Check if user exists
-            cursor.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
-            if not cursor.fetchone():
-                cursor.execute('INSERT INTO users (user_id) VALUES (?)', (user_id,))
+        # Update fields
+        for field, value in kwargs.items():
+            if field in ['coins', 'xp', 'level', 'reputation', 'bank', 'total_messages', 'voice_time', 'warnings']:
+                await db_manager.execute(f'UPDATE users SET {field} = ? WHERE user_id = ?', (value, user_id))
+            elif field in ['inventory', 'achievements', 'settings']:
+                await db_manager.execute(f'UPDATE users SET {field} = ? WHERE user_id = ?', (json.dumps(value), user_id))
+            elif field in ['last_daily', 'last_weekly', 'last_monthly']:
+                await db_manager.execute(f'UPDATE users SET {field} = ? WHERE user_id = ?', (value, user_id))
 
-            # Update fields
-            for field, value in kwargs.items():
-                if field in ['coins', 'xp', 'level', 'reputation', 'bank', 'total_messages', 'voice_time', 'warnings']:
-                    cursor.execute(f'UPDATE users SET {field} = ? WHERE user_id = ?', (value, user_id))
-                elif field in ['inventory', 'achievements', 'settings']:
-                    cursor.execute(f'UPDATE users SET {field} = ? WHERE user_id = ?', (json.dumps(value), user_id))
-                elif field in ['last_daily', 'last_weekly', 'last_monthly']:
-                    cursor.execute(f'UPDATE users SET {field} = ? WHERE user_id = ?', (value, user_id))
-
-            conn.commit()
-            conn.close()
     except Exception as e:
         logger.error(f"Error updating user data: {e}")
-        if conn:
-            conn.close()
 
-def add_xp(user_id, amount):
+async def add_xp(user_id, amount):
     """Add XP with level and rank calculation"""
     try:
-        data = get_user_data(user_id)
+        data = await get_user_data(user_id)
         if not data:
-            update_user_data(user_id, xp=amount, level=1)
+            await update_user_data(user_id, xp=amount, level=1)
             return False, 1, False, 1
 
         current_xp = data[2]
@@ -773,7 +764,7 @@ def add_xp(user_id, amount):
         new_rank_id, new_rank = get_user_rank(new_xp)
         rank_up = new_rank_id > old_rank_id
 
-        update_user_data(user_id, xp=new_xp, level=new_level)
+        await update_user_data(user_id, xp=new_xp, level=new_level)
         return leveled_up, new_level, rank_up, new_rank_id
     except Exception as e:
         logger.error(f"Error adding XP: {e}")
@@ -837,7 +828,7 @@ async def on_message(message):
 
     # Sistema de XP
     try:
-        leveled_up, new_level, rank_up, new_rank_id = add_xp(message.author.id, XP_PER_MESSAGE)
+        leveled_up, new_level, rank_up, new_rank_id = await add_xp(message.author.id, XP_PER_MESSAGE)
 
         if leveled_up:
             embed = create_embed(
@@ -877,9 +868,6 @@ async def on_ready():
     logger.info(f"📊 Conectado em {len(bot.guilds)} servidores")
     logger.info(f"👥 Servindo {len(set(bot.get_all_members()))} usuários únicos")
 
-    # Inicializar sessão HTTP
-    await get_http_session()
-
     try:
         channel = bot.get_channel(CHANNEL_ID_ALERTA)
         if channel:
@@ -890,12 +878,12 @@ async def on_ready():
                 f"• Servidores: {len(bot.guilds)}\n"
                 f"• Usuários: {len(set(bot.get_all_members()))}\n"
                 f"• Latência: {round(bot.latency * 1000, 2)}ms\n"
-                f"• Versão: 2.1.0 (Estável)\n\n"
-                f"**🛡️ Sistemas ativos:**\n"
-                f"• ✅ Auto-ping\n"
-                f"• ✅ Keep-alive\n"
-                f"• ✅ Monitor de saúde\n"
-                f"• ✅ Sistema anti-crash\n\n"
+                f"• Versão: 2.1.0 (Otimizada)\n\n"
+                f"**🛡️ Sistemas corrigidos:**\n"
+                f"• ✅ HTTP Session Manager\n"
+                f"• ✅ Database Async\n"
+                f"• ✅ Thread-Safe Games\n"
+                f"• ✅ Memory Optimization\n\n"
                 f"**Data:** <t:{int(datetime.datetime.now().timestamp())}:F>",
                 color=0x00ff00
             )
@@ -925,9 +913,7 @@ async def on_ready():
         except Exception as e:
             logger.error(f"Erro ao iniciar background tasks: {e}")
 
-    # Sistemas de proteção 24/7 removidos para economizar recursos
-
-    # Set initial status com retry
+    # Set initial status
     try:
         await bot.change_presence(
             status=discord.Status.online,
@@ -944,7 +930,6 @@ async def on_ready():
 
     # Executar limpeza de memória inicial
     try:
-        import gc
         gc.collect()
         logger.info("🧹 Limpeza de memória inicial concluída")
     except:
@@ -954,15 +939,14 @@ async def on_ready():
 async def on_disconnect():
     logger.error("🚨 BOT DESCONECTADO DO DISCORD!")
 
-    # Fechar sessão HTTP PRIMEIRO para evitar warnings
+    # Fechar sessão HTTP
     try:
-        await close_http_session()
+        await http_manager.close()
         logger.info("✅ Sessão HTTP fechada adequadamente")
     except Exception as e:
-        logger.error(f"Erro ao fechar sessão HTTP: {e}")
+        logger.warning(f"⚠️ Não foi possível fechar sessão HTTP: {e}")
 
     try:
-        # Tentar notificar antes de perder conexão totalmente
         channel = bot.get_channel(CHANNEL_ID_ALERTA)
         if channel:
             embed = create_embed(
@@ -994,7 +978,6 @@ async def on_resumed():
     except Exception as e:
         logger.error(f"Erro ao enviar alerta de reconexão: {e}")
 
-# Evento para capturar erros críticos do bot
 @bot.event
 async def on_error(event, *args, **kwargs):
     logger.error(f"🚨 Erro crítico no evento {event}: {traceback.format_exc()}")
@@ -1013,8 +996,6 @@ async def on_error(event, *args, **kwargs):
     except:
         pass
 
-# Sistema de reconexão automática removido para economizar recursos
-
 @bot.event
 async def on_guild_join(guild):
     global_stats['guilds_joined'] += 1
@@ -1022,12 +1003,7 @@ async def on_guild_join(guild):
 
     # Initialize guild data
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('INSERT OR IGNORE INTO guilds (guild_id, name) VALUES (?, ?)', (guild.id, guild.name))
-            conn.commit()
-            conn.close()
+        await db_manager.execute('INSERT OR IGNORE INTO guilds (guild_id, name) VALUES (?, ?)', (guild.id, guild.name))
     except Exception as e:
         logger.error(f"Error joining guild: {e}")
 
@@ -1039,9 +1015,9 @@ async def on_reaction_add(reaction, user):
 
     message = reaction.message
 
-    # Sistema de tickets
-    if message.id in active_games:
-        game_data = active_games[message.id]
+    # Sistema de tickets melhorado
+    if await active_games.__contains__(message.id):
+        game_data = await active_games.get(message.id)
 
         # Verificar se é o usuário correto para este tipo de interação
         if game_data.get('type') in ['ticket_creation', 'ticket_confirmation', 'ticket_tier_confirmation', 'clear_confirmation', 'ban_confirmation']:
@@ -1067,7 +1043,6 @@ async def on_reaction_add(reaction, user):
             if str(reaction.emoji) in emoji_to_motivo:
                 motivo = emoji_to_motivo[str(reaction.emoji)]
 
-                # Criar ticket
                 try:
                     ctx_mock = type('MockCtx', (), {
                         'guild': message.guild,
@@ -1077,14 +1052,13 @@ async def on_reaction_add(reaction, user):
 
                     await create_ticket_channel(ctx_mock, motivo, user)
 
-                    # Editar mensagem original para mostrar que foi processado
                     embed = create_embed(
                         "✅ Ticket Criado!",
                         f"Seu ticket foi criado com sucesso!\n**Motivo:** {motivo}",
                         color=0x00ff00
                     )
                     await message.edit(embed=embed)
-                    del active_games[message.id]
+                    await active_games.delete(message.id)
                 except Exception as e:
                     logger.error(f"Erro ao criar ticket: {e}")
 
@@ -1101,50 +1075,20 @@ async def on_reaction_add(reaction, user):
 
                     await create_ticket_channel(ctx_mock, motivo, user)
 
-                    # Editar mensagem de confirmação
                     embed = create_embed(
                         "✅ Ticket Criado!",
                         f"Seu ticket foi criado com sucesso!\n**Motivo:** {motivo}",
                         color=0x00ff00
                     )
                     await message.edit(embed=embed)
-                    del active_games[message.id]
+                    await active_games.delete(message.id)
                 except Exception as e:
                     logger.error(f"Erro ao criar ticket: {e}")
 
             elif str(reaction.emoji) == "❌":
                 embed = create_embed("❌ Ticket Cancelado", "Criação de ticket cancelada pelo usuário.", color=0xff6b6b)
                 await message.edit(embed=embed)
-                del active_games[message.id]
-
-        elif game_data['type'] == 'ticket_tier_confirmation':
-            if str(reaction.emoji) == "✅":
-                motivo = game_data['motivo']
-
-                try:
-                    ctx_mock = type('MockCtx', (), {
-                        'guild': message.guild,
-                        'channel': message.channel,
-                        'send': message.channel.send
-                    })()
-
-                    await create_ticket_channel(ctx_mock, motivo, user)
-
-                    # Editar mensagem de confirmação
-                    embed = create_embed(
-                        "✅ Ticket Tier Criado!",
-                        f"Seu ticket tier foi criado com sucesso!\n**Motivo:** {motivo}",
-                        color=0xffd700
-                    )
-                    await message.edit(embed=embed)
-                    del active_games[message.id]
-                except Exception as e:
-                    logger.error(f"Erro ao criar ticket tier: {e}")
-
-            elif str(reaction.emoji) == "❌":
-                embed = create_embed("❌ Ticket Tier Cancelado", "Criação de ticket tier cancelada pelo usuário.", color=0xff6b6b)
-                await message.edit(embed=embed)
-                del active_games[message.id]
+                await active_games.delete(message.id)
 
         elif game_data['type'] == 'clear_confirmation':
             if str(reaction.emoji) == "✅":
@@ -1155,7 +1099,7 @@ async def on_reaction_add(reaction, user):
                 if not channel:
                     embed = create_embed("❌ Erro", "Canal não encontrado!", color=0xff0000)
                     await message.edit(embed=embed)
-                    del active_games[message.id]
+                    await active_games.delete(message.id)
                     return
 
                 try:
@@ -1174,7 +1118,7 @@ async def on_reaction_add(reaction, user):
                         color=0x00ff00
                     )
                     await channel.send(embed=confirm_embed, delete_after=5)
-                    del active_games[message.id]
+                    await active_games.delete(message.id)
                 except Exception as e:
                     logger.error(f"Erro na limpeza: {e}")
                     embed = create_embed("❌ Erro na Limpeza", f"Erro: {str(e)[:100]}", color=0xff0000)
@@ -1182,242 +1126,20 @@ async def on_reaction_add(reaction, user):
                         await channel.send(embed=embed, delete_after=10)
                     except:
                         pass
-                    if message.id in active_games:
-                        del active_games[message.id]
+                    if await active_games.__contains__(message.id):
+                        await active_games.delete(message.id)
 
             elif str(reaction.emoji) == "❌":
                 embed = create_embed("❌ Limpeza Cancelada", "Operação cancelada pelo usuário.", color=0xff6b6b)
                 await message.edit(embed=embed)
-                del active_games[message.id]
+                await active_games.delete(message.id)
 
-        elif game_data['type'] == 'ban_confirmation':
-            if user.id != game_data['user']:
-                try:
-                    await reaction.remove(user)
-                except:
-                    pass
-                return
-
-            if str(reaction.emoji) == "✅":
-                try:
-                    member_id = game_data['member_id']
-                    reason = game_data['reason']
-
-                    member = message.guild.get_member(member_id)
-                    if not member:
-                        embed = create_embed("❌ Erro", "Membro não encontrado!", color=0xff0000)
-                        await message.edit(embed=embed)
-                        del active_games[message.id]
-                        return
-
-                    # Executar ban
-                    await member.ban(reason=reason)
-
-                    # Confirmar ban
-                    embed = create_embed(
-                        "🔨 Membro Banido!",
-                        f"**Usuário:** {member.name}#{member.discriminator}\n"
-                        f"**Motivo:** {reason}\n"
-                        f"**Moderador:** {user.mention}",
-                        color=0xff0000
-                    )
-                    await message.edit(embed=embed)
-                    del active_games[message.id]
-
-                    # Log da moderação
-                    try:
-                        with db_lock:
-                            conn = get_db_connection()
-                            cursor = conn.cursor()
-                            cursor.execute('''
-                                INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                                VALUES (?, ?, ?, ?, ?)
-                            ''', (message.guild.id, member_id, user.id, 'ban', reason))
-                            conn.commit()
-                            conn.close()
-                    except Exception as e:
-                        logger.error(f"Erro ao salvar log de moderação: {e}")
-
-                except Exception as e:
-                    logger.error(f"Erro ao banir membro: {e}")
-                    embed = create_embed("❌ Erro", f"Erro ao banir membro: {str(e)[:100]}", color=0xff0000)
-                    await message.edit(embed=embed)
-                    if message.id in active_games:
-                        del active_games[message.id]
-
-            elif str(reaction.emoji) == "❌":
-                embed = create_embed("❌ Ban Cancelado", "Operação de ban cancelada.", color=0xffaa00)
-                await message.edit(embed=embed)
-                del active_games[message.id]
-
-        elif game_data['type'] == 'close_ticket_confirmation':
-            # Verificar se é o usuário que iniciou o fechamento
-            if user.id != game_data['closer']:
-                try:
-                    await reaction.remove(user)
-                except:
-                    pass
-                return
-
-            if str(reaction.emoji) == "✅":
-                try:
-                    # Fechar ticket
-                    closer_id = game_data['closer']
-                    closer = message.guild.get_member(closer_id)
-
-                    # Buscar informações do ticket para logs
-                    ticket_creator = None
-                    try:
-                        with db_lock:
-                            conn = get_db_connection()
-                            cursor = conn.cursor()
-                            cursor.execute('SELECT creator_id FROM tickets WHERE channel_id = ?', (message.channel.id,))
-                            result = cursor.fetchone()
-                            if result:
-                                ticket_creator = message.guild.get_member(result[0])
-                            conn.close()
-                    except Exception as e:
-                        logger.error(f"Erro ao buscar criador do ticket: {e}")
-
-                    # Atualizar banco de dados
-                    try:
-                        with db_lock:
-                            conn = get_db_connection()
-                            cursor = conn.cursor()
-                            cursor.execute('''
-                                UPDATE tickets 
-                                SET status = 'closed', closed_by = ?
-                                WHERE channel_id = ?
-                            ''', (closer_id, message.channel.id))
-                            conn.commit()
-                            conn.close()
-                    except Exception as e:
-                        logger.error(f"Erro ao atualizar ticket no banco: {e}")
-
-                    # Enviar mensagem de fechamento
-                    final_embed = create_embed(
-                        "🔒 Ticket Fechado com Sucesso",
-                        f"**📋 Detalhes do Fechamento:**\n"
-                        f"**Fechado por:** {closer.mention if closer else 'Usuário desconhecido'}\n"
-                        f"**Criado por:** {ticket_creator.mention if ticket_creator else 'Usuário desconhecido'}\n"
-                        f"**Data/Hora:** <t:{int(datetime.datetime.now().timestamp())}:F>\n"
-                        f"**Canal:** {message.channel.name}\n\n"
-                        f"🗑️ **Este canal será deletado em 5 segundos...**\n"
-                        f"💾 Dados salvos no banco de dados para histórico.",
-                        color=0xff6b6b
-                    )
-
-                    await message.edit(embed=final_embed)
-
-                    # Log do fechamento
-                    logger.info(f"Ticket fechado: {message.channel.name} por {closer.name if closer else 'Unknown'}")
-
-                    # Notificar em canal de logs se existir
-                    try:
-                        log_channel = discord.utils.get(message.guild.channels, name="logs-tickets")
-                        if log_channel:
-                            log_embed = create_embed(
-                                "🔒 Ticket Fechado",
-                                f"**Canal:** {message.channel.name}\n"
-                                f"**Fechado por:** {closer.mention if closer else 'Desconhecido'}\n"
-                                f"**Criado por:** {ticket_creator.mention if ticket_creator else 'Desconhecido'}\n"
-                                f"**Data:** <t:{int(datetime.datetime.now().timestamp())}:F>",
-                                color=0xff6b6b
-                            )
-                            await log_channel.send(embed=log_embed)
-                    except:
-                        pass
-
-                    # Aguardar e deletar canal
-                    await asyncio.sleep(5)
-                    await message.channel.delete(reason=f"Ticket fechado por {closer.name if closer else 'Unknown'}")
-
-                    # Limpar dados
-                    if message.id in active_games:
-                        del active_games[message.id]
-
-                except discord.NotFound:
-                    # Canal já foi deletado
-                    if message.id in active_games:
-                        del active_games[message.id]
-                    pass
-                except Exception as e:
-                    logger.error(f"Erro ao fechar ticket: {e}")
-                    try:
-                        error_embed = create_embed(
-                            "❌ Erro ao Fechar Ticket",
-                            f"Ocorreu um erro: {str(e)[:200]}\n\nContate um administrador.",
-                            color=0xff0000
-                        )
-                        await message.channel.send(embed=error_embed)
-                    except:
-                        pass
-                    if message.id in active_games:
-                        del active_games[message.id]
-
-            elif str(reaction.emoji) == "❌":
-                try:
-                    cancel_embed = create_embed(
-                        "❌ Fechamento Cancelado", 
-                        f"O fechamento do ticket foi cancelado por {user.mention}.\n"
-                        f"O ticket permanece **aberto** e funcional.",
-                        color=0xffaa00
-                    )
-                    await message.edit(embed=cancel_embed)
-                    if message.id in active_games:
-                        del active_games[message.id]
-                except Exception as e:
-                    logger.error(f"Erro ao cancelar fechamento: {e}")
-                    if message.id in active_games:
-                        del active_games[message.id]
-
-        elif game_data['type'] == 'trade_invitation':
-            # Apenas o usuário convidado pode aceitar/recusar
-            if user.id != game_data['target']:
-                try:
-                    await reaction.remove(user)
-                except:
-                    pass
-                return
-
-            if str(reaction.emoji) == "✅":
-                embed = create_embed(
-                    "✅ Troca Aceita!",
-                    f"**{user.mention}** aceitou negociar!\n\n"
-                    f"🔄 **Próximo passo:**\n"
-                    f"Ambos devem usar:\n"
-                    f"`RXoffer <item_id> <quantidade>` para oferecer itens\n"
-                    f"`RXconfirmtrade` quando estiverem prontos\n\n"
-                    f"**⏰ Tempo limite:** 10 minutos",
-                    color=0x00ff00
-                )
-                await message.edit(embed=embed)
-
-                # Atualizar dados da troca
-                game_data['step'] = 'offering'
-                game_data['offers'] = {
-                    str(game_data['initiator']): {},
-                    str(game_data['target']): {}
-                }
-                game_data['confirmations'] = []
-                game_data['start_time'] = datetime.datetime.now().timestamp()
-
-            elif str(reaction.emoji) == "❌":
-                embed = create_embed(
-                    "❌ Troca Recusada",
-                    f"**{user.mention}** recusou a troca.",
-                    color=0xff0000
-                )
-                await message.edit(embed=embed)
-                del active_games[message.id]
-
-    # Sistema de fechar tickets - CORRIGIDO E MELHORADO
+    # Sistema de fechar tickets melhorado
     if str(reaction.emoji) == "🔒" and hasattr(message.channel, 'name') and message.channel.name.startswith('ticket-'):
-        # Verificar se usuário tem permissão OU é o criador do ticket
+        # Verificar permissões
         has_permission = False
         is_creator = False
 
-        # Verificar permissões de forma mais segura
         try:
             member = message.guild.get_member(user.id)
             if member:
@@ -1429,25 +1151,18 @@ async def on_reaction_add(reaction, user):
 
         try:
             # Verificar se é o criador do ticket
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute('SELECT creator_id FROM tickets WHERE channel_id = ?', (message.channel.id,))
-                result = cursor.fetchone()
-                if result and result[0] == user.id:
-                    is_creator = True
-                conn.close()
+            result = await db_manager.execute('SELECT creator_id FROM tickets WHERE channel_id = ?', (message.channel.id,))
+            if result and result[0][0] == user.id:
+                is_creator = True
         except Exception as e:
             logger.error(f"Erro ao verificar criador do ticket: {e}")
 
         if not (has_permission or is_creator):
-            # Remover a reação do usuário não autorizado
             try:
                 await reaction.remove(user)
             except:
                 pass
 
-            # Enviar mensagem de erro temporária
             try:
                 error_embed = create_embed(
                     "❌ Sem permissão",
@@ -1478,17 +1193,17 @@ async def on_reaction_add(reaction, user):
             await confirm_msg.add_reaction("❌")
 
             # Armazenar para processar confirmação
-            active_games[confirm_msg.id] = {
+            await active_games.set(confirm_msg.id, {
                 'type': 'close_ticket_confirmation',
                 'user': user.id,
                 'channel': message.channel.id,
                 'closer': user.id,
                 'created_at': datetime.datetime.now().timestamp()
-            }
+            })
 
             # Auto-cancelar após 30 segundos
             await asyncio.sleep(30)
-            if confirm_msg.id in active_games:
+            if await active_games.__contains__(confirm_msg.id):
                 try:
                     timeout_embed = create_embed(
                         "⏰ Tempo Esgotado",
@@ -1496,7 +1211,7 @@ async def on_reaction_add(reaction, user):
                         color=0xffaa00
                     )
                     await confirm_msg.edit(embed=timeout_embed)
-                    del active_games[confirm_msg.id]
+                    await active_games.delete(confirm_msg.id)
                 except:
                     pass
 
@@ -1512,433 +1227,7 @@ async def on_reaction_add(reaction, user):
             except:
                 pass
 
-    # Sistema de chuva de moedas
-    if message.id in active_games:
-        game_data = active_games[message.id]
-
-        if game_data['type'] == 'coin_rain' and str(reaction.emoji) == "💰":
-            if user.id not in game_data['participants'] and len(game_data['participants']) < game_data['max_participants']:
-                game_data['participants'].append(user.id)
-
-                # Se chegou no limite, distribuir prêmios
-                if len(game_data['participants']) >= game_data['max_participants']:
-                    total_coins = game_data['total_coins']
-                    coins_per_user = total_coins // game_data['max_participants']
-
-                    winners = []
-                    try:
-                        with db_lock:
-                            conn = get_db_connection()
-                            cursor = conn.cursor()
-                            for participant_id in game_data['participants']:
-                                user_data = get_user_data(participant_id)
-                                if user_data:
-                                    new_coins = user_data[1] + coins_per_user
-                                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, participant_id))
-                                    participant = bot.get_user(participant_id)
-                                    if participant:
-                                        winners.append(participant.mention)
-                            conn.commit()
-                            conn.close()
-                    except Exception as e:
-                        logger.error(f"Erro na distribuição da chuva de moedas: {e}")
-
-
-                    # Anunciar vencedores
-                    embed = create_embed(
-                        "💰 Chuva de Moedas Finalizada!",
-                        f"🎉 **Vencedores:**\n{', '.join(winners)}\n\n"
-                        f"💰 **Prêmio individual:** {coins_per_user:,} moedas\n"
-                        f"🏆 **Total distribuído:** {total_coins:,} moedas",
-                        color=0xffd700
-                    )
-                    await message.edit(embed=embed)
-
-                    del active_games[message.id]
-
-@bot.event
-async def on_member_join(member):
-    """Enviar mensagem de boas-vindas personalizada quando alguém entrar no servidor"""
-    if member.bot:
-        return
-
-    try:
-        # Canal específico para boas-vindas
-        welcome_channel_id = 1398027575028220013  # <#1398027575028220013>
-        welcome_channel = bot.get_channel(welcome_channel_id)
-
-        if not welcome_channel:
-            logger.error(f"Canal de boas-vindas {welcome_channel_id} não encontrado!")
-            return
-
-        # Buscar dados do usuário para personalizar ainda mais
-        user_data = get_user_data(member.id)
-        if not user_data:
-            update_user_data(member.id)
-            user_data = get_user_data(member.id)
-
-        # Mensagens de boas-vindas variadas
-        welcome_messages = [
-            f"🎉 **Bem-vindo(a) ao nosso servidor, {member.mention}!**\n\n"
-            f"✨ Esperamos que se divirta muito aqui!\n"
-            f"🎮 Use `RXping` para começar a explorar os comandos\n"
-            f"💫 Ganhe XP enviando mensagens e suba de rank!\n\n"
-            f"*{member.guild.name} agora tem {member.guild.member_count} membros!*",
-
-            f"🚀 **{member.mention} chegou para arrasar!**\n\n"
-            f"🎊 Que bom te ver por aqui!\n"
-            f"🎯 Explore nossos +250 comandos com `RXajuda`\n"
-            f"💰 Comece sua jornada econômica com `RXdaily`\n\n"
-            f"*Membro #{member.guild.member_count} do {member.guild.name}!*",
-
-            f"🌟 **Olá {member.mention}! Seja muito bem-vindo(a)!**\n\n"
-            f"🎨 Pronto para uma experiência incrível?\n"
-            f"🤖 Converse comigo mencionando @RXbot\n"
-            f"🏆 Participe dos rankings e ganhe reputação!\n\n"
-            f"*Agradecemos por escolher o {member.guild.name}!*",
-
-            f"🎪 **Chegou mais um aventureiro! {member.mention}**\n\n"
-            f"🎭 Bem-vindo à nossa comunidade!\n"
-            f"🎲 Jogue, se divirta e faça novos amigos\n"
-            f"🎁 Participe dos sorteios e ganhe prêmios\n\n"
-            f"*{member.guild.name} está ainda melhor com você aqui!*"
-        ]
-
-        # Escolher mensagem aleatória
-        welcome_message = random.choice(welcome_messages)
-
-        # Criar embed personalizado
-        embed = create_embed(
-            f"🎉 Bem-vindo(a) ao {member.guild.name}!",
-            welcome_message,
-            color=0x00ff00
-        )
-
-        # Adicionar avatar do membro
-        embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
-
-        # Adicionar informações adicionais
-        embed.add_field(
-            name="Primeiros Passos",
-            value="• `RXping` - Testar o bot\n"
-                  "• `RXajuda` - Ver todos os comandos\n"
-                  "• `RXdaily` - Ganhar moedas diárias\n"
-                  "• `RXrank` - Ver seu progresso",
-            inline=True
-        )
-
-        embed.add_field(
-            name="Informações",
-            value=f"• **Membro:** #{member.guild.member_count}\n"
-                  f"• **Conta criada:** <t:{int(member.created_at.timestamp())}:R>\n"
-                  f"• **Servidor:** {member.guild.name}\n"
-                  f"• **Data:** <t:{int(datetime.datetime.now().timestamp())}:F>",
-            inline=True
-        )
-
-        embed.set_footer(text=f"ID: {member.id} | Desejamos uma ótima experiência!")
-
-        # Enviar mensagem de boas-vindas
-        await welcome_channel.send(embed=embed)
-
-        # Log do evento
-        logger.info(f"👋 Boas-vindas enviadas para {member.name} em {member.guild.name}")
-
-        # Dar XP inicial para novos membros
-        add_xp(member.id, 25)  # XP bônus para novos membros
-
-    except Exception as e:
-        logger.error(f"Erro ao enviar boas-vindas para {member.name}: {e}")
-
-        # Tentar enviar mensagem simples se o embed falhar
-        try:
-            if welcome_channel:
-                await welcome_channel.send(f"🎉 Bem-vindo(a) {member.mention} ao {member.guild.name}! 🎉")
-        except:
-            pass
-
-# Health monitor removido para economizar recursos no Railway
-
-# Sistema de emergência removido para economizar recursos
-
-# ============ SISTEMA DE TICKETS COMPLETO ============
-@bot.command(name='testetier', aliases=['rxticketier', 'tickettier'])
-async def create_tier_ticket(ctx):
-    """Criar ticket específico para tier"""
-    motivo = "RXticket só para tier"
-
-    # Sistema de confirmação para ticket tier
-    embed = create_embed(
-        "🎟️ Confirmação - Ticket Tier",
-        f"""**👑 TICKET ESPECÍFICO PARA TIER**
-
-**📋 Detalhes do ticket:**
-**Motivo:** {motivo}
-**Solicitante:** {ctx.author.mention}
-**Tipo:** Suporte especializado tier
-
-**ℹ️ O que vai acontecer:**
-• Canal privado será criado automaticamente
-• Apenas você e a staff tier poderão ver
-• Atendimento prioritário garantido
-• Suporte especializado para questões tier
-
-**⚠️ Importante:**
-• Este ticket é para assuntos relacionados a tier
-• Descreva claramente sua questão
-• Aguarde a resposta da equipe especializada
-
-**Deseja realmente criar este ticket tier?**""",
-        color=0xffd700
-    )
-
-    msg = await ctx.send(embed=embed)
-    await msg.add_reaction("✅")
-    await msg.add_reaction("❌")
-
-    # Armazenar para processar confirmação
-    active_games[msg.id] = {
-        'type': 'ticket_tier_confirmation',
-        'user': ctx.author.id,
-        'channel': ctx.channel.id,
-        'motivo': motivo
-    }
-
-@bot.command(name='ticket', aliases=['rxticket'])
-async def create_ticket(ctx, *, motivo=None):
-    """Criar ticket de suporte com emoji"""
-    if not motivo:
-        embed = create_embed(
-            "🎟️ Sistema de Tickets",
-            """**Como criar um ticket:**
-`RXticket <motivo>`
-
-**Exemplos:**
-• `RXticket Problema com economia`
-• `RXticket Bug no bot`
-• `RXticket Sugestão de melhoria`
-• `RXticket Denúncia de usuário`
-
-**Ou use o sistema simplificado:**
-Digite apenas `RXticket` e escolha uma opção! ⬇️""",
-            color=0x7289da
-        )
-
-        # Sistema simplificado com emojis
-        embed.add_field(
-            name="🎯 Criação Rápida",
-            value="Reaja com o emoji correspondente:\n"
-                  "🐛 - Bug/Erro no bot\n"
-                  "💰 - Problema com economia\n"
-                  "⚖️ - Denúncia/Moderação\n"
-                  "💡 - Sugestão/Ideia\n"
-                  "❓ - Dúvida geral\n"
-                  "🛠️ - Suporte técnico\n"
-                  "👑 - RXticket só para tier",
-            inline=False
-        )
-
-        msg = await ctx.send(embed=embed)
-
-        # Adicionar reações
-        reactions = ["🐛", "💰", "⚖️", "💡", "❓", "🛠️", "👑"]
-        for reaction in reactions:
-            await msg.add_reaction(reaction)
-
-        # Armazenar para processar depois
-        active_games[msg.id] = {
-            'type': 'ticket_creation',
-            'user': ctx.author.id,
-            'channel': ctx.channel.id
-        }
-        return
-
-    # Sistema de confirmação para ticket com motivo específico
-    embed = create_embed(
-        "🎟️ Confirmação de Ticket",
-        f"""**📋 Você está prestes a criar um ticket:**
-
-**Motivo:** {motivo}
-**Solicitante:** {ctx.author.mention}
-
-**ℹ️ O que vai acontecer:**
-• Um canal privado será criado
-• Apenas você e a staff poderão ver
-• A equipe será notificada automaticamente
-• Você receberá suporte personalizado
-
-**⚠️ Importante:**
-• Descreva seu problema claramente
-• Seja respeitoso com a equipe
-• Aguarde a resposta da staff
-
-**Deseja realmente criar este ticket?**""",
-        color=0xffaa00
-    )
-
-    msg = await ctx.send(embed=embed)
-    await msg.add_reaction("✅")
-    await msg.add_reaction("❌")
-
-    # Armazenar para processar confirmação
-    active_games[msg.id] = {
-        'type': 'ticket_confirmation',
-        'user': ctx.author.id,
-        'channel': ctx.channel.id,
-        'motivo': motivo
-    }
-
-async def create_ticket_channel(ctx, motivo, user):
-    """Create ticket channel"""
-    # Obter guild de forma mais robusta
-    guild = None
-
-    # Tentar múltiplas formas de obter o guild
-    if hasattr(ctx, 'guild') and ctx.guild:
-        guild = ctx.guild
-    elif hasattr(ctx, 'channel') and ctx.channel and hasattr(ctx.channel, 'guild'):
-        guild = ctx.channel.guild
-    else:
-        # Fallback: buscar guild onde o usuário está presente
-        for g in bot.guilds:
-            try:
-                member = g.get_member(user.id)
-                if member:
-                    guild = g
-                    break
-            except:
-                continue
-
-    # Verificar se guild existe e é válido
-    if not guild or not hasattr(guild, 'categories'):
-        logger.error(f"Guild inválido ou None: {guild}")
-        try:
-            # Tentar obter guild do contexto da mensagem original se possível
-            if hasattr(ctx, 'channel') and hasattr(ctx.channel, 'guild'):
-                guild = ctx.channel.guild
-
-            # Se ainda não temos guild válido, erro crítico
-            if not guild or not hasattr(guild, 'categories'):
-                embed = create_embed("❌ Erro Crítico", "Erro interno: servidor não encontrado ou inválido", color=0xff0000)
-                if hasattr(ctx, 'send'):
-                    await ctx.send(embed=embed)
-                elif hasattr(ctx, 'channel'):
-                    await ctx.channel.send(embed=embed)
-                return
-        except Exception as e:
-            logger.error(f"Erro crítico na validação de guild: {e}")
-            return
-
-    # Verificar se usuário tem ticket prioritário
-    user_data = get_user_data(user.id)
-    priority = False
-    if user_data:
-        try:
-            settings = json.loads(user_data[11]) if user_data[11] else {}
-            if settings.get('priority_tickets', 0) > 0:
-                priority = True
-                settings['priority_tickets'] = settings['priority_tickets'] - 1
-                update_user_data(user.id, settings=settings)
-        except:
-            pass
-
-    # Criar categoria se não existir
-    category = discord.utils.get(guild.categories, name="📋 Tickets")
-    if not category:
-        try:
-            category = await guild.create_category("📋 Tickets")
-        except Exception as e:
-            logger.error(f"Erro ao criar categoria de tickets: {e}")
-            category = None
-
-    # Criar canal do ticket
-    ticket_name = f"ticket-{user.name}-{random.randint(1000, 9999)}"
-
-    overwrites = {
-        guild.default_role: discord.PermissionOverwrite(read_messages=False),
-        user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-        guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-    }
-
-    # Adicionar staff aos overwrites
-    for role in guild.roles:
-        if any(perm_name in role.name.lower() for perm_name in ['admin', 'mod', 'staff']) or role.permissions.administrator:
-            overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-
-    try:
-        ticket_channel = await guild.create_text_channel(
-            ticket_name,
-            category=category,
-            overwrites=overwrites
-        )
-    except Exception as e:
-        embed = create_embed("❌ Erro", f"Não foi possível criar o ticket: {str(e)}", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    # Salvar ticket no banco
-    try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO tickets (guild_id, creator_id, channel_id, reason)
-                VALUES (?, ?, ?, ?)
-            ''', (guild.id, user.id, ticket_channel.id, motivo))
-            ticket_id = cursor.lastrowid
-            conn.commit()
-            conn.close()
-    except Exception as e:
-        logger.error(f"Error saving ticket: {e}")
-        ticket_id = "ERRO"
-
-    # Embed inicial do ticket
-    priority_text = "🎫 PRIORITÁRIO " if priority else ""
-    embed = create_embed(
-        f"🎟️ {priority_text}Ticket #{ticket_id}",
-        f"""**Criado por:** {user.mention}
-**Motivo:** {motivo}
-**Status:** 🟢 Aberto
-**Criado em:** <t:{int(datetime.datetime.now().timestamp())}:F>
-
-📋 **Informações:**
-• Este ticket foi criado automaticamente
-• A staff será notificada em breve
-• Para fechar o ticket, reaja com 🔒
-
-{"🎫 **Este ticket tem prioridade!**" if priority else ""}
-
-⚠️ **Regras do ticket:**
-• Seja respeitoso e educado
-• Descreva seu problema claramente
-• Aguarde a resposta da staff
-• Não spam ou flood""",
-        color=0xffd700 if priority else 0x7289da
-    )
-
-    msg = await ticket_channel.send(f"{user.mention}", embed=embed)
-    await msg.add_reaction("🔒")  # Para fechar
-
-    # Notificar que ticket foi criado
-    confirm_embed = create_embed(
-        "✅ Ticket Criado!",
-        f"{priority_text}Seu ticket foi criado em {ticket_channel.mention}!\n"
-        f"**ID:** #{ticket_id}\n"
-        f"A staff será notificada automaticamente.",
-        color=0x00ff00
-    )
-
-    # Tentar enviar no canal original
-    try:
-        if hasattr(ctx, 'send'):
-            await ctx.send(embed=confirm_embed, delete_after=10)
-        elif hasattr(ctx, 'channel'):
-            await ctx.channel.send(embed=confirm_embed, delete_after=10)
-    except:
-        pass
-
 # ============ COMANDOS FALTANDO ADICIONADOS ============
-
 @bot.command(name='perfil', aliases=['profile'])
 async def perfil(ctx, user: discord.Member = None):
     """Ver perfil completo do usuário"""
@@ -1946,10 +1235,10 @@ async def perfil(ctx, user: discord.Member = None):
     target = user or ctx.author
 
     try:
-        user_data = get_user_data(target.id)
+        user_data = await get_user_data(target.id)
         if not user_data:
-            update_user_data(target.id)
-            user_data = get_user_data(target.id)
+            await update_user_data(target.id)
+            user_data = await get_user_data(target.id)
 
         coins, xp, level, rep, bank = user_data[1], user_data[2], user_data[3], user_data[4], user_data[5]
         total_money = coins + bank
@@ -2010,9 +1299,9 @@ async def level_info(ctx, user: discord.Member = None):
     target = user or ctx.author
 
     try:
-        user_data = get_user_data(target.id)
+        user_data = await get_user_data(target.id)
         if not user_data:
-            update_user_data(target.id)
+            await update_user_data(target.id)
             xp, level = 0, 1
         else:
             xp, level = user_data[2], user_data[3]
@@ -2064,8 +1353,8 @@ async def top_users(ctx):
     global_stats['commands_used'] += 1
 
     try:
-        with db_lock:
-            conn = get_db_connection()
+        with db_manager._lock: # Acessar com lock para consistência
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
 
             # Top XP
@@ -2091,7 +1380,7 @@ async def top_users(ctx):
             if user:
                 rank_id, rank_data = get_user_rank(xp)
                 medal = ["🥇", "🥈", "🥉", "4º", "5º"][i]
-                xp_text += f"{medal} {user.display_name} - {rank_data['emoji']} Lv.{level} ({xp:,} XP)\n"
+                xp_text += f"{medal} **{user.display_name}** - {rank_data['emoji']} Lv.{level} ({xp:,} XP)\n"
 
         if xp_text:
             embed.add_field(name="⭐ Top XP/Level", value=xp_text, inline=True)
@@ -2103,7 +1392,7 @@ async def top_users(ctx):
             if user:
                 total = coins + bank
                 medal = ["🥇", "🥈", "🥉", "4º", "5º"][i]
-                coins_text += f"{medal} {user.display_name} - {total:,} moedas\n"
+                coins_text += f"{medal} **{user.display_name}** - {total:,} moedas\n"
 
         if coins_text:
             embed.add_field(name="💰 Top Economia", value=coins_text, inline=True)
@@ -2275,11 +1564,10 @@ async def teste_inventario(ctx):
     try:
         user_id = ctx.author.id
 
-        with db_lock:
-            conn = get_db_connection()
+        with db_manager._lock: # Usar lock para acesso ao DB
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
 
-            # Verificar se usuário existe
             cursor.execute('SELECT user_id, inventory FROM users WHERE user_id = ?', (user_id,))
             result = cursor.fetchone()
 
@@ -2287,9 +1575,7 @@ async def teste_inventario(ctx):
                 embed = create_embed("❌ Usuário não encontrado", "Criando dados do usuário...", color=0xff6600)
                 await ctx.send(embed=embed)
 
-                # Criar usuário
-                cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
-                conn.commit()
+                await db_manager.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
 
                 cursor.execute('SELECT user_id, inventory FROM users WHERE user_id = ?', (user_id,))
                 result = cursor.fetchone()
@@ -2337,39 +1623,31 @@ async def diagnostico_completo(ctx):
 
     # 1. Teste Database
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('SELECT COUNT(*) FROM users')
-            user_count = cursor.fetchone()[0]
-            cursor.execute('SELECT COUNT(*) FROM tickets')
-            ticket_count = cursor.fetchone()[0]
-            cursor.execute('SELECT COUNT(*) FROM giveaways')
-            giveaway_count = cursor.fetchone()[0]
-            conn.close()
-        resultados.append(f"✅ **Database:** {user_count} users, {ticket_count} tickets, {giveaway_count} sorteios")
+        user_count = await db_manager.execute('SELECT COUNT(*) FROM users')
+        ticket_count = await db_manager.execute('SELECT COUNT(*) FROM tickets')
+        giveaway_count = await db_manager.execute('SELECT COUNT(*) FROM giveaways')
+        results.append(f"✅ **Database:** {user_count[0][0]} users, {ticket_count[0][0]} tickets, {giveaway_count[0][0]} sorteios")
     except Exception as e:
         resultados.append(f"❌ **Database:** {str(e)[:50]}...")
 
     # 2. Teste Keep-alive
     try:
-        session = await get_http_session()
-        async with session.get('http://0.0.0.0:8080/ping', timeout=5) as response:
-            if response.status == 200:
-                resultados.append("✅ **Keep-alive:** Porta 8080 ativa")
-            else:
-                resultados.append(f"⚠️ **Keep-alive:** Status {response.status}")
+        async with http_manager:
+            async with http_manager._session.get('http://0.0.0.0:8080/ping', timeout=5) as response:
+                if response.status == 200:
+                    resultados.append("✅ **Keep-alive:** Porta 8080 ativa")
+                else:
+                    resultados.append(f"⚠️ **Keep-alive:** Status {response.status}")
     except Exception as e:
         resultados.append(f"❌ **Keep-alive:** {str(e)[:50]}...")
 
     # 3. Teste Memória
     try:
-        import psutil
         memory = psutil.virtual_memory()
         cpu = psutil.cpu_percent()
         resultados.append(f"✅ **Sistema:** RAM {memory.percent}%, CPU {cpu}%")
     except Exception as e:
-        resultados.append(f"⚠️ **Sistema:** Dados não disponíveis")
+        resultados.append("⚠️ **Sistema:** Dados não disponíveis")
 
     # 4. Teste Conexão Discord
     latency = round(bot.latency * 1000, 2)
@@ -2380,14 +1658,10 @@ async def diagnostico_completo(ctx):
 
     # 5. Teste Background Tasks
     running_tasks = []
-    if update_status.is_running():
-        running_tasks.append("Status")
-    if backup_database.is_running():
-        running_tasks.append("Backup")
-    if check_reminders.is_running():
-        running_tasks.append("Reminders")
-    if check_giveaways.is_running():
-        running_tasks.append("Giveaways")
+    if update_status.is_running(): running_tasks.append("Status")
+    if backup_database.is_running(): running_tasks.append("Backup")
+    if check_reminders.is_running(): running_tasks.append("Reminders")
+    if check_giveaways.is_running(): running_tasks.append("Giveaways")
 
     if len(running_tasks) >= 3:
         resultados.append(f"✅ **Tasks:** {len(running_tasks)}/4 ativos")
@@ -2395,7 +1669,6 @@ async def diagnostico_completo(ctx):
         resultados.append(f"⚠️ **Tasks:** {len(running_tasks)}/4 ativos")
 
     # 6. Teste Arquivos Críticos
-    import os
     arquivos_criticos = ['rxbot.db', 'main.py']
     arquivos_ok = 0
     for arquivo in arquivos_criticos:
@@ -2463,24 +1736,19 @@ async def teste_completo(ctx):
 
     # 1. Teste Database
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('SELECT COUNT(*) FROM users')
-            user_count = cursor.fetchone()[0]
-            conn.close()
-        resultados.append("✅ **Database:** Funcionando - " + str(user_count) + " usuários")
+        user_count = await db_manager.execute('SELECT COUNT(*) FROM users')
+        resultados.append("✅ **Database:** Funcionando - " + str(user_count[0][0]) + " usuários")
     except Exception as e:
         resultados.append("❌ **Database:** Erro - " + str(e))
 
     # 2. Teste Keep-alive
     try:
-        session = await get_http_session()
-        async with session.get('http://0.0.0.0:8080/ping', timeout=5) as response:
-            if response.status == 200:
-                resultados.append("✅ **Keep-alive:** Ativo - Porta 8080")
-            else:
-                resultados.append("⚠️ **Keep-alive:** Problema - Status " + str(response.status))
+        async with http_manager:
+            async with http_manager._session.get('http://0.0.0.0:8080/ping', timeout=5) as response:
+                if response.status == 200:
+                    resultados.append("✅ **Keep-alive:** Ativo - Porta 8080")
+                else:
+                    resultados.append("⚠️ **Keep-alive:** Problema - Status " + str(response.status))
     except Exception as e:
         resultados.append("❌ **Keep-alive:** Erro - " + str(e))
 
@@ -2496,7 +1764,6 @@ async def teste_completo(ctx):
 
     # 4. Teste Sistema de Tickets
     try:
-        # Verificar se pode criar categoria de tickets
         category = discord.utils.get(ctx.guild.categories, name="📋 Tickets")
         if category:
             resultados.append("✅ **Tickets:** Categoria existe")
@@ -2507,7 +1774,7 @@ async def teste_completo(ctx):
 
     # 5. Teste XP System
     try:
-        user_data = get_user_data(ctx.author.id)
+        user_data = await get_user_data(ctx.author.id)
         if user_data:
             resultados.append("✅ **Sistema XP:** Funcionando - User encontrado")
         else:
@@ -2527,14 +1794,10 @@ async def teste_completo(ctx):
 
     # 7. Teste Background Tasks
     running_tasks = []
-    if update_status.is_running():
-        running_tasks.append("Status Update")
-    if backup_database.is_running():
-        running_tasks.append("Backup")
-    if check_reminders.is_running():
-        running_tasks.append("Reminders")
-    if check_giveaways.is_running():
-        running_tasks.append("Giveaways")
+    if update_status.is_running(): running_tasks.append("Status Update")
+    if backup_database.is_running(): running_tasks.append("Backup")
+    if check_reminders.is_running(): running_tasks.append("Reminders")
+    if check_giveaways.is_running(): running_tasks.append("Giveaways")
 
     if running_tasks:
         resultados.append(f"✅ **Background Tasks:** {len(running_tasks)} ativos - {', '.join(running_tasks)}")
@@ -2836,7 +2099,7 @@ Mencione o bot para conversar!
 `Título | Prêmio | Duração | Vencedores`
 
 **Exemplo:**
-`RXcriarsorteio iPhone 15 | iPhone novo | 24h | 1`
+`RXcriarsorteio iPhone 15 | iPhone 15 Pro | 24h | 1`
 
 **Durações aceitas:** 30m, 2h, 1d, 7d
 
@@ -3016,13 +2279,12 @@ async def clear_messages(ctx, amount: int = 10):
     await msg.add_reaction("✅")
     await msg.add_reaction("❌")
 
-    # Armazenar para processar confirmação
-    active_games[msg.id] = {
+    await active_games.set(msg.id, {
         'type': 'clear_confirmation',
         'user': ctx.author.id,
         'channel': ctx.channel.id,
         'amount': amount
-    }
+    })
 
 @bot.command(name='ban', aliases=['banir'])
 @commands.has_permissions(ban_members=True)
@@ -3060,24 +2322,23 @@ Reaja com ✅ para confirmar ou ❌ para cancelar""",
     await msg.add_reaction("✅")
     await msg.add_reaction("❌")
 
-    # Armazenar para processar confirmação
-    active_games[msg.id] = {
+    await active_games.set(msg.id, {
         'type': 'ban_confirmation',
         'user': ctx.author.id,
         'channel': ctx.channel.id,
         'member_id': member.id,
         'reason': reason
-    }
+    })
 
 # ============ COMANDOS DE ECONOMIA ============
 @bot.command(name='saldo', aliases=['balance', 'bal'])
 async def balance(ctx, user: discord.Member = None):
     """Ver saldo do usuário"""
     target = user or ctx.author
-    data = get_user_data(target.id)
+    data = await get_user_data(target.id)
 
     if not data:
-        update_user_data(target.id)
+        await update_user_data(target.id)
         coins, bank = 50, 0
     else:
         coins, bank = data[1], data[5]
@@ -3100,11 +2361,11 @@ async def balance(ctx, user: discord.Member = None):
 async def daily(ctx):
     """Recompensa diária"""
     user_id = ctx.author.id
-    data = get_user_data(user_id)
+    data = await get_user_data(user_id)
 
     if not data:
-        update_user_data(user_id)
-        data = get_user_data(user_id)
+        await update_user_data(user_id)
+        data = await get_user_data(user_id)
 
     last_daily = data[6]
     today = datetime.date.today().isoformat()
@@ -3122,13 +2383,8 @@ async def daily(ctx):
     new_coins = data[1] + DAILY_REWARD
 
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, last_daily = ? WHERE user_id = ?',
-                          (new_coins, today, user_id))
-            conn.commit()
-            conn.close()
+        await db_manager.execute('UPDATE users SET coins = ?, last_daily = ? WHERE user_id = ?',
+                      (new_coins, today, user_id))
     except Exception as e:
         logger.error(f"Error updating daily: {e}")
 
@@ -3148,10 +2404,10 @@ async def user_rank(ctx, user: discord.Member = None):
     """Ver rank do usuário"""
     global_stats['commands_used'] += 1
     target = user or ctx.author
-    data = get_user_data(target.id)
+    data = await get_user_data(target.id)
 
     if not data:
-        update_user_data(target.id)
+        await update_user_data(target.id)
         xp, level = 0, 1
     else:
         xp, level = data[2], data[3]
@@ -3212,10 +2468,10 @@ async def transferir(ctx, user: discord.Member, amount: int):
         await ctx.send(embed=embed)
         return
 
-    sender_data = get_user_data(ctx.author.id)
+    sender_data = await get_user_data(ctx.author.id)
     if not sender_data:
-        update_user_data(ctx.author.id)
-        sender_data = get_user_data(ctx.author.id)
+        await update_user_data(ctx.author.id)
+        sender_data = await get_user_data(ctx.author.id)
 
     sender_coins = sender_data[1]
 
@@ -3230,15 +2486,15 @@ async def transferir(ctx, user: discord.Member, amount: int):
 
     # Processar transferência
     try:
-        receiver_data = get_user_data(user.id)
+        receiver_data = await get_user_data(user.id)
         if not receiver_data:
-            update_user_data(user.id)
-            receiver_data = get_user_data(user.id)
+            await update_user_data(user.id)
+            receiver_data = await get_user_data(user.id)
 
         receiver_coins = receiver_data[1]
 
-        with db_lock:
-            conn = get_db_connection()
+        async with db_manager._lock:
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
 
             # Atualizar saldos
@@ -3246,12 +2502,12 @@ async def transferir(ctx, user: discord.Member, amount: int):
             cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (receiver_coins + amount, user.id))
 
             # Registrar transações
-            cursor.execute('''
+            await db_manager.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (ctx.author.id, ctx.guild.id, 'transfer_out', -amount, f"Transferiu para {user.name}"))
 
-            cursor.execute('''
+            await db_manager.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (user.id, ctx.guild.id, 'transfer_in', amount, f"Recebeu de {ctx.author.name}"))
@@ -3294,10 +2550,10 @@ async def depositar(ctx, amount: int):
         await ctx.send(embed=embed)
         return
 
-    user_data = get_user_data(ctx.author.id)
+    user_data = await get_user_data(ctx.author.id)
     if not user_data:
-        update_user_data(ctx.author.id)
-        user_data = get_user_data(ctx.author.id)
+        await update_user_data(ctx.author.id)
+        user_data = await get_user_data(ctx.author.id)
 
     coins, bank = user_data[1], user_data[5]
 
@@ -3311,8 +2567,8 @@ async def depositar(ctx, amount: int):
         return
 
     try:
-        with db_lock:
-            conn = get_db_connection()
+        async with db_manager._lock:
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute('UPDATE users SET coins = ?, bank = ? WHERE user_id = ?', 
                           (coins - amount, bank + amount, ctx.author.id))
@@ -3342,10 +2598,10 @@ async def sacar(ctx, amount: int):
         await ctx.send(embed=embed)
         return
 
-    user_data = get_user_data(ctx.author.id)
+    user_data = await get_user_data(ctx.author.id)
     if not user_data:
-        update_user_data(ctx.author.id)
-        user_data = get_user_data(ctx.author.id)
+        await update_user_data(ctx.author.id)
+        user_data = await get_user_data(ctx.author.id)
 
     coins, bank = user_data[1], user_data[5]
 
@@ -3359,8 +2615,8 @@ async def sacar(ctx, amount: int):
         return
 
     try:
-        with db_lock:
-            conn = get_db_connection()
+        async with db_manager._lock:
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute('UPDATE users SET coins = ?, bank = ? WHERE user_id = ?', 
                           (coins + amount, bank - amount, ctx.author.id))
@@ -3385,10 +2641,10 @@ async def sacar(ctx, amount: int):
 @bot.command(name='trabalhar', aliases=['work'])
 async def trabalhar(ctx):
     """Trabalhar para ganhar dinheiro"""
-    user_data = get_user_data(ctx.author.id)
+    user_data = await get_user_data(ctx.author.id)
     if not user_data:
-        update_user_data(ctx.author.id)
-        user_data = get_user_data(ctx.author.id)
+        await update_user_data(ctx.author.id)
+        user_data = await get_user_data(ctx.author.id)
 
     # Verificar cooldown (2 horas)
     try:
@@ -3430,8 +2686,8 @@ async def trabalhar(ctx):
     ganho_total = ganho + bonus
 
     try:
-        with db_lock:
-            conn = get_db_connection()
+        async with db_manager._lock:
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
 
             # Atualizar dinheiro
@@ -3443,7 +2699,7 @@ async def trabalhar(ctx):
             cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
 
             # Registrar transação
-            cursor.execute('''
+            await db_manager.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (ctx.author.id, ctx.guild.id, 'work', ganho_total, f"Trabalhou como {trabalho['nome']}"))
@@ -3466,7 +2722,7 @@ async def trabalhar(ctx):
         # Chance de ganhar XP
         if random.randint(1, 100) <= 30:  # 30% chance
             xp_bonus = random.randint(10, 25)
-            add_xp(ctx.author.id, xp_bonus)
+            await add_xp(ctx.author.id, xp_bonus)
             await ctx.send(f"🎉 Bônus: +{xp_bonus} XP por trabalhar bem!")
 
     except Exception as e:
@@ -3477,10 +2733,10 @@ async def trabalhar(ctx):
 @bot.command(name='crime', aliases=['roubar'])
 async def crime(ctx):
     """Cometer um crime (risco/recompensa)"""
-    user_data = get_user_data(ctx.author.id)
+    user_data = await get_user_data(ctx.author.id)
     if not user_data:
-        update_user_data(ctx.author.id)
-        user_data = get_user_data(ctx.author.id)
+        await update_user_data(ctx.author.id)
+        user_data = await get_user_data(ctx.author.id)
 
     # Verificar cooldown (4 horas)
     try:
@@ -3517,18 +2773,17 @@ async def crime(ctx):
     crime = random.choice(crimes)
 
     try:
-        with db_lock:
-            conn = get_db_connection()
+        async with db_manager._lock:
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
 
             if sucesso:
                 # Crime bem-sucedido
                 ganho = random.randint(crime["ganho"][0], crime["ganho"][1])
                 new_coins = user_data[1] + ganho
-
                 cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
 
-                cursor.execute('''
+                await db_manager.execute('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
                     VALUES (?, ?, ?, ?, ?)
                 ''', (ctx.author.id, ctx.guild.id, 'crime_success', ganho, f"Crime bem-sucedido: {crime['nome']}"))
@@ -3547,10 +2802,9 @@ async def crime(ctx):
                 perda = random.randint(crime["perda"][0], crime["perda"][1])
                 perda = min(perda, user_data[1])  # Não pode perder mais do que tem
                 new_coins = max(0, user_data[1] - perda)
-
                 cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
 
-                cursor.execute('''
+                await db_manager.execute('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
                     VALUES (?, ?, ?, ?, ?)
                 ''', (ctx.author.id, ctx.guild.id, 'crime_fail', -perda, f"Crime falhou: {crime['nome']}"))
@@ -3582,11 +2836,11 @@ async def crime(ctx):
 async def weekly(ctx):
     """Recompensa semanal"""
     user_id = ctx.author.id
-    data = get_user_data(user_id)
+    data = await get_user_data(user_id)
 
     if not data:
-        update_user_data(user_id)
-        data = get_user_data(user_id)
+        await update_user_data(user_id)
+        data = await get_user_data(user_id)
 
     last_weekly = data[7]
     today = datetime.date.today()
@@ -3607,13 +2861,8 @@ async def weekly(ctx):
     new_coins = data[1] + WEEKLY_REWARD
 
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, last_weekly = ? WHERE user_id = ?',
-                          (new_coins, week_start_str, user_id))
-            conn.commit()
-            conn.close()
+        await db_manager.execute('UPDATE users SET coins = ?, last_weekly = ? WHERE user_id = ?',
+                      (new_coins, week_start_str, user_id))
     except Exception as e:
         logger.error(f"Error updating weekly: {e}")
 
@@ -3631,11 +2880,11 @@ async def weekly(ctx):
 async def monthly(ctx):
     """Recompensa mensal"""
     user_id = ctx.author.id
-    data = get_user_data(user_id)
+    data = await get_user_data(user_id)
 
     if not data:
-        update_user_data(user_id)
-        data = get_user_data(user_id)
+        await update_user_data(user_id)
+        data = await get_user_data(user_id)
 
     last_monthly = data[8]
     today = datetime.date.today()
@@ -3655,13 +2904,8 @@ async def monthly(ctx):
     new_coins = data[1] + MONTHLY_REWARD
 
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, last_monthly = ? WHERE user_id = ?',
-                          (new_coins, month_start, user_id))
-            conn.commit()
-            conn.close()
+        await db_manager.execute('UPDATE users SET coins = ?, last_monthly = ? WHERE user_id = ?',
+                      (new_coins, month_start, user_id))
     except Exception as e:
         logger.error(f"Error updating monthly: {e}")
 
@@ -3681,8 +2925,8 @@ async def leaderboard(ctx, tipo='xp'):
     global_stats['commands_used'] += 1
 
     try:
-        with db_lock:
-            conn = get_db_connection()
+        with db_manager._lock:
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
 
             if tipo.lower() in ['xp', 'rank', 'nivel']:
@@ -3756,7 +3000,7 @@ async def leaderboard(ctx, tipo='xp'):
         if leaderboard_text:
             embed.add_field(name=field_name, value=leaderboard_text[:1024], inline=False)
 
-        embed.set_footer(text=f"Use: RXleaderboard xp/coins/rep • Posição de {ctx.author.display_name}: #{await get_user_position(ctx.author.id, ctx.guild.id)}")
+        embed.set_footer(text=f"Use RXleaderboard xp/coins/rep • Posição de {ctx.author.display_name}: #{await get_user_position(ctx.author.id, ctx.guild.id)}")
         await ctx.send(embed=embed)
 
     except Exception as e:
@@ -3767,16 +3011,10 @@ async def leaderboard(ctx, tipo='xp'):
 async def get_user_position(user_id, guild_id):
     """Obter posição do usuário no ranking"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-
-            # Contar quantos usuários têm XP maior
-            cursor.execute('SELECT COUNT(*) FROM users WHERE xp > (SELECT xp FROM users WHERE user_id = ?)', (user_id,))
-            position = cursor.fetchone()[0] + 1
-
-            conn.close()
-            return position
+        # Contar quantos usuários têm XP maior
+        position_data = await db_manager.execute('SELECT COUNT(*) FROM users WHERE xp > (SELECT xp FROM users WHERE user_id = ?)', (user_id,))
+        position = position_data[0][0] + 1
+        return position
     except:
         return "?"
 
@@ -3869,15 +3107,10 @@ Reaja com 🎉 para participar!""",
         await giveaway_msg.add_reaction("🎉")
 
         # Salvar no banco
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO giveaways (guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (ctx.guild.id, ctx.channel.id, ctx.author.id, title, prize, winners_count, end_time, giveaway_msg.id))
-            conn.commit()
-            conn.close()
+        await db_manager.execute('''
+            INSERT INTO giveaways (guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (ctx.guild.id, ctx.channel.id, ctx.author.id, title, prize, winners_count, end_time, giveaway_msg.id))
 
     except ValueError:
         embed = create_embed("❌ Duração inválida", "Use números válidos: 30m, 2h, 1d", color=0xff0000)
@@ -3887,18 +3120,12 @@ Reaja com 🎉 para participar!""",
 async def list_giveaways(ctx):
     """Ver sorteios ativos"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT title, prize, end_time, winners_count, participants
-                FROM giveaways
-                WHERE guild_id = ? AND status = 'active'
-                ORDER BY end_time
-            ''', (ctx.guild.id,))
-
-            giveaways = cursor.fetchall()
-            conn.close()
+        giveaways = await db_manager.execute('''
+            SELECT title, prize, end_time, winners_count, participants
+            FROM giveaways
+            WHERE guild_id = ? AND status = 'active'
+            ORDER BY end_time
+        ''', (ctx.guild.id,))
 
         if not giveaways:
             embed = create_embed(
@@ -3987,7 +3214,6 @@ async def feedback_ticket(ctx, *, avaliacao):
 
     try:
         # Extrair nota da avaliação usando regex
-        import re
         notas = re.findall(r'(\d{1,2})/10', avaliacao)
 
         if not notas:
@@ -4016,28 +3242,20 @@ async def feedback_ticket(ctx, *, avaliacao):
 
         # Salvar feedback no banco
         try:
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
+            await db_manager.execute('''CREATE TABLE IF NOT EXISTS ticket_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_channel_id INTEGER,
+                user_id INTEGER,
+                feedback_text TEXT,
+                notas TEXT,
+                media_nota INTEGER,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
 
-                # Criar tabela de feedback se não existir
-                cursor.execute('''CREATE TABLE IF NOT EXISTS ticket_feedback (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ticket_channel_id INTEGER,
-                    user_id INTEGER,
-                    feedback_text TEXT,
-                    notas TEXT,
-                    media_nota INTEGER,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )''')
-
-                cursor.execute('''
-                    INSERT INTO ticket_feedback (ticket_channel_id, user_id, feedback_text, notas, media_nota)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (ctx.channel.id, ctx.author.id, avaliacao, ','.join(notas), media))
-
-                conn.commit()
-                conn.close()
+            await db_manager.execute('''
+                INSERT INTO ticket_feedback (ticket_channel_id, user_id, feedback_text, notas, media_nota)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (ctx.channel.id, ctx.author.id, avaliacao, ','.join(notas), media))
         except Exception as e:
             logger.error(f"Erro ao salvar feedback: {e}")
 
@@ -4069,7 +3287,7 @@ async def feedback_ticket(ctx, *, avaliacao):
 • **Qualidade:** {qualidade}
 
 **👤 Por:** {ctx.author.mention}
-**📅 Data:** <t:{int(datetime.datetime.now().timestamp())}:R>
+**📅 Data:** <t:{int(datetime.datetime.fromisoformat(timestamp).timestamp())}:R>
 
 *Obrigado pelo seu feedback! Ele nos ajuda a melhorar.*""",
             color=cor
@@ -4090,19 +3308,12 @@ async def feedback_ticket(ctx, *, avaliacao):
 async def ver_feedbacks(ctx):
     """[STAFF] Ver feedbacks de tickets"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-
-            cursor.execute('''
-                SELECT feedback_text, notas, media_nota, timestamp, user_id
-                FROM ticket_feedback
-                ORDER BY timestamp DESC
-                LIMIT 10
-            ''')
-
-            feedbacks = cursor.fetchall()
-            conn.close()
+        feedbacks = await db_manager.execute('''
+            SELECT feedback_text, notas, media_nota, timestamp, user_id
+            FROM ticket_feedback
+            ORDER BY timestamp DESC
+            LIMIT 10
+        ''')
 
         if not feedbacks:
             embed = create_embed(
@@ -4219,11 +3430,11 @@ async def comprar_item(ctx, item_id: int = None):
         return
 
     item = LOJA_ITENS[item_id]
-    user_data = get_user_data(ctx.author.id)
+    user_data = await get_user_data(ctx.author.id)
 
     if not user_data:
-        update_user_data(ctx.author.id)
-        user_data = get_user_data(ctx.author.id)
+        await update_user_data(ctx.author.id)
+        user_data = await get_user_data(ctx.author.id)
 
     coins = user_data[1]
 
@@ -4239,8 +3450,8 @@ async def comprar_item(ctx, item_id: int = None):
 
     # Processar compra
     try:
-        with db_lock:
-            conn = get_db_connection()
+        async with db_manager._lock:
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
 
             # Remover dinheiro
@@ -4260,7 +3471,7 @@ async def comprar_item(ctx, item_id: int = None):
             cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), ctx.author.id))
 
             # Registrar transação
-            cursor.execute('''
+            await db_manager.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (ctx.author.id, ctx.guild.id, 'compra', -item['preco'], f"Comprou {item['nome']}"))
@@ -4290,23 +3501,16 @@ async def inventario(ctx, user: discord.Member = None):
     target = user or ctx.author
 
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-
-            # Buscar dados do usuário diretamente
-            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (target.id,))
-            result = cursor.fetchone()
-            conn.close()
-
-        if not result:
-            update_user_data(target.id)
+        inventory_data = await db_manager.execute('SELECT inventory FROM users WHERE user_id = ?', (target.id,))
+        
+        if not inventory_data:
+            await update_user_data(target.id)
             embed = create_embed("📦 Inventário vazio", f"{target.display_name} ainda não tem itens!", color=0xffaa00)
             await ctx.send(embed=embed)
             return
 
-        inventory_data = result[0]
-        inventory = json.loads(inventory_data) if inventory_data else {}
+        inventory_data_str = inventory_data[0][0]
+        inventory = json.loads(inventory_data_str) if inventory_data_str else {}
 
         if not inventory:
             embed = create_embed("📦 Inventário vazio", f"{target.display_name} ainda não tem itens!", color=0xffaa00)
@@ -4376,13 +3580,18 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
         await ctx.send(embed=embed)
         return
 
+    if user.bot:
+        embed = create_embed("❌ Impossível", "Você não pode dar itens para bots!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
     if item_id not in LOJA_ITENS:
         embed = create_embed("❌ Item inválido", "Este item não existe!", color=0xff0000)
         await ctx.send(embed=embed)
         return
 
     # Verificar se o usuário tem o item
-    sender_data = get_user_data(ctx.author.id)
+    sender_data = await get_user_data(ctx.author.id)
     if not sender_data:
         embed = create_embed("❌ Sem itens", "Você não tem itens para dar!", color=0xff0000)
         await ctx.send(embed=embed)
@@ -4404,18 +3613,18 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
 
     try:
         # Obter dados do receptor
-        receiver_data = get_user_data(user.id)
+        receiver_data = await get_user_data(user.id)
         if not receiver_data:
-            update_user_data(user.id)
-            receiver_data = get_user_data(user.id)
+            await update_user_data(user.id)
+            receiver_data = await get_user_data(user.id)
 
         receiver_inventory_data = receiver_data[10]
         receiver_inventory = json.loads(receiver_inventory_data) if receiver_inventory_data else {}
 
         item = LOJA_ITENS[item_id]
 
-        with db_lock:
-            conn = get_db_connection()
+        async with db_manager._lock:
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
 
             # Remover do inventário do remetente
@@ -4436,12 +3645,12 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
                           (json.dumps(receiver_inventory), user.id))
 
             # Registrar transações
-            cursor.execute('''
+            await db_manager.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (ctx.author.id, ctx.guild.id, 'item_given', 0, f"Deu {quantidade}x {item['nome']} para {user.name}"))
 
-            cursor.execute('''
+            await db_manager.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (user.id, ctx.guild.id, 'item_received', 0, f"Recebeu {quantidade}x {item['nome']} de {ctx.author.name}"))
@@ -4495,8 +3704,8 @@ async def sistema_troca(ctx, user: discord.Member):
         return
 
     # Verificar se ambos usuários têm itens
-    sender_data = get_user_data(ctx.author.id)
-    receiver_data = get_user_data(user.id)
+    sender_data = await get_user_data(ctx.author.id)
+    receiver_data = await get_user_data(user.id)
 
     if not sender_data:
         embed = create_embed("❌ Sem dados", "Você não tem dados no sistema!", color=0xff0000)
@@ -4551,19 +3760,19 @@ Reaja com ✅ para aceitar ou ❌ para recusar""",
     await trade_msg.add_reaction("❌")
 
     # Armazenar dados da troca
-    active_games[trade_msg.id] = {
+    await active_games.set(trade_msg.id, {
         'type': 'trade_invitation',
         'initiator': ctx.author.id,
         'target': user.id,
         'channel': ctx.channel.id,
         'step': 'invitation'
-    }
+    })
 
 @bot.command(name='efeitos', aliases=['buffs', 'effects'])
 async def ver_efeitos(ctx, user: discord.Member = None):
     """Ver buffs e efeitos ativos do usuário"""
     target = user or ctx.author
-    user_data = get_user_data(target.id)
+    user_data = await get_user_data(target.id)
 
     if not user_data:
         embed = create_embed("❌ Dados não encontrados", f"{target.display_name} não está no sistema!", color=0xff0000)
@@ -4646,219 +3855,206 @@ async def usar_item(ctx, item_id: int = None):
 
     # Buscar inventário diretamente do banco
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (ctx.author.id,))
-            result = cursor.fetchone()
-            conn.close()
-    except Exception as e:
-        logger.error(f"Erro ao buscar inventário: {e}")
-        embed = create_embed("❌ Erro", "Erro ao acessar inventário!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
+        inventory_data = await db_manager.execute('SELECT inventory FROM users WHERE user_id = ?', (ctx.author.id,))
+        
+        if not inventory_data:
+            embed = create_embed("❌ Dados não encontrados", "Você não tem dados de usuário!", color=0xff0000)
+            await ctx.send(embed=embed)
+            return
 
-    if not result:
-        embed = create_embed("❌ Dados não encontrados", "Você não tem dados de usuário!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
+        inventory_data_str = inventory_data[0][0]
+        inventory = json.loads(inventory_data_str) if inventory_data_str else {}
 
-    inventory_data = result[0]
-    inventory = json.loads(inventory_data) if inventory_data else {}
+        if str(item_id) not in inventory or inventory[str(item_id)] <= 0:
+            embed = create_embed("❌ Item não encontrado", "Você não possui este item!\nUse `RXinventario` para ver seus itens.", color=0xff0000)
+            await ctx.send(embed=embed)
+            return
 
-    if str(item_id) not in inventory or inventory[str(item_id)] <= 0:
-        embed = create_embed("❌ Item não encontrado", "Você não possui este item!\nUse `RXinventario` para ver seus itens.", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
+        if item_id not in LOJA_ITENS:
+            embed = create_embed("❌ Item inválido", "Este item não existe!", color=0xff0000)
+            await ctx.send(embed=embed)
+            return
 
-    if item_id not in LOJA_ITENS:
-        embed = create_embed("❌ Item inválido", "Este item não existe!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
+        item = LOJA_ITENS[item_id]
 
-    item = LOJA_ITENS[item_id]
+        # Aplicar efeito do item ANTES de remover do inventário
+        try:
+            async with db_manager._lock:
+                conn = await db_manager.get_connection()
+                cursor = conn.cursor()
 
-    # Aplicar efeito do item ANTES de remover do inventário
-    try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
+                # Buscar dados atuais
+                user_info = await db_manager.execute('SELECT settings, coins, xp FROM users WHERE user_id = ?', (ctx.author.id,))
+                settings_data, current_coins, current_xp = user_info[0][0], user_info[0][1], user_info[0][2]
+                settings = json.loads(settings_data) if settings_data else {}
 
-            # Buscar dados atuais
-            cursor.execute('SELECT settings, coins, xp FROM users WHERE user_id = ?', (ctx.author.id,))
-            user_info = cursor.fetchone()
-            settings_data, current_coins, current_xp = user_info[0], user_info[1], user_info[2]
-            settings = json.loads(settings_data) if settings_data else {}
+                resultado = ""
 
-            resultado = ""
-
-            # ITEM 1: Desafio do Dia
-            if item_id == 1:
-                # Simular mini-game (pedra/papel/tesoura automático)
-                resultado_jogo = random.choice(['vitoria', 'derrota', 'empate'])
-                if resultado_jogo == 'vitoria':
-                    premio = random.randint(200, 500)
-                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins + premio, ctx.author.id))
-                    resultado = f"🎉 **VITÓRIA!** Você ganhou {premio:,} moedas!"
-                elif resultado_jogo == 'empate':
-                    resultado = f"😐 **EMPATE!** Nada aconteceu."
-                else:
-                    perda = random.randint(50, 150)
-                    perda = min(perda, current_coins)
-                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins - perda, ctx.author.id))
-                    resultado = f"😢 **DERROTA!** Você perdeu {perda:,} moedas."
-
-            # ITEM 2: Caixa Misteriosa
-            elif item_id == 2:
-                sorte = random.randint(1, 100)
-                if sorte <= 5:  # 5% - Muito raro
-                    premio_coins = random.randint(2000, 5000)
-                    premio_xp = random.randint(100, 200)
-                    cursor.execute('UPDATE users SET coins = ?, xp = ? WHERE user_id = ?', (current_coins + premio_coins, current_xp + premio_xp, ctx.author.id))
-                    resultado = f"🌟 **JACKPOT!** {premio_coins:,} moedas + {premio_xp} XP!"
-                elif sorte <= 25:  # 20% - Bom
-                    premio_coins = random.randint(500, 1500)
-                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins + premio_coins, ctx.author.id))
-                    resultado = f"💰 **SORTE!** Você ganhou {premio_coins:,} moedas!"
-                elif sorte <= 50:  # 25% - Regular
-                    premio_xp = random.randint(50, 100)
-                    cursor.execute('UPDATE users SET xp = ? WHERE user_id = ?', (current_xp + premio_xp, ctx.author.id))
-                    resultado = f"⭐ **XP!** Você ganhou {premio_xp} pontos de experiência!"
-                elif sorte <= 80:  # 30% - Pequeno
-                    premio_coins = random.randint(100, 300)
-                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins + premio_coins, ctx.author.id))
-                    resultado = f"🪙 **Algo!** {premio_coins:,} moedas encontradas."
-                else:  # 20% - Nada
-                    resultado = f"📦 **VAZIA!** A caixa estava vazia... que azar!"
-
-            # ITEM 3: Ticket Prioritário
-            elif item_id == 3:
-                settings['priority_tickets'] = settings.get('priority_tickets', 0) + 1
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
-                resultado = f"🎫 **PRIORIDADE ATIVADA!** Seu próximo ticket terá atendimento prioritário!"
-
-            # ITEM 4: Explosão de Moedas
-            elif item_id == 4:
-                # Criar evento de chuva de moedas
-                moedas_total = random.randint(800, 1500)
-                embed_chuva = create_embed(
-                    "🧨 EXPLOSÃO DE MOEDAS!",
-                    f"💰 **{ctx.author.mention} ativou uma Explosão de Moedas!**\n\n"
-                    f"🪙 **{moedas_total:,} moedas** estão caindo do céu!\n"
-                    f"⚡ **Os 3 primeiros a reagir com 💰 ganham parte das moedas!**\n\n"
-                    f"🏃‍♂️ **CORRA!** Seja rápido!",
-                    color=0xffd700
-                )
-
-                chuva_msg = await ctx.send(embed=embed_chuva)
-                await chuva_msg.add_reaction("💰")
-
-                # Armazenar evento
-                active_games[chuva_msg.id] = {
-                    'type': 'coin_rain',
-                    'total_coins': moedas_total,
-                    'participants': [],
-                    'max_participants': 3,
-                    'creator': ctx.author.id
-                }
-
-                resultado = f"🧨 **EXPLOSÃO ATIVADA!** Chuva de {moedas_total:,} moedas liberada no chat!"
-
-            # ITEM 5: Boost de XP (1h)
-            elif item_id == 5:
-                boost_end = datetime.datetime.now() + datetime.timedelta(hours=1)
-                settings['xp_boost'] = boost_end.timestamp()
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
-                resultado = f"📈 **BOOST ATIVO!** XP dobrado por 1 hora! (até <t:{int(boost_end.timestamp())}:t>)"
-
-            # ITEM 6: Título Personalizado
-            elif item_id == 6:
-                settings['custom_title_available'] = True
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
-                resultado = f"👑 **TÍTULO DESBLOQUEADO!** Use `RXsettitle <título>` para definir seu título personalizado!"
-
-            # ITEM 7: Salário VIP (7 dias)
-            elif item_id == 7:
-                vip_end = datetime.datetime.now() + datetime.timedelta(days=7)
-                settings['vip_salary'] = vip_end.timestamp()
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
-                resultado = f"💼 **SALÁRIO VIP ATIVO!** +50% em trabalhos por 7 dias! (até <t:{int(vip_end.timestamp())}:d>)"
-
-            # ITEM 8: Cargo Exclusivo (3 dias)
-            elif item_id == 8:
-                exclusive_end = datetime.datetime.now() + datetime.timedelta(days=3)
-                settings['exclusive_role'] = exclusive_end.timestamp()
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
-
-                # Tentar criar/dar cargo especial se possível
-                try:
-                    guild = ctx.guild
-                    role_name = f"👑 {ctx.author.display_name} VIP"
-                    existing_role = discord.utils.get(guild.roles, name=role_name)
-
-                    if not existing_role:
-                        special_role = await guild.create_role(
-                            name=role_name,
-                            color=discord.Color.gold(),
-                            reason="Cargo exclusivo da loja RX"
-                        )
+                # ITEM 1: Desafio do Dia
+                if item_id == 1:
+                    resultado_jogo = random.choice(['vitoria', 'derrota', 'empate'])
+                    if resultado_jogo == 'vitoria':
+                        premio = random.randint(200, 500)
+                        cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins + premio, ctx.author.id))
+                        resultado = f"🎉 **VITÓRIA!** Você ganhou {premio:,} moedas!"
+                    elif resultado_jogo == 'empate':
+                        resultado = f"😐 **EMPATE!** Nada aconteceu."
                     else:
-                        special_role = existing_role
+                        perda = random.randint(50, 150)
+                        perda = min(perda, current_coins)
+                        cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins - perda, ctx.author.id))
+                        resultado = f"😢 **DERROTA!** Você perdeu {perda:,} moedas."
 
-                    await ctx.author.add_roles(special_role, reason="Item da loja: Cargo Exclusivo")
-                    resultado = f"🛡️ **CARGO EXCLUSIVO ATIVO!** Você recebeu o cargo {special_role.mention} por 3 dias!"
-                except:
-                    resultado = f"🛡️ **CARGO EXCLUSIVO ATIVO!** Privilégios especiais por 3 dias! (Cargo automático indisponível)"
+                # ITEM 2: Caixa Misteriosa
+                elif item_id == 2:
+                    sorte = random.randint(1, 100)
+                    if sorte <= 5:  # 5% - Muito raro
+                        premio_coins = random.randint(2000, 5000)
+                        premio_xp = random.randint(100, 200)
+                        cursor.execute('UPDATE users SET coins = ?, xp = ? WHERE user_id = ?', (current_coins + premio_coins, current_xp + premio_xp, ctx.author.id))
+                        resultado = f"🌟 **JACKPOT!** {premio_coins:,} moedas + {premio_xp} XP!"
+                    elif sorte <= 25:  # 20% - Bom
+                        premio_coins = random.randint(500, 1500)
+                        cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins + premio_coins, ctx.author.id))
+                        resultado = f"💰 **SORTE!** Você ganhou {premio_coins:,} moedas!"
+                    elif sorte <= 50:  # 25% - Regular
+                        premio_xp = random.randint(50, 100)
+                        cursor.execute('UPDATE users SET xp = ? WHERE user_id = ?', (current_xp + premio_xp, ctx.author.id))
+                        resultado = f"⭐ **XP!** Você ganhou {premio_xp} pontos de experiência!"
+                    elif sorte <= 80:  # 30% - Pequeno
+                        premio_coins = random.randint(100, 300)
+                        cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins + premio_coins, ctx.author.id))
+                        resultado = f"🪙 **Algo!** {premio_coins:,} moedas encontradas."
+                    else:  # 20% - Nada
+                        resultado = f"📦 **VAZIA!** A caixa estava vazia... que azar!"
 
-            # ITEM 9: RX Medalha Épica
-            elif item_id == 9:
-                settings['epic_medals'] = settings.get('epic_medals', 0) + 1
-                settings['collection_power'] = settings.get('collection_power', 0) + 10
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
-                resultado = f"🌌 **MEDALHA ÉPICA COLETADA!** Adicionada à sua coleção! Poder de Coleção: +10 (Total: {settings['collection_power']})"
+                # ITEM 3: Ticket Prioritário
+                elif item_id == 3:
+                    settings['priority_tickets'] = settings.get('priority_tickets', 0) + 1
+                    cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                    resultado = f"🎫 **PRIORIDADE ATIVADA!** Seu próximo ticket terá atendimento prioritário!"
 
-            # ITEM 10: DNA RX
-            elif item_id == 10:
-                settings['dna_rx'] = settings.get('dna_rx', 0) + 1
-                settings['evolution_points'] = settings.get('evolution_points', 0) + 25
+                # ITEM 4: Explosão de Moedas
+                elif item_id == 4:
+                    moedas_total = random.randint(800, 1500)
+                    embed_chuva = create_embed(
+                        "🧨 EXPLOSÃO DE MOEDAS!",
+                        f"**{ctx.author.mention} ativou uma Explosão de Moedas!**\n\n"
+                        f"🪙 **{moedas_total:,} moedas** estão caindo do céu!\n"
+                        f"⚡ **Os 3 primeiros a reagir com 💰 ganham parte das moedas!**\n\n"
+                        f"🏃‍♂️ **CORRA!** Seja rápido!",
+                        color=0xffd700
+                    )
 
-                # Chance de desbloquear habilidade especial
-                if random.randint(1, 100) <= 30:  # 30% chance
-                    special_abilities = ['super_luck', 'coin_magnet', 'xp_master', 'command_master']
-                    new_ability = random.choice(special_abilities)
-                    if 'special_abilities' not in settings:
-                        settings['special_abilities'] = []
-                    if new_ability not in settings['special_abilities']:
-                        settings['special_abilities'].append(new_ability)
-                        cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
-                        resultado = f"🧬 **DNA RX ABSORVIDO!** +25 Pontos de Evolução + Habilidade Especial: **{new_ability.replace('_', ' ').title()}**!"
+                    chuva_msg = await ctx.send(embed=embed_chuva)
+                    await chuva_msg.add_reaction("💰")
+
+                    # Armazenar evento
+                    await active_games.set(chuva_msg.id, {
+                        'type': 'coin_rain',
+                        'total_coins': moedas_total,
+                        'participants': [],
+                        'max_participants': 3,
+                        'creator': ctx.author.id
+                    })
+
+                    resultado = f"🧨 **EXPLOSÃO ATIVADA!** Chuva de {moedas_total:,} moedas liberada no chat!"
+
+                # ITEM 5: Boost de XP (1h)
+                elif item_id == 5:
+                    boost_end = datetime.datetime.now() + datetime.timedelta(hours=1)
+                    settings['xp_boost'] = boost_end.timestamp()
+                    cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                    resultado = f"📈 **BOOST ATIVO!** XP dobrado por 1 hora! (até <t:{int(boost_end.timestamp())}:t>)"
+
+                # ITEM 6: Título Personalizado
+                elif item_id == 6:
+                    settings['custom_title_available'] = True
+                    cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                    resultado = f"👑 **TÍTULO DESBLOQUEADO!** Use `RXsettitle <título>` para definir seu título personalizado!"
+
+                # ITEM 7: Salário VIP (7 dias)
+                elif item_id == 7:
+                    vip_end = datetime.datetime.now() + datetime.timedelta(days=7)
+                    settings['vip_salary'] = vip_end.timestamp()
+                    cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                    resultado = f"💼 **SALÁRIO VIP ATIVO!** +50% em trabalhos por 7 dias! (até <t:{int(vip_end.timestamp())}:d>)"
+
+                # ITEM 8: Cargo Exclusivo (3 dias)
+                elif item_id == 8:
+                    exclusive_end = datetime.datetime.now() + datetime.timedelta(days=3)
+                    settings['exclusive_role'] = exclusive_end.timestamp()
+                    cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+
+                    # Tentar criar/dar cargo especial se possível
+                    try:
+                        guild = ctx.guild
+                        role_name = f"👑 {ctx.author.display_name} VIP"
+                        existing_role = discord.utils.get(guild.roles, name=role_name)
+
+                        if not existing_role:
+                            special_role = await guild.create_role(
+                                name=role_name,
+                                color=discord.Color.gold(),
+                                reason="Cargo exclusivo da loja RX"
+                            )
+                        else:
+                            special_role = existing_role
+
+                        await ctx.author.add_roles(special_role, reason="Item da loja: Cargo Exclusivo")
+                        resultado = f"🛡️ **CARGO EXCLUSIVO ATIVO!** Você recebeu o cargo {special_role.mention} por 3 dias!"
+                    except:
+                        resultado = f"🛡️ **CARGO EXCLUSIVO ATIVO!** Privilégios especiais por 3 dias! (Cargo automático indisponível)"
+
+                # ITEM 9: RX Medalha Épica
+                elif item_id == 9:
+                    settings['epic_medals'] = settings.get('epic_medals', 0) + 1
+                    settings['collection_power'] = settings.get('collection_power', 0) + 10
+                    cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                    resultado = f"🌌 **MEDALHA ÉPICA COLETADA!** Adicionada à sua coleção! Poder de Coleção: +10 (Total: {settings['collection_power']})"
+
+                # ITEM 10: DNA RX
+                elif item_id == 10:
+                    settings['dna_rx'] = settings.get('dna_rx', 0) + 1
+                    settings['evolution_points'] = settings.get('evolution_points', 0) + 25
+
+                    # Chance de desbloquear habilidade especial
+                    if random.randint(1, 100) <= 30:  # 30% chance
+                        special_abilities = ['super_luck', 'coin_magnet', 'xp_master', 'command_master']
+                        new_ability = random.choice(special_abilities)
+                        if 'special_abilities' not in settings:
+                            settings['special_abilities'] = []
+                        if new_ability not in settings['special_abilities']:
+                            settings['special_abilities'].append(new_ability)
+                            cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                            resultado = f"🧬 **DNA RX ABSORVIDO!** +25 Pontos de Evolução + Habilidade Especial: **{new_ability.replace('_', ' ').title()}**!"
+                        else:
+                            cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                            resultado = f"🧬 **DNA RX ABSORVIDO!** +25 Pontos de Evolução! (Total: {settings['evolution_points']})"
                     else:
                         cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
                         resultado = f"🧬 **DNA RX ABSORVIDO!** +25 Pontos de Evolução! (Total: {settings['evolution_points']})"
-                else:
-                    cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
-                    resultado = f"🧬 **DNA RX ABSORVIDO!** +25 Pontos de Evolução! (Total: {settings['evolution_points']})"
 
-            # Remover item do inventário APÓS aplicar efeito
-            inventory[str(item_id)] -= 1
-            if inventory[str(item_id)] <= 0:
-                del inventory[str(item_id)]
+                # Remover item do inventário APÓS aplicar efeito
+                inventory[str(item_id)] -= 1
+                if inventory[str(item_id)] <= 0:
+                    del inventory[str(item_id)]
 
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), ctx.author.id))
+                cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), ctx.author.id))
 
-            conn.commit()
-            conn.close()
+                conn.commit()
+                conn.close()
 
-        embed = create_embed(
-            f"✅ {item['emoji']} {item['nome']} Usado!",
-            f"**Efeito aplicado:**\n{resultado}\n\n"
-            f"**Descrição:** {item['descricao']}",
-            color=0x00ff00
-        )
-        await ctx.send(embed=embed)
+            embed = create_embed(
+                f"✅ {item['emoji']} {item['nome']} Usado!",
+                f"**Efeito aplicado:**\n{resultado}\n\n"
+                f"**Descrição:** {item['descricao']}",
+                color=0x00ff00
+            )
+            await ctx.send(embed=embed)
 
-        # Log do uso
-        logger.info(f"Item usado: {ctx.author.name} usou {item['nome']} (ID: {item_id})")
+            # Log do uso
+            logger.info(f"Item usado: {ctx.author.name} usou {item['nome']} (ID: {item_id})")
 
     except Exception as e:
         logger.error(f"Erro ao usar item {item_id}: {e}")
@@ -4879,7 +4075,7 @@ async def set_custom_title(ctx, *, titulo=None):
         await ctx.send(embed=embed)
         return
 
-    user_data = get_user_data(ctx.author.id)
+    user_data = await get_user_data(ctx.author.id)
     if not user_data:
         embed = create_embed("❌ Erro", "Dados do usuário não encontrados!", color=0xff0000)
         await ctx.send(embed=embed)
@@ -4898,8 +4094,8 @@ async def set_custom_title(ctx, *, titulo=None):
         return
 
     try:
-        with db_lock:
-            conn = get_db_connection()
+        async with db_manager._lock:
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
 
             settings['custom_title'] = titulo
@@ -4922,7 +4118,6 @@ async def set_custom_title(ctx, *, titulo=None):
         await ctx.send(embed=embed)
 
 # ============ MAIS COMANDOS FALTANDO ============
-
 @bot.command(name='base64', aliases=['b64'])
 async def base64_encode(ctx, *, texto=None):
     """Converter texto para base64"""
@@ -5109,7 +4304,7 @@ async def generate_password(ctx, tamanho: int = 12):
 
 @bot.command(name='qr')
 async def generate_qr(ctx, *, texto=None):
-    """Gerar QR Code (placeholder)"""
+    """Gerar QR Code"""
     if not texto:
         embed = create_embed("❌ Texto necessário", "Use: `RXqr Seu texto aqui`", color=0xff0000)
         await ctx.send(embed=embed)
@@ -5160,24 +4355,24 @@ async def warn_user(ctx, user: discord.Member, *, motivo="Sem motivo especificad
 
     try:
         # Buscar warns atuais
-        user_data = get_user_data(user.id)
+        user_data = await get_user_data(user.id)
         if not user_data:
-            update_user_data(user.id)
+            await update_user_data(user.id)
             current_warns = 0
         else:
             current_warns = user_data[15] if len(user_data) > 15 else 0
 
         new_warns = current_warns + 1
 
-        with db_lock:
-            conn = get_db_connection()
+        async with db_manager._lock:
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
 
             # Atualizar warns
             cursor.execute('UPDATE users SET warnings = ? WHERE user_id = ?', (new_warns, user.id))
 
             # Registrar no log de moderação
-            cursor.execute('''
+            await db_manager.execute('''
                 INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
                 VALUES (?, ?, ?, ?, ?)
             ''', (ctx.guild.id, user.id, ctx.author.id, 'warn', motivo))
@@ -5220,7 +4415,7 @@ async def check_warns(ctx, user: discord.Member = None):
     target = user or ctx.author
 
     try:
-        user_data = get_user_data(target.id)
+        user_data = await get_user_data(target.id)
         if not user_data:
             warns = 0
         else:
@@ -5282,15 +4477,10 @@ async def kick_member(ctx, member: discord.Member, *, reason="Sem motivo especif
 
         # Log da moderação
         try:
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (ctx.guild.id, member.id, ctx.author.id, 'kick', reason))
-                conn.commit()
-                conn.close()
+            await db_manager.execute('''
+                INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (ctx.guild.id, member.id, ctx.author.id, 'kick', reason))
         except Exception as e:
             logger.error(f"Erro ao salvar log de moderação: {e}")
 
@@ -5310,22 +4500,22 @@ async def add_saldo(ctx, user: discord.Member, amount: int):
         return
 
     try:
-        user_data = get_user_data(user.id)
+        user_data = await get_user_data(user.id)
         if not user_data:
-            update_user_data(user.id)
+            await update_user_data(user.id)
             current_coins = 50
         else:
             current_coins = user_data[1]
 
         new_coins = current_coins + amount
 
-        with db_lock:
-            conn = get_db_connection()
+        async with db_manager._lock:
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user.id))
 
             # Registrar transação
-            cursor.execute('''
+            await db_manager.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (user.id, ctx.guild.id, 'admin_add', amount, f"Saldo adicionado por {ctx.author.name}"))
@@ -5371,7 +4561,7 @@ async def remove_saldo(ctx, user: discord.Member, amount: int):
         return
 
     try:
-        user_data = get_user_data(user.id)
+        user_data = await get_user_data(user.id)
         if not user_data:
             embed = create_embed("❌ Usuário não encontrado", "Este usuário não está no banco de dados!", color=0xff0000)
             await ctx.send(embed=embed)
@@ -5390,13 +4580,13 @@ async def remove_saldo(ctx, user: discord.Member, amount: int):
 
         new_coins = max(0, current_coins - amount)
 
-        with db_lock:
-            conn = get_db_connection()
+        async with db_manager._lock:
+            conn = await db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user.id))
 
             # Registrar transação
-            cursor.execute('''
+            await db_manager.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (user.id, ctx.guild.id, 'admin_remove', -amount, f"Saldo removido por {ctx.author.name}"))
@@ -5511,35 +4701,10 @@ Membros dos clans {clan1} e {clan2} podem reagir com:
 
         # Salvar evento no banco
         try:
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-
-                # Criar tabela de eventos de clan se não existir
-                cursor.execute('''CREATE TABLE IF NOT EXISTS clan_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    guild_id INTEGER,
-                    creator_id INTEGER,
-                    clan1 TEXT,
-                    clan2 TEXT,
-                    event_type TEXT,
-                    bet_amount INTEGER,
-                    end_time TIMESTAMP,
-                    message_id INTEGER,
-                    participants TEXT DEFAULT '[]',
-                    bets TEXT DEFAULT '{}',
-                    status TEXT DEFAULT 'active',
-                    winner_clan TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )''')
-
-                cursor.execute('''
-                    INSERT INTO clan_events (guild_id, creator_id, clan1, clan2, event_type, bet_amount, end_time, message_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (ctx.guild.id, ctx.author.id, clan1, clan2, tipo_evento, aposta, end_time, evento_msg.id))
-
-                conn.commit()
-                conn.close()
+            await db_manager.execute('''
+                INSERT INTO clan_events (guild_id, creator_id, clan1, clan2, event_type, bet_amount, end_time, message_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (ctx.guild.id, ctx.author.id, clan1, clan2, tipo_evento, aposta, end_time, evento_msg.id))
 
             logger.info(f"Evento de clan criado: {clan1} vs {clan2}")
 
@@ -5554,19 +4719,12 @@ Membros dos clans {clan1} e {clan2} podem reagir com:
 async def listar_eventos_clan(ctx):
     """Ver eventos de clan ativos"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-
-            cursor.execute('''
-                SELECT clan1, clan2, event_type, bet_amount, participants, status
-                FROM clan_events
-                WHERE guild_id = ? AND status = 'active'
-                ORDER BY end_time
-            ''', (ctx.guild.id,))
-
-            eventos = cursor.fetchall()
-            conn.close()
+        eventos = await db_manager.execute('''
+            SELECT clan1, clan2, event_type, bet_amount, participants, end_time
+            FROM clan_events
+            WHERE guild_id = ? AND status = 'active'
+            ORDER BY end_time
+        ''', (ctx.guild.id,))
 
         if not eventos:
             embed = create_embed(
@@ -5584,7 +4742,7 @@ async def listar_eventos_clan(ctx):
         )
 
         for evento in eventos[:5]:
-            clan1, clan2, event_type, bet_amount, end_time_str, participants_json, status = evento
+            clan1, clan2, event_type, bet_amount, participants_json, end_time_str = evento
             participants = json.loads(participants_json) if participants_json else []
 
             embed.add_field(
@@ -5606,55 +4764,46 @@ async def listar_eventos_clan(ctx):
 async def finalizar_evento_clan(ctx, evento_id: int, clan_vencedor: str):
     """[ADMIN] Finalizar evento de clan"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
+        evento = await db_manager.execute('''
+            SELECT clan1, clan2, bet_amount, participants, bets, message_id
+            FROM clan_events
+            WHERE id = ? AND guild_id = ? AND status = 'active'
+        ''', (evento_id, ctx.guild.id))
 
-            # Buscar evento
-            cursor.execute('''
-                SELECT clan1, clan2, bet_amount, participants, bets, message_id
-                FROM clan_events
-                WHERE id = ? AND guild_id = ? AND status = 'active'
-            ''', (evento_id, ctx.guild.id))
+        if not evento:
+            embed = create_embed("❌ Evento não encontrado", "Evento não existe ou já foi finalizado!", color=0xff0000)
+            await ctx.send(embed=embed)
+            return
 
-            evento = cursor.fetchone()
-            if not evento:
-                embed = create_embed("❌ Evento não encontrado", "Evento não existe ou já foi finalizado!", color=0xff0000)
-                await ctx.send(embed=embed)
-                return
+        clan1, clan2, bet_amount, participants_json, bets_json, message_id = evento[0]
+        clan_vencedor = clan_vencedor.upper()
 
-            clan1, clan2, bet_amount, participants_json, bets_json, message_id = evento
-            clan_vencedor = clan_vencedor.upper()
+        if clan_vencedor not in [clan1, clan2]:
+            embed = create_embed("❌ Clan inválido", f"Use {clan1} ou {clan2}", color=0xff0000)
+            await ctx.send(embed=embed)
+            return
 
-            if clan_vencedor not in [clan1, clan2]:
-                embed = create_embed("❌ Clan inválido", f"Use {clan1} ou {clan2}", color=0xff0000)
-                await ctx.send(embed=embed)
-                return
+        participants = json.loads(participants_json) if participants_json else []
+        bets = json.loads(bets_json) if bets_json else {}
 
-            participants = json.loads(participants_json) if participants_json else []
-            bets = json.loads(bets_json) if bets_json else {}
+        # Calcular prêmios
+        vencedores = [p for p in participants if bets.get(str(p), {}).get('clan') == clan_vencedor]
+        premio_total = len(participants) * bet_amount
+        premio_individual = premio_total // len(vencedores) if vencedores else 0
 
-            # Calcular prêmios
-            vencedores = [p for p in participants if bets.get(str(p), {}).get('clan') == clan_vencedor]
-            premio_total = len(participants) * bet_amount
-            premio_individual = premio_total // len(vencedores) if vencedores else 0
+        # Distribuir prêmios
+        for user_id in vencedores:
+            user_data = await get_user_data(user_id)
+            if user_data:
+                new_coins = user_data[1] + premio_individual + bet_amount  # Devolver aposta + prêmio
+                await db_manager.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user_id))
 
-            # Distribuir prêmios
-            for user_id in vencedores:
-                user_data = get_user_data(user_id)
-                if user_data:
-                    new_coins = user_data[1] + premio_individual + bet_amount  # Devolver aposta + prêmio
-                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user_id))
-
-            # Marcar como finalizado
-            cursor.execute('''
-                UPDATE clan_events 
-                SET status = 'finished', winner_clan = ?
-                WHERE id = ?
-            ''', (clan_vencedor, evento_id))
-
-            conn.commit()
-            conn.close()
+        # Marcar como finalizado
+        await db_manager.execute('''
+            UPDATE clan_events 
+            SET status = 'finished', winner_clan = ?
+            WHERE id = ?
+        ''', (clan_vencedor, evento_id))
 
         embed = create_embed(
             f"🏆 {clan_vencedor} VENCEU!",
@@ -5874,15 +5023,10 @@ async def create_reminder(ctx, tempo=None, *, texto=None):
         remind_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
 
         # Salvar no banco
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO reminders (user_id, guild_id, channel_id, reminder_text, remind_time)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (ctx.author.id, ctx.guild.id, ctx.channel.id, texto, remind_time))
-            conn.commit()
-            conn.close()
+        await db_manager.execute('''
+            INSERT INTO reminders (user_id, guild_id, channel_id, reminder_text, remind_time)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (ctx.author.id, ctx.guild.id, ctx.channel.id, texto, remind_time))
 
         embed = create_embed(
             "✅ Lembrete Criado!",
@@ -6039,12 +5183,12 @@ async def user_info(ctx, user: discord.Member = None):
     target = user or ctx.author
 
     # Buscar dados do usuário no banco
-    user_data = get_user_data(target.id)
+    user_data = await get_user_data(target.id)
     if user_data:
         coins, xp, level, rep, bank = user_data[1], user_data[2], user_data[3], user_data[4], user_data[5]
         warnings = user_data[15]
     else:
-        coins = xp = level = rep = bank = warnings = 0
+        coins, xp, level, rep, bank, warnings = 0, 0, 1, 0, 0, 0
 
     # Status emoji
     status_emoji = {
@@ -6104,8 +5248,7 @@ async def avatar(ctx, user: discord.Member = None):
 async def on_command_error(ctx, error):
     try:
         if isinstance(error, commands.CommandNotFound):
-            # Sugerir comando similar
-            command_name = ctx.message.content.split()[0][2:].lower()  # Remove prefix
+            command_name = ctx.message.content.split()[0][2:].lower()
             similar_commands = ['ping', 'ajuda', 'saldo', 'rank', 'daily']
             suggestion = None
 
@@ -6158,13 +5301,15 @@ async def on_command_error(ctx, error):
 
         elif isinstance(error, discord.HTTPException):
             logger.error(f"Discord HTTP Error: {error}")
-            embed = create_embed(
-                "🔄 Erro de conexão",
-                "Houve um problema de conexão. Tentando novamente...",
-                color=0xff6600
-            )
             try:
-                await ctx.send(embed=embed, delete_after=5)
+                channel = bot.get_channel(CHANNEL_ID_ALERTA)
+                if channel:
+                    embed = create_embed(
+                        "⚠️ Aviso HTTP",
+                        f"Erro HTTP detectado mas sistema continua funcionando: {str(error)[:100]}",
+                        color=0xffaa00
+                    )
+                    await channel.send(embed=embed)
             except:
                 pass
 
@@ -6184,7 +5329,6 @@ async def on_command_error(ctx, error):
             logger.error(f"Unexpected error in {ctx.command}: {error}")
             logger.error(f"Error type: {type(error)}")
 
-            # Tentar enviar erro genérico se possível
             try:
                 embed = create_embed(
                     "❌ Erro interno",
@@ -6195,7 +5339,6 @@ async def on_command_error(ctx, error):
             except:
                 pass
 
-            # Notificar canal de alerta
             try:
                 channel = bot.get_channel(CHANNEL_ID_ALERTA)
                 if channel:
@@ -6213,32 +5356,28 @@ async def on_command_error(ctx, error):
 
     except Exception as handler_error:
         logger.error(f"Erro no error handler: {handler_error}")
-        # Último recurso - resposta simples
         try:
             await ctx.send("❌ Erro interno do bot.", delete_after=5)
         except:
             pass
 
-# Sistemas de manutenção de conexão removidos para economizar recursos
-
-# Sistemas de restart automático removidos para economizar recursos
-
+# Sistema de inicialização melhorado
 async def start_bot():
-    """Sistema de inicialização ULTRA robusto com restart real"""
+    """Sistema de inicialização otimizado e robusto"""
     reconnect_count = 0
-    max_reconnects = 20  # Mais tentativas
-    critical_error_count = 0
-    max_critical_errors = 3
+    max_reconnects = 10
 
     while reconnect_count < max_reconnects:
         try:
             logger.info(f"🚀 Iniciando RXbot... (Tentativa {reconnect_count + 1}/{max_reconnects})")
 
+            # Inicializar database
+            await init_database()
+
             # Limpeza prévia de memória
-            import gc
             gc.collect()
 
-            # Verificar token antes de tentar conectar
+            # Verificar token
             token = os.getenv('TOKEN')
             if not token:
                 logger.error("🚨 TOKEN não encontrado!")
@@ -6246,38 +5385,18 @@ async def start_bot():
                 reconnect_count += 1
                 continue
 
-            # REINICIAR bot completamente se necessário
-            if critical_error_count > 0:
-                logger.info("🔄 Reiniciando bot devido a erro crítico...")
-                try:
-                    if not bot.is_closed():
-                        await bot.close()
-                    await asyncio.sleep(3)
+            logger.info("🌐 Conectando ao Discord...")
+            await asyncio.wait_for(bot.start(token), timeout=60.0)
 
-                    # Recriar o bot se necessário
-                    if bot.is_closed():
-                        logger.info("🔨 Recriando instância do bot...")
-                        bot.clear()
-                        await asyncio.sleep(2)
-                except Exception as restart_error:
-                    logger.error(f"Erro ao reiniciar bot: {restart_error}")
+            logger.info("✅ Bot conectado com sucesso!")
+            reconnect_count = 0
+            return
 
-            # Iniciar o bot com timeout aumentado
-            try:
-                logger.info("🌐 Conectando ao Discord...")
-                await asyncio.wait_for(bot.start(token), timeout=90.0)
-
-                # Se chegou até aqui, sucesso!
-                logger.info("✅ Bot conectado com sucesso!")
-                reconnect_count = 0  # Reset counter on success
-                critical_error_count = 0
-                return  # Sair da função, bot está rodando
-
-            except asyncio.TimeoutError:
-                logger.error("⏱️ Timeout na inicialização do bot")
-                reconnect_count += 1
-                await asyncio.sleep(5)
-                continue
+        except asyncio.TimeoutError:
+            logger.error("⏱️ Timeout na inicialização do bot")
+            reconnect_count += 1
+            await asyncio.sleep(5)
+            continue
 
         except discord.LoginFailure as e:
             logger.error(f"❌ Falha de login (token inválido): {e}")
@@ -6286,9 +5405,9 @@ async def start_bot():
             reconnect_count += 1
 
         except discord.HTTPException as e:
-            if e.status == 429:  # Rate limited
+            if e.status == 429:
                 logger.error("🚨 Rate limited! Aguardando...")
-                wait_time = 120  # 2 minutos para rate limit
+                wait_time = 120
             else:
                 logger.error(f"❌ Erro HTTP Discord: {e}")
                 wait_time = min(300, 30 * (2 ** min(reconnect_count, 5)))
@@ -6300,9 +5419,7 @@ async def start_bot():
         except discord.ConnectionClosed as e:
             logger.error(f"🔗 Conexão fechada: {e}")
             reconnect_count += 1
-            critical_error_count += 1
 
-            # Fechar bot antes de tentar reconectar
             try:
                 if not bot.is_closed():
                     await bot.close()
@@ -6310,7 +5427,7 @@ async def start_bot():
             except:
                 pass
 
-            wait_time = 20  # Reconectar rapidamente para connection closed
+            wait_time = 20
             logger.info(f"🔄 Reconectando em {wait_time} segundos...")
             await asyncio.sleep(wait_time)
 
@@ -6320,9 +5437,7 @@ async def start_bot():
             logger.error(f"🔍 Traceback: {traceback.format_exc()}")
 
             reconnect_count += 1
-            critical_error_count += 1
 
-            # Fechar bot em caso de erro crítico
             try:
                 if not bot.is_closed():
                     await bot.close()
@@ -6330,24 +5445,21 @@ async def start_bot():
             except:
                 pass
 
-            # Limpeza de memória em caso de erro
-            import gc
             gc.collect()
 
             wait_time = min(60, 15 * reconnect_count)
             logger.info(f"🔄 Aguardando {wait_time}s antes da próxima tentativa...")
             await asyncio.sleep(wait_time)
 
-    # Se chegou aqui, todas as tentativas falharam
     logger.error("🚨 Máximo de tentativas atingido. ERRO CRÍTICO!")
 
-    # Fechar sessão HTTP antes de finalizar
+    # Cleanup final
     try:
-        await close_http_session()
+        await http_manager.close()
+        await db_manager.close_all()
     except Exception as e:
-        logger.error(f"Erro ao fechar sessão HTTP: {e}")
+        logger.warning(f"⚠️ Cleanup final: {e}")
 
-    # Notificar canal de alerta se possível
     try:
         if not bot.is_closed():
             channel = bot.get_channel(CHANNEL_ID_ALERTA)
@@ -6363,53 +5475,12 @@ async def start_bot():
     except:
         pass
 
-    # RESTART FORÇADO - Última tentativa
-    logger.error("💀 Iniciando RESTART FORÇADO do sistema...")
-
-    try:
-        # Fechar sessão HTTP primeiro
-        await close_http_session()
-
-        # Fechar completamente o bot
-        if not bot.is_closed():
-            await bot.close()
-        await asyncio.sleep(5)
-
-        # Limpar tudo
-        bot.clear()
-        import gc
-        gc.collect()
-
-        logger.info("🔄 REINICIANDO BOT COMPLETAMENTE...")
-
-        # Tentar uma última vez com novo loop
-        token = os.getenv('TOKEN')
-        if token:
-            await asyncio.sleep(10)  # Aguardar antes do restart final
-
-            # Recursão controlada - uma única tentativa de restart completo
-            if critical_error_count < max_critical_errors:
-                logger.info("🆘 Tentativa de restart recursivo...")
-                await start_bot()
-            else:
-                logger.error("💥 FALHA CRÍTICA TOTAL - Sistema não consegue se recuperar")
-
-    except Exception as restart_error:
-        logger.error(f"💥 FALHA NO RESTART FORÇADO: {restart_error}")
-        logger.error("🚨 SISTEMA EM ESTADO CRÍTICO IRRECUPERÁVEL")
-
-
-# Funções de keep-alive removidos para economizar recursos
-
-# Sistemas de restart automático removidos para economizar recursos
-
 if __name__ == "__main__":
-    max_restarts = 5
+    max_restarts = 3
     restart_count = 0
 
     while restart_count < max_restarts:
         try:
-            # Verificar token
             token = os.getenv('TOKEN')
             if not token:
                 logger.error("🚨 TOKEN não encontrado nas variáveis de ambiente!")
@@ -6418,10 +5489,8 @@ if __name__ == "__main__":
 
             logger.info(f"🚀 Iniciando RXbot... (Restart #{restart_count + 1})")
 
-            # Iniciar bot com sistema robusto
             asyncio.run(start_bot())
 
-            # Se chegou aqui, o bot foi fechado normalmente
             logger.info("✅ Bot finalizado normally")
             break
 
@@ -6444,8 +5513,6 @@ if __name__ == "__main__":
                 logger.info(f"🔄 Tentando restart automático em {wait_time}s...")
                 time.sleep(wait_time)
 
-                # Limpeza de memória antes do restart
-                import gc
                 gc.collect()
             else:
                 logger.error("💀 Máximo de restarts atingido. Encerrando...")
