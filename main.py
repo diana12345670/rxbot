@@ -4581,76 +4581,89 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
         await ctx.send(embed=embed)
         return
 
+    if user.bot:
+        embed = create_embed("❌ Impossível", "Você não pode dar itens para bots!", color=0xff0000)
+        await ctx.send(embed=embed)
+        return
+
     if item_id not in LOJA_ITENS:
         embed = create_embed("❌ Item inválido", "Este item não existe!", color=0xff0000)
         await ctx.send(embed=embed)
         return
 
-    # Verificar se o usuário tem o item
-    sender_data = get_user_data(ctx.author.id)
-    if not sender_data:
-        embed = create_embed("❌ Sem itens", "Você não tem itens para dar!", color=0xff0000)
-        await ctx.send(embed=embed)
-        return
-
-    sender_inventory_data = sender_data[10]
-    sender_inventory = json.loads(sender_inventory_data) if sender_inventory_data else {}
-
-    if str(item_id) not in sender_inventory or sender_inventory[str(item_id)] < quantidade:
-        item_name = LOJA_ITENS[item_id]['nome']
-        embed = create_embed(
-            "❌ Item insuficiente",
-            f"Você não tem {quantidade}x **{item_name}** suficientes!\n"
-            f"Você tem apenas: {sender_inventory.get(str(item_id), 0)}",
-            color=0xff0000
-        )
-        await ctx.send(embed=embed)
-        return
-
     try:
-        # Obter dados do receptor
-        receiver_data = get_user_data(user.id)
-        if not receiver_data:
-            update_user_data(user.id)
-            receiver_data = get_user_data(user.id)
-
-        receiver_inventory_data = receiver_data[10]
-        receiver_inventory = json.loads(receiver_inventory_data) if receiver_inventory_data else {}
-
-        item = LOJA_ITENS[item_id]
-
+        # Buscar inventário do remetente diretamente do banco
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-
-            # Remover do inventário do remetente
+            
+            # Verificar se remetente existe
+            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (ctx.author.id,))
+            sender_result = cursor.fetchone()
+            
+            if not sender_result:
+                conn.close()
+                embed = create_embed("❌ Sem dados", "Você não tem dados no sistema!", color=0xff0000)
+                await ctx.send(embed=embed)
+                return
+            
+            sender_inventory_data = sender_result[0]
+            sender_inventory = json.loads(sender_inventory_data) if sender_inventory_data else {}
+            
+            # Verificar se tem o item
+            if str(item_id) not in sender_inventory or sender_inventory[str(item_id)] < quantidade:
+                item_name = LOJA_ITENS[item_id]['nome']
+                conn.close()
+                embed = create_embed(
+                    "❌ Item insuficiente",
+                    f"Você não tem {quantidade}x **{item_name}** suficientes!\n"
+                    f"Você tem apenas: {sender_inventory.get(str(item_id), 0)}",
+                    color=0xff0000
+                )
+                await ctx.send(embed=embed)
+                return
+            
+            # Verificar/criar receptor
+            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user.id,))
+            receiver_result = cursor.fetchone()
+            
+            if not receiver_result:
+                # Criar dados do receptor
+                cursor.execute('INSERT INTO users (user_id) VALUES (?)', (user.id,))
+                receiver_inventory = {}
+            else:
+                receiver_inventory_data = receiver_result[0]
+                receiver_inventory = json.loads(receiver_inventory_data) if receiver_inventory_data else {}
+            
+            item = LOJA_ITENS[item_id]
+            
+            # Processar transferência
             sender_inventory[str(item_id)] -= quantidade
             if sender_inventory[str(item_id)] <= 0:
                 del sender_inventory[str(item_id)]
-
-            # Adicionar ao inventário do receptor
+            
             if str(item_id) in receiver_inventory:
                 receiver_inventory[str(item_id)] += quantidade
             else:
                 receiver_inventory[str(item_id)] = quantidade
-
+            
             # Atualizar banco de dados
             cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?',
                           (json.dumps(sender_inventory), ctx.author.id))
             cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?',
                           (json.dumps(receiver_inventory), user.id))
-
+            
             # Registrar transações
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (ctx.author.id, ctx.guild.id, 'item_given', 0, f"Deu {quantidade}x {item['nome']} para {user.name}"))
-
+            
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (user.id, ctx.guild.id, 'item_received', 0, f"Recebeu {quantidade}x {item['nome']} de {ctx.author.name}"))
-
+            
             conn.commit()
             conn.close()
 
@@ -4683,7 +4696,7 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
 
     except Exception as e:
         logger.error(f"Erro ao transferir item: {e}")
-        embed = create_embed("❌ Erro", "Erro ao transferir item! Contate um administrador.", color=0xff0000)
+        embed = create_embed("❌ Erro", f"Erro ao transferir item: {str(e)[:100]}", color=0xff0000)
         await ctx.send(embed=embed)
 
 @bot.command(name='trocar', aliases=['trade', 'negociar'])
