@@ -1616,6 +1616,242 @@ async def on_member_join(member):
 # Sistema de emergência removido para economizar recursos
 
 # ============ SISTEMA DE TICKETS COMPLETO ============
+
+# ============ SISTEMA DE TICKETS PÚBLICOS ============
+@bot.command(name='ticketpublico', aliases=['rxticketpublico'])
+@commands.has_permissions(manage_messages=True)
+async def criar_ticket_publico(ctx, tipo=None):
+    """[MOD] Criar sistema de ticket público"""
+    
+    if tipo is None:
+        # Menu principal
+        embed = create_embed(
+            "🎟️ Sistema de Tickets Públicos",
+            """**Comandos disponíveis:**
+
+`RXticketpublico` - Criar painel geral de tickets
+`RXticketpublico atendimento` - Criar painel de atendimento
+`RXticketpublico testetier` - Criar painel para teste tier
+
+**ℹ️ Como funciona:**
+• Moderador usa o comando
+• Bot cria uma mensagem com botão
+• Qualquer pessoa pode clicar e criar ticket
+• Sem limites de uso ou quantidade de pessoas""",
+            color=0x7289da
+        )
+        await ctx.send(embed=embed)
+        return
+    
+    elif tipo.lower() == "atendimento":
+        # Painel de atendimento geral
+        embed = create_embed(
+            "🎧 Sistema de Atendimento - Tickets",
+            f"""**🌟 Precisa de ajuda? Estamos aqui para você!**
+
+**📋 Tipos de atendimento disponíveis:**
+• 🐛 **Problemas técnicos** - Bugs, erros, falhas
+• 💰 **Economia** - Problemas com moedas, loja, itens
+• ⚖️ **Moderação** - Denúncias, reports, punições
+• 💡 **Sugestões** - Ideias e melhorias
+• ❓ **Dúvidas gerais** - Comandos, funcionamento
+• 🛠️ **Suporte técnico** - Configurações, permissões
+
+**✨ Vantagens do nosso atendimento:**
+• ⚡ **Resposta rápida** da equipe
+• 🔒 **Canal privado** só para você
+• 👥 **Suporte especializado** por categoria
+• 📋 **Histórico salvo** para acompanhamento
+
+**🚀 Criar seu ticket é simples:**
+Clique no botão abaixo e seu canal privado será criado instantaneamente!
+
+*Criado por {ctx.author.mention} | {ctx.guild.name}*""",
+            color=0x00ff00
+        )
+        
+        view = PublicTicketView("atendimento")
+        msg = await ctx.send(embed=embed, view=view)
+        
+        # Confirmar para o moderador
+        confirm_embed = create_embed(
+            "✅ Painel de Atendimento Criado!",
+            f"Sistema público de tickets de atendimento ativo!\nQualquer pessoa pode clicar no botão para criar um ticket.",
+            color=0x00ff00
+        )
+        await ctx.send(embed=confirm_embed, delete_after=10)
+        
+    elif tipo.lower() == "testetier":
+        # Painel específico para teste tier
+        embed = create_embed(
+            "👑 Sistema de Teste Tier - Tickets",
+            f"""**🎯 TESTE TIER EXCLUSIVO**
+
+**📋 Sobre o Teste Tier:**
+• 🏆 **Avaliação especializada** da equipe tier
+• 📊 **Critérios rigorosos** de seleção
+• 🎮 **Testes práticos** de habilidade
+• 👑 **Acesso a benefícios exclusivos** se aprovado
+
+**✨ O que você precisa saber:**
+• 📝 **Prepare-se bem** antes de fazer o teste
+• ⏰ **Atendimento prioritário** garantido
+• 🔍 **Avaliação completa** de suas skills
+• 📈 **Feedback detalhado** sobre seu desempenho
+
+**🎪 Benefícios de ser Tier:**
+• 🌟 **Privilégios especiais** no servidor
+• 💎 **Acesso a canais exclusivos**
+• 🎁 **Recompensas diferenciadas**
+• 👑 **Reconhecimento da comunidade**
+
+**🚀 Pronto para o desafio?**
+Clique no botão abaixo para iniciar seu teste tier!
+
+*Criado por {ctx.author.mention} | Sistema Tier {ctx.guild.name}*""",
+            color=0xffd700
+        )
+        
+        view = PublicTicketView("testetier")
+        msg = await ctx.send(embed=embed, view=view)
+        
+        # Confirmar para o moderador
+        confirm_embed = create_embed(
+            "✅ Painel de Teste Tier Criado!",
+            f"Sistema público de teste tier ativo!\nQualquer pessoa pode clicar no botão para criar um ticket de teste tier.",
+            color=0xffd700
+        )
+        await ctx.send(embed=confirm_embed, delete_after=10)
+        
+    else:
+        # Painel geral de tickets
+        embed = create_embed(
+            "🎟️ Sistema Geral de Tickets",
+            f"""**🌟 Central de Suporte {ctx.guild.name}**
+
+**📞 Precisa de ajuda? Crie seu ticket agora!**
+
+**🔧 Nosso sistema oferece:**
+• 🏆 **Atendimento personalizado** da equipe
+• 🔒 **Privacidade total** - só você e a staff veem
+• ⚡ **Resposta rápida** em horário comercial
+• 📋 **Histórico completo** de todas as interações
+• ✨ **Suporte especializado** para cada tipo de problema
+
+**📋 Para que você pode usar:**
+• Reportar bugs ou problemas técnicos
+• Fazer denúncias ou reports
+• Tirar dúvidas sobre comandos
+• Sugerir melhorias para o servidor
+• Resolver problemas com economia
+• Qualquer outro assunto que precise de atenção da staff
+
+**🎯 É muito simples:**
+1. Clique no botão abaixo
+2. Seu ticket será criado automaticamente
+3. Descreva sua situação no canal privado
+4. Nossa equipe te atenderá em breve!
+
+*Sistema criado por {ctx.author.mention} | Suporte 24/7*""",
+            color=0x7289da
+        )
+        
+        view = PublicTicketView("geral")
+        msg = await ctx.send(embed=embed, view=view)
+        
+        # Confirmar para o moderador
+        confirm_embed = create_embed(
+            "✅ Painel de Tickets Criado!",
+            f"Sistema público de tickets ativo!\nQualquer pessoa pode clicar no botão para criar um ticket.",
+            color=0x00ff00
+        )
+        await ctx.send(embed=confirm_embed, delete_after=10)
+
+# Classe para os botões dos tickets públicos
+class PublicTicketView(discord.ui.View):
+    def __init__(self, tipo):
+        super().__init__(timeout=None)  # Sem timeout para botões permanentes
+        self.tipo = tipo
+    
+    @discord.ui.button(label="🎟️ Criar Ticket", style=discord.ButtonStyle.primary, emoji="🎟️")
+    async def criar_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            user = interaction.user
+            guild = interaction.guild
+            
+            # Definir motivo baseado no tipo
+            if self.tipo == "atendimento":
+                motivo = "Atendimento Geral - Painel Público"
+                emoji = "🎧"
+                cor = 0x00ff00
+            elif self.tipo == "testetier":
+                motivo = "Teste Tier - Painel Público"
+                emoji = "👑"
+                cor = 0xffd700
+            else:
+                motivo = "Suporte Geral - Painel Público"
+                emoji = "🎟️"
+                cor = 0x7289da
+            
+            # Verificar se usuário já tem ticket aberto
+            existing_channels = [ch for ch in guild.channels if ch.name.startswith('ticket-') and str(user.id) in ch.name]
+            if len(existing_channels) >= 3:  # Limite de 3 tickets simultâneos
+                embed = create_embed(
+                    "⚠️ Limite de Tickets",
+                    "Você já tem muitos tickets abertos! Feche alguns antes de criar novos.",
+                    color=0xff6600
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+            
+            # Responder imediatamente
+            embed_loading = create_embed(
+                f"{emoji} Criando Ticket...",
+                f"Criando seu ticket de {motivo.lower()}...\nAguarde alguns segundos!",
+                color=cor
+            )
+            await interaction.response.send_message(embed=embed_loading, ephemeral=True)
+            
+            # Criar ticket usando a função existente
+            ctx_mock = type('MockCtx', (), {
+                'guild': guild,
+                'channel': interaction.channel,
+                'send': interaction.channel.send,
+                'author': user  # Para logs
+            })()
+            
+            await create_ticket_channel(ctx_mock, motivo, user)
+            
+            # Confirmar criação
+            embed_success = create_embed(
+                f"✅ {emoji} Ticket Criado!",
+                f"Seu ticket foi criado com sucesso!\n**Tipo:** {motivo}\n\nVerifique a categoria **📋 Tickets** para encontrar seu canal.",
+                color=cor
+            )
+            
+            try:
+                await interaction.edit_original_response(embed=embed_success)
+            except:
+                await interaction.followup.send(embed=embed_success, ephemeral=True)
+            
+            # Log da criação
+            logger.info(f"Ticket público criado: {user.name} - Tipo: {self.tipo}")
+            
+        except Exception as e:
+            logger.error(f"Erro ao criar ticket público: {e}")
+            try:
+                embed_error = create_embed(
+                    "❌ Erro ao Criar Ticket",
+                    "Ocorreu um erro ao criar seu ticket. Tente novamente ou contate um administrador.",
+                    color=0xff0000
+                )
+                await interaction.response.send_message(embed=embed_error, ephemeral=True)
+            except:
+                try:
+                    await interaction.edit_original_response(embed=embed_error)
+                except:
+                    pass
+
 @bot.command(name='testetier', aliases=['rxticketier', 'tickettier'])
 async def create_tier_ticket(ctx):
     """Criar ticket específico para tier"""
@@ -1848,8 +2084,23 @@ async def create_ticket_channel(ctx, motivo, user):
 
     # Embed inicial do ticket
     priority_text = "🎫 PRIORITÁRIO " if priority else ""
+    
+    # Determinar cor e emoji baseado no tipo
+    if "Teste Tier" in motivo:
+        cor = 0xffd700
+        emoji_tipo = "👑"
+    elif "Atendimento" in motivo:
+        cor = 0x00ff00
+        emoji_tipo = "🎧"
+    elif "Painel Público" in motivo:
+        cor = 0x7289da
+        emoji_tipo = "🎟️"
+    else:
+        cor = 0x7289da if not priority else 0xffd700
+        emoji_tipo = "🎟️"
+    
     embed = create_embed(
-        f"🎟️ {priority_text}Ticket #{ticket_id}",
+        f"{emoji_tipo} {priority_text}Ticket #{ticket_id}",
         f"""**Criado por:** {user.mention}
 **Motivo:** {motivo}
 **Status:** 🟢 Aberto
@@ -1861,13 +2112,14 @@ async def create_ticket_channel(ctx, motivo, user):
 • Para fechar o ticket, reaja com 🔒
 
 {"🎫 **Este ticket tem prioridade!**" if priority else ""}
+{"👑 **Este é um ticket de Teste Tier especial!**" if "Teste Tier" in motivo else ""}
 
 ⚠️ **Regras do ticket:**
 • Seja respeitoso e educado
 • Descreva seu problema claramente
 • Aguarde a resposta da staff
 • Não spam ou flood""",
-        color=0xffd700 if priority else 0x7289da
+        color=cor
     )
 
     msg = await ticket_channel.send(f"{user.mention}", embed=embed)
@@ -2797,7 +3049,7 @@ Mencione o bot para conversar!
     elif categoria.lower() in ['tickets', 'ticket', 'suporte']:
         embed = create_embed(
             "🎟️ Sistema Completo de Tickets",
-            """**📝 Criar Tickets:**
+            """**📝 Criar Tickets (Usuários):**
 • `RXticket <motivo>` - Criar ticket com motivo específico
 • `RXticket` - Menu interativo de criação rápida
 • `RXtestetier` - Ticket específico para teste tier
@@ -2806,6 +3058,13 @@ Mencione o bot para conversar!
 🐛 Bug/Erro no bot | 💰 Problema com economia
 ⚖️ Denúncia/Moderação | 💡 Sugestão/Ideia
 ❓ Dúvida geral | 🛠️ Suporte técnico | 👑 Tier
+
+**🌐 Sistema de Tickets Públicos (MOD):**
+• `RXticketpublico` - Painel geral de tickets
+• `RXticketpublico atendimento` - Painel de atendimento
+• `RXticketpublico testetier` - Painel de teste tier
+• Qualquer pessoa pode clicar e criar ticket
+• Sem limites de uso ou quantidade
 
 **🔧 Gerenciar Tickets:**
 • Reaja com 🔒 para fechar ticket
