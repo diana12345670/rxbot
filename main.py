@@ -1209,7 +1209,7 @@ async def on_reaction_add(reaction, user):
                 # Verificar se é membro do clan correto
                 event_id = game_data.get('event_id')
                 clan_name = game_data.get('clan_name', '')
-                
+
                 # Buscar dados do evento
                 try:
                     with db_lock:
@@ -1217,22 +1217,22 @@ async def on_reaction_add(reaction, user):
                         cursor = conn.cursor()
                         cursor.execute('SELECT participants FROM clan_events WHERE id = ?', (event_id,))
                         result = cursor.fetchone()
-                        
+
                         if result:
                             participants = json.loads(result[0]) if result[0] else []
-                            
+
                             if user.id not in participants:
                                 participants.append(user.id)
                                 cursor.execute('UPDATE clan_events SET participants = ? WHERE id = ?', 
                                              (json.dumps(participants), event_id))
                                 conn.commit()
-                                
+
                                 # Confirmar participação
                                 try:
                                     await user.send(f"✅ Você entrou no evento Stumble Guys do **{clan_name}**! Boa sorte na partida! 🎮")
                                 except:
                                     pass
-                        
+
                         conn.close()
                 except Exception as e:
                     logger.error(f"Erro ao processar participação no evento: {e}")
@@ -1655,7 +1655,7 @@ async def on_member_join(member):
 @commands.has_permissions(manage_messages=True)
 async def criar_ticket_publico(ctx, tipo=None):
     """[MOD] Criar sistema de ticket público"""
-    
+
     if tipo is None:
         # Menu principal
         embed = create_embed(
@@ -1675,7 +1675,7 @@ async def criar_ticket_publico(ctx, tipo=None):
         )
         await ctx.send(embed=embed)
         return
-    
+
     elif tipo.lower() == "atendimento":
         # Painel de atendimento geral
         embed = create_embed(
@@ -1702,10 +1702,10 @@ Clique no botão abaixo e seu canal privado será criado instantaneamente!
 *Criado por {ctx.author.mention} | {ctx.guild.name}*""",
             color=0x00ff00
         )
-        
+
         view = PublicTicketView("atendimento")
         msg = await ctx.send(embed=embed, view=view)
-        
+
         # Confirmar para o moderador
         confirm_embed = create_embed(
             "✅ Painel de Atendimento Criado!",
@@ -1713,7 +1713,7 @@ Clique no botão abaixo e seu canal privado será criado instantaneamente!
             color=0x00ff00
         )
         await ctx.send(embed=confirm_embed, delete_after=10)
-        
+
     elif tipo.lower() == "testetier":
         # Painel específico para teste tier
         embed = create_embed(
@@ -1744,10 +1744,10 @@ Clique no botão abaixo para iniciar seu teste tier!
 *Criado por {ctx.author.mention} | Sistema Tier {ctx.guild.name}*""",
             color=0xffd700
         )
-        
+
         view = PublicTicketView("testetier")
         msg = await ctx.send(embed=embed, view=view)
-        
+
         # Confirmar para o moderador
         confirm_embed = create_embed(
             "✅ Painel de Teste Tier Criado!",
@@ -1755,7 +1755,7 @@ Clique no botão abaixo para iniciar seu teste tier!
             color=0xffd700
         )
         await ctx.send(embed=confirm_embed, delete_after=10)
-        
+
     else:
         # Painel geral de tickets
         embed = create_embed(
@@ -1788,10 +1788,10 @@ Clique no botão abaixo para iniciar seu teste tier!
 *Sistema criado por {ctx.author.mention} | Suporte 24/7*""",
             color=0x7289da
         )
-        
+
         view = PublicTicketView("geral")
         msg = await ctx.send(embed=embed, view=view)
-        
+
         # Confirmar para o moderador
         confirm_embed = create_embed(
             "✅ Painel de Tickets Criado!",
@@ -1891,13 +1891,13 @@ class PublicTicketView(discord.ui.View):
     def __init__(self, tipo):
         super().__init__(timeout=None)  # Sem timeout para botões permanentes
         self.tipo = tipo
-    
+
     @discord.ui.button(label="🎟️ Criar Ticket", style=discord.ButtonStyle.primary, emoji="🎟️")
     async def criar_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             user = interaction.user
             guild = interaction.guild
-            
+
             # Definir motivo baseado no tipo
             if self.tipo == "atendimento":
                 motivo = "Atendimento Geral - Painel Público"
@@ -1911,7 +1911,7 @@ class PublicTicketView(discord.ui.View):
                 motivo = "Suporte Geral - Painel Público"
                 emoji = "🎟️"
                 cor = 0x7289da
-            
+
             # Verificar se usuário já tem ticket aberto
             existing_channels = [ch for ch in guild.channels if ch.name.startswith('ticket-') and str(user.id) in ch.name]
             if len(existing_channels) >= 3:  # Limite de 3 tickets simultâneos
@@ -1922,7 +1922,7 @@ class PublicTicketView(discord.ui.View):
                 )
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
-            
+
             # Responder imediatamente
             embed_loading = create_embed(
                 f"{emoji} Criando Ticket...",
@@ -1930,7 +1930,7 @@ class PublicTicketView(discord.ui.View):
                 color=cor
             )
             await interaction.response.send_message(embed=embed_loading, ephemeral=True)
-            
+
             # Criar ticket usando a função existente
             ctx_mock = type('MockCtx', (), {
                 'guild': guild,
@@ -1938,24 +1938,24 @@ class PublicTicketView(discord.ui.View):
                 'send': interaction.channel.send,
                 'author': user  # Para logs
             })()
-            
+
             await create_ticket_channel(ctx_mock, motivo, user)
-            
+
             # Confirmar criação
             embed_success = create_embed(
                 f"✅ {emoji} Ticket Criado!",
                 f"Seu ticket foi criado com sucesso!\n**Tipo:** {motivo}\n\nVerifique a categoria **📋 Tickets** para encontrar seu canal.",
                 color=cor
             )
-            
+
             try:
                 await interaction.edit_original_response(embed=embed_success)
             except:
                 await interaction.followup.send(embed=embed_success, ephemeral=True)
-            
+
             # Log da criação
             logger.info(f"Ticket público criado: {user.name} - Tipo: {self.tipo}")
-            
+
         except Exception as e:
             logger.error(f"Erro ao criar ticket público: {e}")
             try:
@@ -2203,7 +2203,7 @@ async def create_ticket_channel(ctx, motivo, user):
 
     # Embed inicial do ticket
     priority_text = "🎫 PRIORITÁRIO " if priority else ""
-    
+
     # Determinar cor e emoji baseado no tipo
     if "Teste Tier" in motivo:
         cor = 0xffd700
@@ -2217,7 +2217,7 @@ async def create_ticket_channel(ctx, motivo, user):
     else:
         cor = 0x7289da if not priority else 0xffd700
         emoji_tipo = "🎟️"
-    
+
     embed = create_embed(
         f"{emoji_tipo} {priority_text}Ticket #{ticket_id}",
         f"""**Criado por:** {user.mention}
@@ -4728,20 +4728,20 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             # Verificar se remetente existe
             cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (ctx.author.id,))
             sender_result = cursor.fetchone()
-            
+
             if not sender_result:
                 conn.close()
                 embed = create_embed("❌ Sem dados", "Você não tem dados no sistema!", color=0xff0000)
                 await ctx.send(embed=embed)
                 return
-            
+
             sender_inventory_data = sender_result[0]
             sender_inventory = json.loads(sender_inventory_data) if sender_inventory_data else {}
-            
+
             # Verificar se tem o item
             if str(item_id) not in sender_inventory or sender_inventory[str(item_id)] < quantidade:
                 item_name = LOJA_ITENS[item_id]['nome']
@@ -4754,11 +4754,11 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
                 )
                 await ctx.send(embed=embed)
                 return
-            
+
             # Verificar/criar receptor
             cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user.id,))
             receiver_result = cursor.fetchone()
-            
+
             if not receiver_result:
                 # Criar dados do receptor
                 cursor.execute('INSERT INTO users (user_id) VALUES (?)', (user.id,))
@@ -4766,36 +4766,36 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
             else:
                 receiver_inventory_data = receiver_result[0]
                 receiver_inventory = json.loads(receiver_inventory_data) if receiver_inventory_data else {}
-            
+
             item = LOJA_ITENS[item_id]
-            
+
             # Processar transferência
             sender_inventory[str(item_id)] -= quantidade
             if sender_inventory[str(item_id)] <= 0:
                 del sender_inventory[str(item_id)]
-            
+
             if str(item_id) in receiver_inventory:
                 receiver_inventory[str(item_id)] += quantidade
             else:
                 receiver_inventory[str(item_id)] = quantidade
-            
+
             # Atualizar banco de dados
             cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?',
                           (json.dumps(sender_inventory), ctx.author.id))
             cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?',
                           (json.dumps(receiver_inventory), user.id))
-            
+
             # Registrar transações
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (ctx.author.id, ctx.guild.id, 'item_given', 0, f"Deu {quantidade}x {item['nome']} para {user.name}"))
-            
+
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
                 VALUES (?, ?, ?, ?, ?)
             ''', (user.id, ctx.guild.id, 'item_received', 0, f"Recebeu {quantidade}x {item['nome']} de {ctx.author.name}"))
-            
+
             conn.commit()
             conn.close()
 
@@ -5774,9 +5774,9 @@ async def remove_saldo(ctx, user: discord.Member, amount: int):
 
 # View para criar eventos XClan
 class XClanEventView(discord.ui.View):
-    def __init__(self, user_id):
-        super().__init__(timeout=300)  # 5 minutos
-        self.user_id = user_id
+    def __init__(self, creator_id):
+        super().__init__(timeout=900)  # 15 minutos
+        self.creator_id = creator_id  # ID do staff que criou
         self.event_data = {
             'clan_adversario': None,
             'mapa': None,
@@ -5785,7 +5785,15 @@ class XClanEventView(discord.ui.View):
             'emotes': None,
             'data': None
         }
-    
+
+    def check_staff_permissions(self, user):
+        """Verifica se o usuário é staff ou o criador"""
+        if user.id == self.creator_id:
+            return True
+        # Verificar se é staff
+        return any(role.name.lower() in ['admin', 'mod', 'staff', 'moderador', 'administrador'] 
+                  for role in user.roles) or user.guild_permissions.administrator
+
     @discord.ui.select(
         placeholder="🏆 Escolha o clan adversário...",
         options=[
@@ -5798,14 +5806,10 @@ class XClanEventView(discord.ui.View):
         ]
     )
     async def select_clan(self, interaction: discord.Interaction, select: discord.ui.Select):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ Apenas quem iniciou pode escolher!", ephemeral=True)
-            return
-        
+        # Qualquer pessoa pode preencher agora
         self.event_data['clan_adversario'] = select.values[0]
-        await interaction.response.send_message(f"✅ Clan adversário: **{select.values[0]}**", ephemeral=True)
-        await self.update_embed(interaction)
-    
+        await self.update_embed_response(interaction, f"✅ Clan adversário definido: **{select.values[0]}** por {interaction.user.mention}")
+
     @discord.ui.select(
         placeholder="🗺️ Escolha o mapa do Stumble Guys...",
         options=[
@@ -5818,14 +5822,10 @@ class XClanEventView(discord.ui.View):
         ]
     )
     async def select_map(self, interaction: discord.Interaction, select: discord.ui.Select):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ Apenas quem iniciou pode escolher!", ephemeral=True)
-            return
-        
+        # Qualquer pessoa pode preencher agora
         self.event_data['mapa'] = select.values[0]
-        await interaction.response.send_message(f"✅ Mapa selecionado: **{select.values[0]}**", ephemeral=True)
-        await self.update_embed(interaction)
-    
+        await self.update_embed_response(interaction, f"✅ Mapa selecionado: **{select.values[0]}** por {interaction.user.mention}")
+
     @discord.ui.select(
         placeholder="🎮 Quantos jogadores?",
         options=[
@@ -5838,14 +5838,10 @@ class XClanEventView(discord.ui.View):
         ]
     )
     async def select_players(self, interaction: discord.Interaction, select: discord.ui.Select):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ Apenas quem iniciou pode escolher!", ephemeral=True)
-            return
-        
+        # Qualquer pessoa pode preencher agora
         self.event_data['jogadores'] = select.values[0]
-        await interaction.response.send_message(f"✅ Jogadores: **{select.values[0]}v{select.values[0]}**", ephemeral=True)
-        await self.update_embed(interaction)
-    
+        await self.update_embed_response(interaction, f"✅ Jogadores: **{select.values[0]}v{select.values[0]}** por {interaction.user.mention}")
+
     @discord.ui.select(
         placeholder="🎯 MD (Melhor de quantas?)",
         options=[
@@ -5856,38 +5852,27 @@ class XClanEventView(discord.ui.View):
         ]
     )
     async def select_md(self, interaction: discord.Interaction, select: discord.ui.Select):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ Apenas quem iniciou pode escolher!", ephemeral=True)
-            return
-        
+        # Qualquer pessoa pode preencher agora
         self.event_data['md'] = select.values[0]
-        await interaction.response.send_message(f"✅ MD selecionado: **MD{select.values[0]}**", ephemeral=True)
-        await self.update_embed(interaction)
-    
+        await self.update_embed_response(interaction, f"✅ MD selecionado: **MD{select.values[0]}** por {interaction.user.mention}")
+
     @discord.ui.button(label="📅 Definir Data e Horário", style=discord.ButtonStyle.secondary)
     async def set_datetime(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ Apenas quem iniciou pode escolher!", ephemeral=True)
-            return
-        
-        # Modal para data e horário
-        await interaction.response.send_modal(DateTimeModal(self))
-    
+        # Qualquer pessoa pode preencher agora
+        await interaction.response.send_modal(DateTimeModal(self, interaction.user))
+
     @discord.ui.button(label="😎 Definir Emotes", style=discord.ButtonStyle.secondary)
     async def set_emotes(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ Apenas quem iniciou pode escolher!", ephemeral=True)
-            return
-        
-        # Modal para emotes
-        await interaction.response.send_modal(EmotesModal(self))
-    
+        # Qualquer pessoa pode preencher agora
+        await interaction.response.send_modal(EmotesModal(self, interaction.user))
+
     @discord.ui.button(label="🚨 CRIAR EVENTO VS! 🚨", style=discord.ButtonStyle.danger)
     async def create_event(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ Apenas quem iniciou pode criar!", ephemeral=True)
+        # Apenas staff pode finalizar a criação
+        if not self.check_staff_permissions(interaction.user):
+            await interaction.response.send_message("❌ Apenas staff pode finalizar a criação do evento!", ephemeral=True)
             return
-        
+
         # Verificar se todos os campos foram preenchidos
         missing = []
         if not self.event_data['clan_adversario']:
@@ -5902,16 +5887,16 @@ class XClanEventView(discord.ui.View):
             missing.append("Emotes")
         if not self.event_data['data']:
             missing.append("Data e Horário")
-        
+
         if missing:
-            await interaction.response.send_message(f"❌ Preencha: {', '.join(missing)}", ephemeral=True)
+            await interaction.response.send_message(f"❌ Ainda faltam: {', '.join(missing)}", ephemeral=True)
             return
-        
+
         # Criar evento
         await self.publish_event(interaction)
-    
-    async def update_embed(self, interaction):
-        """Atualiza o embed com as informações preenchidas"""
+
+    async def update_embed_response(self, interaction, status_message):
+        """Atualiza o embed na mesma mensagem com feedback de preenchimento"""
         embed = create_embed(
             "🚨 CRIANDO EVENTO XClan VS! 🚨",
             f"""**📋 Informações do Evento:**
@@ -5923,15 +5908,22 @@ class XClanEventView(discord.ui.View):
 **😎 Emotes:** {self.event_data['emotes'] or '❓ Não definido'}
 **📅 Data:** {self.event_data['data'] or '❓ Não definido'}
 
-**⚠️ Preencha todos os campos e clique em "CRIAR EVENTO VS!"**""",
+**💡 Qualquer pessoa pode preencher os campos!**
+**🔒 Apenas staff pode finalizar a criação.**
+
+**📝 Última ação:** {status_message}""",
             color=0xff0000
         )
-        
+
         try:
-            await interaction.edit_original_response(embed=embed, view=self)
+            await interaction.response.edit_message(embed=embed, view=self)
         except:
-            pass
-    
+            try:
+                await interaction.edit_original_response(embed=embed, view=self)
+            except:
+                # Fallback para resposta ephemeral se não conseguir editar
+                await interaction.response.send_message(status_message, ephemeral=True)
+
     async def publish_event(self, interaction):
         """Publica o evento no canal correto"""
         try:
@@ -5949,22 +5941,25 @@ class XClanEventView(discord.ui.View):
 
 👨‍🎤**Marque:** <@&1400167903126356120>
 
+**🎯 Criado por:** <@{self.creator_id}>
+**✅ Finalizado por:** {interaction.user.mention}
+
 ||@everyone // @here||""",
                 color=0xff0000
             )
-            
+
             # Salvar no banco de dados
             try:
                 with db_lock:
                     conn = get_db_connection()
                     cursor = conn.cursor()
-                    
+
                     cursor.execute('''
                         INSERT INTO clan_events (guild_id, creator_id, clan1, clan2, event_type, end_time, message_id, participants, status)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         interaction.guild.id, 
-                        interaction.user.id, 
+                        self.creator_id, 
                         "RX", 
                         self.event_data['clan_adversario'], 
                         f"VS - {self.event_data['mapa']}", 
@@ -5973,105 +5968,106 @@ class XClanEventView(discord.ui.View):
                         "[]",  # Lista de participantes
                         'active'
                     ))
-                    
+
                     event_id = cursor.lastrowid
                     conn.commit()
                     conn.close()
             except Exception as e:
                 logger.error(f"Erro ao salvar evento XClan: {e}")
-            
-            # Publicar no canal atual
-            event_msg = await interaction.response.send_message(embed=embed)
-            
-            # Desativar view original
+
+            # Desativar view original e mostrar sucesso
             for item in self.children:
                 item.disabled = True
-            
+
             success_embed = create_embed(
-                "✅ Evento XClan Criado!",
-                f"Evento **RX vs {self.event_data['clan_adversario']}** criado com sucesso!\n\n"
+                "✅ Evento XClan Criado com Sucesso!",
+                f"**RX vs {self.event_data['clan_adversario']}** foi criado!\n\n"
                 f"📋 **Resumo:**\n"
                 f"• Mapa: {self.event_data['mapa']}\n"
                 f"• MD: MD{self.event_data['md']}\n"
                 f"• Jogadores: {self.event_data['jogadores']}v{self.event_data['jogadores']}\n"
                 f"• Data: {self.event_data['data']}\n\n"
+                f"🎯 **Criado por:** <@{self.creator_id}>\n"
+                f"✅ **Finalizado por:** {interaction.user.mention}\n\n"
                 f"Use `RXresultadoxclan` para enviar o resultado!",
                 color=0x00ff00
             )
-            
-            # Enviar confirmação em DM
-            try:
-                await interaction.user.send(embed=success_embed)
-            except:
-                pass
-            
-            logger.info(f"Evento XClan criado: RX vs {self.event_data['clan_adversario']} por {interaction.user}")
-            
+
+            await interaction.response.edit_message(embed=success_embed, view=self)
+
+            # Publicar evento em nova mensagem
+            await interaction.followup.send(embed=embed)
+
+            logger.info(f"Evento XClan criado: RX vs {self.event_data['clan_adversario']} - criado por ID {self.creator_id}, finalizado por {interaction.user}")
+
         except Exception as e:
             logger.error(f"Erro ao publicar evento XClan: {e}")
             await interaction.response.send_message("❌ Erro ao criar evento!", ephemeral=True)
 
 # Modal para data e horário
 class DateTimeModal(discord.ui.Modal, title="📅 Data e Horário do Evento"):
-    def __init__(self, view):
+    def __init__(self, view, user):
         super().__init__()
         self.view = view
-    
+        self.user = user
+
     date_input = discord.ui.TextInput(
         label="Data e Horário",
         placeholder="Ex: 15/01/2025 às 20:00",
         required=True,
         max_length=50
     )
-    
+
     async def on_submit(self, interaction: discord.Interaction):
         self.view.event_data['data'] = self.date_input.value
-        await interaction.response.send_message(f"✅ Data definida: **{self.date_input.value}**", ephemeral=True)
-        await self.view.update_embed(interaction)
+        await self.view.update_embed_response(interaction, f"✅ Data definida: **{self.date_input.value}** por {self.user.mention}")
 
 # Modal para emotes
 class EmotesModal(discord.ui.Modal, title="😎 Emotes do Stumble Guys"):
-    def __init__(self, view):
+    def __init__(self, view, user):
         super().__init__()
         self.view = view
-    
+        self.user = user
+
     emotes_input = discord.ui.TextInput(
         label="Emotes",
         placeholder="Ex: 🏃💨🔥⚡🌊❄️",
         required=True,
         max_length=100
     )
-    
+
     async def on_submit(self, interaction: discord.Interaction):
         self.view.event_data['emotes'] = self.emotes_input.value
-        await interaction.response.send_message(f"✅ Emotes definidos: **{self.emotes_input.value}**", ephemeral=True)
-        await self.view.update_embed(interaction)
+        await self.view.update_embed_response(interaction, f"✅ Emotes definidos: **{self.emotes_input.value}** por {self.user.mention}")
 
 @bot.command(name='mensagemxclan', aliases=['xclan', 'eventoxclan'])
+@commands.has_permissions(manage_messages=True)
 async def mensagem_xclan(ctx):
-    """Criar evento XClan vs interativo"""
-    
+    """[STAFF] Criar evento XClan vs interativo - qualquer pessoa pode preencher"""
+
     embed = create_embed(
         "🚨 SISTEMA DE EVENTOS XClan VS! 🚨",
         f"""**🎮 Criando evento RX vs Outro Clan**
 
 **📋 Como funciona:**
-1️⃣ Escolha o clan adversário
-2️⃣ Selecione o mapa do Stumble Guys
-3️⃣ Defina MD (Melhor de quantas)
-4️⃣ Escolha quantidade de jogadores
-5️⃣ Defina data e horário
-6️⃣ Escolha os emotes
-7️⃣ Clique em "CRIAR EVENTO VS!"
+1️⃣ **Qualquer pessoa** pode preencher os campos
+2️⃣ Escolha o clan adversário nos menus
+3️⃣ Selecione o mapa do Stumble Guys
+4️⃣ Defina MD (Melhor de quantas)
+5️⃣ Escolha quantidade de jogadores
+6️⃣ Defina data e horário (botão)
+7️⃣ Escolha os emotes (botão)
+8️⃣ **Apenas staff** pode finalizar clicando em "CRIAR EVENTO VS!"
 
 **🏆 O evento será publicado automaticamente com ping @everyone**
 
-**👑 Iniciado por:** {ctx.author.mention}
+**👑 Staff responsável:** {ctx.author.mention}
+**💡 Qualquer membro pode ajudar a preencher!**
 
 ⬇️ **Use os menus abaixo para preencher as informações:**""",
         color=0xff0000
     )
-    
+
     view = XClanEventView(ctx.author.id)
     await ctx.send(embed=embed, view=view)
 
@@ -6079,7 +6075,7 @@ async def mensagem_xclan(ctx):
 @commands.has_permissions(manage_messages=True)
 async def resultado_xclan(ctx, *, resultado=None):
     """[MOD] Enviar resultado do evento XClan"""
-    
+
     if not resultado:
         embed = create_embed(
             "🏆 Como enviar resultado XClan",
@@ -6097,7 +6093,7 @@ Obs: WO
         )
         await ctx.send(embed=embed)
         return
-    
+
     try:
         # Canal específico para resultados
         result_channel = bot.get_channel(1400167040504823869)
@@ -6105,7 +6101,7 @@ Obs: WO
             embed = create_embed("❌ Erro", "Canal de resultados não encontrado!", color=0xff0000)
             await ctx.send(embed=embed)
             return
-        
+
         # Criar embed do resultado
         embed = create_embed(
             "🏆 RESULTADO XCLAN VS",
@@ -6115,9 +6111,9 @@ Obs: WO
 **⏰ Data:** <t:{int(datetime.datetime.now().timestamp())}:F>""",
             color=0xffd700
         )
-        
+
         await result_channel.send(embed=embed)
-        
+
         # Confirmar envio
         confirm_embed = create_embed(
             "✅ Resultado Enviado!",
@@ -6125,9 +6121,9 @@ Obs: WO
             color=0x00ff00
         )
         await ctx.send(embed=confirm_embed, delete_after=10)
-        
+
         logger.info(f"Resultado XClan enviado por {ctx.author}: {resultado[:50]}...")
-        
+
     except Exception as e:
         logger.error(f"Erro ao enviar resultado XClan: {e}")
         embed = create_embed("❌ Erro", "Erro ao enviar resultado!", color=0xff0000)
@@ -6299,7 +6295,7 @@ async def listar_eventos_clan(ctx):
                 "Speed Run": "⚡",
                 "Aguardando seleção": "❓"
             }
-            
+
             map_emoji = map_emojis.get(selected_map, "🗺️")
 
             embed.add_field(
