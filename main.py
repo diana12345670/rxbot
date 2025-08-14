@@ -1204,6 +1204,39 @@ async def on_reaction_add(reaction, user):
                 await message.edit(embed=embed)
                 del active_games[message.id]
 
+        elif game_data['type'] == 'stumble_guys_event':
+            if str(reaction.emoji) == "🎮":
+                # Verificar se é membro do clan correto
+                event_id = game_data.get('event_id')
+                clan_name = game_data.get('clan_name', '')
+                
+                # Buscar dados do evento
+                try:
+                    with db_lock:
+                        conn = get_db_connection()
+                        cursor = conn.cursor()
+                        cursor.execute('SELECT participants FROM clan_events WHERE id = ?', (event_id,))
+                        result = cursor.fetchone()
+                        
+                        if result:
+                            participants = json.loads(result[0]) if result[0] else []
+                            
+                            if user.id not in participants:
+                                participants.append(user.id)
+                                cursor.execute('UPDATE clan_events SET participants = ? WHERE id = ?', 
+                                             (json.dumps(participants), event_id))
+                                conn.commit()
+                                
+                                # Confirmar participação
+                                try:
+                                    await user.send(f"✅ Você entrou no evento Stumble Guys do **{clan_name}**! Boa sorte na partida! 🎮")
+                                except:
+                                    pass
+                        
+                        conn.close()
+                except Exception as e:
+                    logger.error(f"Erro ao processar participação no evento: {e}")
+
         elif game_data['type'] == 'close_ticket_confirmation':
             # Verificar se é o usuário que iniciou o fechamento
             if user.id != game_data['closer']:
@@ -1766,6 +1799,92 @@ Clique no botão abaixo para iniciar seu teste tier!
             color=0x00ff00
         )
         await ctx.send(embed=confirm_embed, delete_after=10)
+
+# Classe para seleção de mapas do Stumble Guys
+class StumbleGuysEventView(discord.ui.View):
+    def __init__(self, clan_name, creator_id, end_time):
+        super().__init__(timeout=3600)  # 1 hora para escolher mapa
+        self.clan_name = clan_name
+        self.creator_id = creator_id
+        self.end_time = end_time
+
+    @discord.ui.button(label="🏃 Block Dash", style=discord.ButtonStyle.primary)
+    async def block_dash(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.select_map(interaction, "Block Dash", "🏃")
+
+    @discord.ui.button(label="🌊 Water Race", style=discord.ButtonStyle.primary)
+    async def water_race(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.select_map(interaction, "Water Race", "🌊")
+
+    @discord.ui.button(label="🔥 Lava Land", style=discord.ButtonStyle.danger)
+    async def lava_land(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.select_map(interaction, "Lava Land", "🔥")
+
+    @discord.ui.button(label="❄️ Ice Cold", style=discord.ButtonStyle.secondary)
+    async def ice_cold(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.select_map(interaction, "Ice Cold", "❄️")
+
+    @discord.ui.button(label="🌪️ Wind Rush", style=discord.ButtonStyle.success)
+    async def wind_rush(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.select_map(interaction, "Wind Rush", "🌪️")
+
+    @discord.ui.button(label="⚡ Speed Run", style=discord.ButtonStyle.danger)
+    async def speed_run(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.select_map(interaction, "Speed Run", "⚡")
+
+    async def select_map(self, interaction, map_name, map_emoji):
+        # Verificar se é o criador ou admin
+        if interaction.user.id != self.creator_id and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Apenas o criador do evento ou admins podem selecionar o mapa!", ephemeral=True)
+            return
+
+        try:
+            # Atualizar banco de dados
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE clan_events 
+                    SET selected_map = ? 
+                    WHERE message_id = ?
+                ''', (map_name, interaction.message.id))
+                conn.commit()
+                conn.close()
+
+            # Criar embed atualizado com mapa selecionado
+            embed = create_embed(
+                f"🎮 EVENTO STUMBLE GUYS - {self.clan_name}",
+                f"""**🏆 Clan:** {self.clan_name}
+**🗺️ Mapa Selecionado:** {map_emoji} **{map_name}**
+**🏁 Termina:** <t:{int(self.end_time.timestamp())}:R>
+**👑 Mapa escolhido por:** {interaction.user.mention}
+
+**📋 Agora os membros podem participar:**
+Reaja com 🎮 para entrar na batalha!
+
+**⚠️ Instruções:**
+• Apenas membros do {self.clan_name}
+• Partida no mapa **{map_name}**
+• Sem apostas - apenas diversão!
+• Boa sorte a todos!""",
+                color=0x00ff00
+            )
+
+            # Desativar todos os botões
+            for item in self.children:
+                item.disabled = True
+
+            await interaction.response.edit_message(embed=embed, view=self)
+
+            # Adicionar reação para participar
+            await interaction.followup.send("✅ Mapa selecionado! Agora os membros podem reagir com 🎮 para participar!", ephemeral=True)
+            await interaction.message.add_reaction("🎮")
+
+            logger.info(f"Mapa {map_name} selecionado para evento do clan {self.clan_name}")
+
+        except Exception as e:
+            logger.error(f"Erro ao selecionar mapa: {e}")
+            await interaction.response.send_message("❌ Erro ao selecionar mapa!", ephemeral=True)
 
 # Classe para os botões dos tickets públicos
 class PublicTicketView(discord.ui.View):
@@ -3159,35 +3278,48 @@ Mencione o bot para conversar!
 
     elif categoria.lower() in ['eventos', 'clan', 'clans']:
         embed = create_embed(
-            "⚔️ Sistema de Eventos de Clan",
-            """**Para Membros:**
+            "🎮 Sistema de Eventos Stumble Guys",
+            """**🚨 EVENTOS XCLAN VS (NOVO):**
+• `RXmensagemxclan` - Criar evento RX vs outro clan (interativo)
+• `RXresultadoxclan <resultado>` - [MOD] Enviar resultado do evento
+• Sistema completo com formulário interativo
+• Publicação automática com @everyone ping
+
+**Para Membros do Clan:**
 • `RXeventosclan` - Ver eventos ativos
-• Reaja com ⚔️ para participar
-• Reaja com 🏆 para apostar no seu clan
+• Reaja com 🎮 para participar (sem custo!)
 
 **Para Administradores:**
-• `RXcriareventoclan <dados>` - Criar evento
-• `RXfinalizareventoclan <id> <vencedor>` - Finalizar
+• `RXcriareventoclan <dados>` - Criar evento simples
+• `RXfinalizareventoclan <id> <resultado>` - Finalizar
 
-**Formato de Criação:**
-`RXcriareventoclan CLAN1 vs CLAN2 | tipo | aposta | duração`
+**🚨 SISTEMA XCLAN VS:**
+1️⃣ Use `RXmensagemxclan`
+2️⃣ Escolha clan adversário (WLX, TOP, PRO, etc.)
+3️⃣ Selecione mapa do Stumble Guys
+4️⃣ Defina MD (1, 3, 5, 7)
+5️⃣ Escolha jogadores (1v1 até 6v6)
+6️⃣ Defina data e horário
+7️⃣ Escolha emotes do Stumble Guys
+8️⃣ Publica automaticamente com ping @everyone
 
-**Exemplo:**
-`RXcriareventoclan XCLAN vs GSN | Battle Royale | 5000 | 2h`
+**🗺️ Mapas do Stumble Guys:**
+🏃 **Block Dash** - Corrida clássica
+🌊 **Water Race** - Corrida aquática  
+🔥 **Lava Land** - Obstáculos de lava
+❄️ **Ice Cold** - Pista escorregadia
+🌪️ **Wind Rush** - Corrida com vento
+⚡ **Speed Run** - Velocidade máxima
 
-**Tipos de Eventos:**
-• Battle Royale
-• Team Deathmatch
-• King of the Hill
-• Capture the Flag
-• Tournament
+**📊 Envio de Resultado:**
+• Use `RXresultadoxclan ## 🏆 RX vs WLX`
+• `RX 11 ✖ 0 WLX`
+• `Obs: WO`
+• Resultado vai para <#1400167040504823869>
 
-**Durações aceitas:** 30m, 1h, 2h, 6h, 12h, 1d
-
-**Como funciona:**
-• Membros dos clans participam com aposta obrigatória
-• Admin decide o vencedor
-• Prêmio total é distribuído entre os vencedores""",
+**Recompensas:**
+• Vitória: 50 XP para todos
+• Derrota/Empate: 25 XP para todos""",
             color=0xff6600
         )
         await ctx.send(embed=embed)
@@ -5639,24 +5771,387 @@ async def remove_saldo(ctx, user: discord.Member, amount: int):
         await ctx.send(embed=embed)
 
 # ============ SISTEMA DE EVENTOS E BATALHAS DE CLANS ============
+
+# View para criar eventos XClan
+class XClanEventView(discord.ui.View):
+    def __init__(self, user_id):
+        super().__init__(timeout=300)  # 5 minutos
+        self.user_id = user_id
+        self.event_data = {
+            'clan_adversario': None,
+            'mapa': None,
+            'md': None,
+            'jogadores': None,
+            'emotes': None,
+            'data': None
+        }
+    
+    @discord.ui.select(
+        placeholder="🏆 Escolha o clan adversário...",
+        options=[
+            discord.SelectOption(label="WLX", value="WLX", emoji="⚔️"),
+            discord.SelectOption(label="TOP", value="TOP", emoji="🔥"),
+            discord.SelectOption(label="PRO", value="PRO", emoji="💪"),
+            discord.SelectOption(label="ELITE", value="ELITE", emoji="👑"),
+            discord.SelectOption(label="KING", value="KING", emoji="🎯"),
+            discord.SelectOption(label="Outro clan", value="OUTRO", emoji="❓")
+        ]
+    )
+    async def select_clan(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Apenas quem iniciou pode escolher!", ephemeral=True)
+            return
+        
+        self.event_data['clan_adversario'] = select.values[0]
+        await interaction.response.send_message(f"✅ Clan adversário: **{select.values[0]}**", ephemeral=True)
+        await self.update_embed(interaction)
+    
+    @discord.ui.select(
+        placeholder="🗺️ Escolha o mapa do Stumble Guys...",
+        options=[
+            discord.SelectOption(label="Block Dash", value="Block Dash", emoji="🏃"),
+            discord.SelectOption(label="Water Race", value="Water Race", emoji="🌊"),
+            discord.SelectOption(label="Lava Land", value="Lava Land", emoji="🔥"),
+            discord.SelectOption(label="Ice Cold", value="Ice Cold", emoji="❄️"),
+            discord.SelectOption(label="Wind Rush", value="Wind Rush", emoji="🌪️"),
+            discord.SelectOption(label="Speed Run", value="Speed Run", emoji="⚡")
+        ]
+    )
+    async def select_map(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Apenas quem iniciou pode escolher!", ephemeral=True)
+            return
+        
+        self.event_data['mapa'] = select.values[0]
+        await interaction.response.send_message(f"✅ Mapa selecionado: **{select.values[0]}**", ephemeral=True)
+        await self.update_embed(interaction)
+    
+    @discord.ui.select(
+        placeholder="🎮 Quantos jogadores?",
+        options=[
+            discord.SelectOption(label="1v1", value="1", emoji="1️⃣"),
+            discord.SelectOption(label="2v2", value="2", emoji="2️⃣"),
+            discord.SelectOption(label="3v3", value="3", emoji="3️⃣"),
+            discord.SelectOption(label="4v4", value="4", emoji="4️⃣"),
+            discord.SelectOption(label="5v5", value="5", emoji="5️⃣"),
+            discord.SelectOption(label="6v6", value="6", emoji="6️⃣")
+        ]
+    )
+    async def select_players(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Apenas quem iniciou pode escolher!", ephemeral=True)
+            return
+        
+        self.event_data['jogadores'] = select.values[0]
+        await interaction.response.send_message(f"✅ Jogadores: **{select.values[0]}v{select.values[0]}**", ephemeral=True)
+        await self.update_embed(interaction)
+    
+    @discord.ui.select(
+        placeholder="🎯 MD (Melhor de quantas?)",
+        options=[
+            discord.SelectOption(label="MD1 (Melhor de 1)", value="1", emoji="1️⃣"),
+            discord.SelectOption(label="MD3 (Melhor de 3)", value="3", emoji="3️⃣"),
+            discord.SelectOption(label="MD5 (Melhor de 5)", value="5", emoji="5️⃣"),
+            discord.SelectOption(label="MD7 (Melhor de 7)", value="7", emoji="7️⃣")
+        ]
+    )
+    async def select_md(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Apenas quem iniciou pode escolher!", ephemeral=True)
+            return
+        
+        self.event_data['md'] = select.values[0]
+        await interaction.response.send_message(f"✅ MD selecionado: **MD{select.values[0]}**", ephemeral=True)
+        await self.update_embed(interaction)
+    
+    @discord.ui.button(label="📅 Definir Data e Horário", style=discord.ButtonStyle.secondary)
+    async def set_datetime(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Apenas quem iniciou pode escolher!", ephemeral=True)
+            return
+        
+        # Modal para data e horário
+        await interaction.response.send_modal(DateTimeModal(self))
+    
+    @discord.ui.button(label="😎 Definir Emotes", style=discord.ButtonStyle.secondary)
+    async def set_emotes(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Apenas quem iniciou pode escolher!", ephemeral=True)
+            return
+        
+        # Modal para emotes
+        await interaction.response.send_modal(EmotesModal(self))
+    
+    @discord.ui.button(label="🚨 CRIAR EVENTO VS! 🚨", style=discord.ButtonStyle.danger)
+    async def create_event(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Apenas quem iniciou pode criar!", ephemeral=True)
+            return
+        
+        # Verificar se todos os campos foram preenchidos
+        missing = []
+        if not self.event_data['clan_adversario']:
+            missing.append("Clan Adversário")
+        if not self.event_data['mapa']:
+            missing.append("Mapa")
+        if not self.event_data['md']:
+            missing.append("MD")
+        if not self.event_data['jogadores']:
+            missing.append("Jogadores")
+        if not self.event_data['emotes']:
+            missing.append("Emotes")
+        if not self.event_data['data']:
+            missing.append("Data e Horário")
+        
+        if missing:
+            await interaction.response.send_message(f"❌ Preencha: {', '.join(missing)}", ephemeral=True)
+            return
+        
+        # Criar evento
+        await self.publish_event(interaction)
+    
+    async def update_embed(self, interaction):
+        """Atualiza o embed com as informações preenchidas"""
+        embed = create_embed(
+            "🚨 CRIANDO EVENTO XClan VS! 🚨",
+            f"""**📋 Informações do Evento:**
+
+**🏆 Clan Adversário:** {self.event_data['clan_adversario'] or '❓ Não definido'}
+**🗺️ Mapa:** {self.event_data['mapa'] or '❓ Não definido'}
+**🎯 MD:** {f"MD{self.event_data['md']}" if self.event_data['md'] else '❓ Não definido'}
+**👥 Jogadores:** {f"{self.event_data['jogadores']}v{self.event_data['jogadores']}" if self.event_data['jogadores'] else '❓ Não definido'}
+**😎 Emotes:** {self.event_data['emotes'] or '❓ Não definido'}
+**📅 Data:** {self.event_data['data'] or '❓ Não definido'}
+
+**⚠️ Preencha todos os campos e clique em "CRIAR EVENTO VS!"**""",
+            color=0xff0000
+        )
+        
+        try:
+            await interaction.edit_original_response(embed=embed, view=self)
+        except:
+            pass
+    
+    async def publish_event(self, interaction):
+        """Publica o evento no canal correto"""
+        try:
+            # Criar embed do evento
+            embed = create_embed(
+                "🚨 MODELO DE VS! 🚨",
+                f"""**Nome do Cla/Line:** {self.event_data['clan_adversario']}
+**Mapa(s):** {self.event_data['mapa']}
+**MD:** MD{self.event_data['md']}
+**Quantos jogadores?** {self.event_data['jogadores']}v{self.event_data['jogadores']}
+**Emotes:** {self.event_data['emotes']}
+**Data:** {self.event_data['data']}
+
+**PING:** ||@everyone||
+
+👨‍🎤**Marque:** <@&1400167903126356120>
+
+||@everyone // @here||""",
+                color=0xff0000
+            )
+            
+            # Salvar no banco de dados
+            try:
+                with db_lock:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    
+                    cursor.execute('''
+                        INSERT INTO clan_events (guild_id, creator_id, clan1, clan2, event_type, end_time, message_id, participants, status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        interaction.guild.id, 
+                        interaction.user.id, 
+                        "RX", 
+                        self.event_data['clan_adversario'], 
+                        f"VS - {self.event_data['mapa']}", 
+                        datetime.datetime.now() + datetime.timedelta(days=1),  # Evento por 24h
+                        0,  # Será atualizado depois
+                        "[]",  # Lista de participantes
+                        'active'
+                    ))
+                    
+                    event_id = cursor.lastrowid
+                    conn.commit()
+                    conn.close()
+            except Exception as e:
+                logger.error(f"Erro ao salvar evento XClan: {e}")
+            
+            # Publicar no canal atual
+            event_msg = await interaction.response.send_message(embed=embed)
+            
+            # Desativar view original
+            for item in self.children:
+                item.disabled = True
+            
+            success_embed = create_embed(
+                "✅ Evento XClan Criado!",
+                f"Evento **RX vs {self.event_data['clan_adversario']}** criado com sucesso!\n\n"
+                f"📋 **Resumo:**\n"
+                f"• Mapa: {self.event_data['mapa']}\n"
+                f"• MD: MD{self.event_data['md']}\n"
+                f"• Jogadores: {self.event_data['jogadores']}v{self.event_data['jogadores']}\n"
+                f"• Data: {self.event_data['data']}\n\n"
+                f"Use `RXresultadoxclan` para enviar o resultado!",
+                color=0x00ff00
+            )
+            
+            # Enviar confirmação em DM
+            try:
+                await interaction.user.send(embed=success_embed)
+            except:
+                pass
+            
+            logger.info(f"Evento XClan criado: RX vs {self.event_data['clan_adversario']} por {interaction.user}")
+            
+        except Exception as e:
+            logger.error(f"Erro ao publicar evento XClan: {e}")
+            await interaction.response.send_message("❌ Erro ao criar evento!", ephemeral=True)
+
+# Modal para data e horário
+class DateTimeModal(discord.ui.Modal, title="📅 Data e Horário do Evento"):
+    def __init__(self, view):
+        super().__init__()
+        self.view = view
+    
+    date_input = discord.ui.TextInput(
+        label="Data e Horário",
+        placeholder="Ex: 15/01/2025 às 20:00",
+        required=True,
+        max_length=50
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        self.view.event_data['data'] = self.date_input.value
+        await interaction.response.send_message(f"✅ Data definida: **{self.date_input.value}**", ephemeral=True)
+        await self.view.update_embed(interaction)
+
+# Modal para emotes
+class EmotesModal(discord.ui.Modal, title="😎 Emotes do Stumble Guys"):
+    def __init__(self, view):
+        super().__init__()
+        self.view = view
+    
+    emotes_input = discord.ui.TextInput(
+        label="Emotes",
+        placeholder="Ex: 🏃💨🔥⚡🌊❄️",
+        required=True,
+        max_length=100
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        self.view.event_data['emotes'] = self.emotes_input.value
+        await interaction.response.send_message(f"✅ Emotes definidos: **{self.emotes_input.value}**", ephemeral=True)
+        await self.view.update_embed(interaction)
+
+@bot.command(name='mensagemxclan', aliases=['xclan', 'eventoxclan'])
+async def mensagem_xclan(ctx):
+    """Criar evento XClan vs interativo"""
+    
+    embed = create_embed(
+        "🚨 SISTEMA DE EVENTOS XClan VS! 🚨",
+        f"""**🎮 Criando evento RX vs Outro Clan**
+
+**📋 Como funciona:**
+1️⃣ Escolha o clan adversário
+2️⃣ Selecione o mapa do Stumble Guys
+3️⃣ Defina MD (Melhor de quantas)
+4️⃣ Escolha quantidade de jogadores
+5️⃣ Defina data e horário
+6️⃣ Escolha os emotes
+7️⃣ Clique em "CRIAR EVENTO VS!"
+
+**🏆 O evento será publicado automaticamente com ping @everyone**
+
+**👑 Iniciado por:** {ctx.author.mention}
+
+⬇️ **Use os menus abaixo para preencher as informações:**""",
+        color=0xff0000
+    )
+    
+    view = XClanEventView(ctx.author.id)
+    await ctx.send(embed=embed, view=view)
+
+@bot.command(name='resultadoxclan', aliases=['resultxclan'])
+@commands.has_permissions(manage_messages=True)
+async def resultado_xclan(ctx, *, resultado=None):
+    """[MOD] Enviar resultado do evento XClan"""
+    
+    if not resultado:
+        embed = create_embed(
+            "🏆 Como enviar resultado XClan",
+            """**Formato:** `RXresultadoxclan resultado`
+
+**Exemplo:**
+```
+RXresultadoxclan ## 🏆 RX vs WLX
+RX  11 ✖ 0  WLX
+Obs: WO
+```
+
+**🏆 O resultado será enviado para <#1400167040504823869>**""",
+            color=0x7289da
+        )
+        await ctx.send(embed=embed)
+        return
+    
+    try:
+        # Canal específico para resultados
+        result_channel = bot.get_channel(1400167040504823869)
+        if not result_channel:
+            embed = create_embed("❌ Erro", "Canal de resultados não encontrado!", color=0xff0000)
+            await ctx.send(embed=embed)
+            return
+        
+        # Criar embed do resultado
+        embed = create_embed(
+            "🏆 RESULTADO XCLAN VS",
+            f"""{resultado}
+
+**📊 Resultado enviado por:** {ctx.author.mention}
+**⏰ Data:** <t:{int(datetime.datetime.now().timestamp())}:F>""",
+            color=0xffd700
+        )
+        
+        await result_channel.send(embed=embed)
+        
+        # Confirmar envio
+        confirm_embed = create_embed(
+            "✅ Resultado Enviado!",
+            f"Resultado do evento XClan foi enviado para {result_channel.mention}",
+            color=0x00ff00
+        )
+        await ctx.send(embed=confirm_embed, delete_after=10)
+        
+        logger.info(f"Resultado XClan enviado por {ctx.author}: {resultado[:50]}...")
+        
+    except Exception as e:
+        logger.error(f"Erro ao enviar resultado XClan: {e}")
+        embed = create_embed("❌ Erro", "Erro ao enviar resultado!", color=0xff0000)
+        await ctx.send(embed=embed)
+
 @bot.command(name='criareventoclan', aliases=['createclanevent'])
 @commands.has_permissions(administrator=True)
 async def criar_evento_clan(ctx, *, dados_evento=None):
-    """[ADMIN] Criar evento de batalha entre clans"""
+    """[ADMIN] Criar evento de batalha entre clans no Stumble Guys"""
     if not dados_evento:
         embed = create_embed(
-            "⚔️ Como criar evento de clan",
-            """**Formato:** `clan1 vs clan2 | tipo | aposta | duração`
+            "🎮 Como criar evento de clan - Stumble Guys",
+            """**Formato:** `XCLAN | duração`
 
 **Exemplo:**
-`RXcriareventoclan XCLAN vs GSN | Battle Royale | 5000 | 2h`
+`RXcriareventoclan XCLAN | 2h`
 
-**Tipos disponíveis:**
-• Battle Royale
-• Team Deathmatch
-• King of the Hill
-• Capture the Flag
-• Tournament
+**Mapas disponíveis do Stumble Guys:**
+🏃 **Block Dash** - Corrida clássica
+🌊 **Water Race** - Corrida aquática
+🔥 **Lava Land** - Obstáculos de lava
+❄️ **Ice Cold** - Pista escorregadia
+🌪️ **Wind Rush** - Corrida com vento
+⚡ **Speed Run** - Velocidade máxima
 
 **Durações:** 30m, 1h, 2h, 6h, 12h, 1d""",
             color=0x7289da
@@ -5665,28 +6160,18 @@ async def criar_evento_clan(ctx, *, dados_evento=None):
         return
 
     parts = [part.strip() for part in dados_evento.split('|')]
-    if len(parts) < 4:
+    if len(parts) < 2:
         embed = create_embed(
             "❌ Formato incorreto",
-            "Use: `clan1 vs clan2 | tipo | aposta | duração`",
+            "Use: `XCLAN | duração`\nExemplo: `XCLAN | 2h`",
             color=0xff0000
         )
         await ctx.send(embed=embed)
         return
 
     try:
-        # Parsear dados
-        clans_vs = parts[0].split(' vs ')
-        if len(clans_vs) != 2:
-            embed = create_embed("❌ Formato de clans inválido", "Use: `CLAN1 vs CLAN2`", color=0xff0000)
-            await ctx.send(embed=embed)
-            return
-
-        clan1 = clans_vs[0].strip().upper()
-        clan2 = clans_vs[1].strip().upper()
-        tipo_evento = parts[1]
-        aposta = int(parts[2])
-        duracao_str = parts[3]
+        clan_name = parts[0].strip().upper()
+        duracao_str = parts[1].strip()
 
         # Parse duração
         time_units = {'m': 60, 'h': 3600, 'd': 86400}
@@ -5701,31 +6186,29 @@ async def criar_evento_clan(ctx, *, dados_evento=None):
         seconds = amount * time_units[unit]
         end_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
 
+        # Criar view com botões para seleção de mapa
+        view = StumbleGuysEventView(clan_name, ctx.author.id, end_time)
+
         # Criar embed do evento
         embed = create_embed(
-            f"⚔️ EVENTO DE CLAN: {clan1} vs {clan2}",
-            f"""**🎮 Tipo:** {tipo_evento}
-**💰 Aposta:** {aposta:,} moedas por participante
+            f"🎮 EVENTO STUMBLE GUYS - {clan_name}",
+            f"""**🏆 Clan:** {clan_name}
 **⏰ Duração:** {duracao_str}
 **🏁 Termina:** <t:{int(end_time.timestamp())}:R>
 **👑 Criado por:** {ctx.author.mention}
 
-**📋 Como participar:**
-Membros dos clans {clan1} e {clan2} podem reagir com:
-⚔️ - Para participar da batalha
-🏆 - Para apostar no seu clan
+**🗺️ Escolha o mapa do Stumble Guys:**
+Clique em um dos botões abaixo para selecionar o mapa da batalha!
 
-**⚠️ Regras:**
-• Apenas membros dos clans podem participar
-• Aposta é obrigatória para participar
-• Resultado será decidido por votação ou admin
-• Prêmio vai para o clan vencedor""",
+**📋 Como funciona:**
+• Apenas membros do {clan_name} podem participar
+• Sem apostas necessárias - só diversão!
+• Admin escolhe o mapa clicando nos botões
+• Resultado decidido após a partida""",
             color=0xff6600
         )
 
-        evento_msg = await ctx.send(embed=embed)
-        await evento_msg.add_reaction("⚔️")
-        await evento_msg.add_reaction("🏆")
+        evento_msg = await ctx.send(embed=embed, view=view)
 
         # Salvar evento no banco
         try:
@@ -5733,7 +6216,7 @@ Membros dos clans {clan1} e {clan2} podem reagir com:
                 conn = get_db_connection()
                 cursor = conn.cursor()
 
-                # Criar tabela de eventos de clan se não existir
+                # Atualizar tabela de eventos de clan
                 cursor.execute('''CREATE TABLE IF NOT EXISTS clan_events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     guild_id INTEGER,
@@ -5741,43 +6224,44 @@ Membros dos clans {clan1} e {clan2} podem reagir com:
                     clan1 TEXT,
                     clan2 TEXT,
                     event_type TEXT,
-                    bet_amount INTEGER,
+                    bet_amount INTEGER DEFAULT 0,
                     end_time TIMESTAMP,
                     message_id INTEGER,
                     participants TEXT DEFAULT '[]',
                     bets TEXT DEFAULT '{}',
                     status TEXT DEFAULT 'active',
                     winner_clan TEXT,
+                    selected_map TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )''')
 
                 cursor.execute('''
-                    INSERT INTO clan_events (guild_id, creator_id, clan1, clan2, event_type, bet_amount, end_time, message_id)
+                    INSERT INTO clan_events (guild_id, creator_id, clan1, event_type, bet_amount, end_time, message_id, selected_map)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (ctx.guild.id, ctx.author.id, clan1, clan2, tipo_evento, aposta, end_time, evento_msg.id))
+                ''', (ctx.guild.id, ctx.author.id, clan_name, 'Stumble Guys', 0, end_time, evento_msg.id, 'Aguardando seleção'))
 
                 conn.commit()
                 conn.close()
 
-            logger.info(f"Evento de clan criado: {clan1} vs {clan2}")
+            logger.info(f"Evento Stumble Guys criado para clan: {clan_name}")
 
         except Exception as e:
             logger.error(f"Erro ao salvar evento de clan: {e}")
 
     except ValueError:
-        embed = create_embed("❌ Valores inválidos", "Verificar aposta (número) e duração!", color=0xff0000)
+        embed = create_embed("❌ Duração inválida", "Use números válidos para duração: 30m, 2h, 1d", color=0xff0000)
         await ctx.send(embed=embed)
 
 @bot.command(name='eventosclan', aliases=['clanevents'])
 async def listar_eventos_clan(ctx):
-    """Ver eventos de clan ativos"""
+    """Ver eventos Stumble Guys ativos"""
     try:
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
 
             cursor.execute('''
-                SELECT clan1, clan2, event_type, bet_amount, end_time, participants, status
+                SELECT clan1, event_type, selected_map, end_time, participants, status, id
                 FROM clan_events
                 WHERE guild_id = ? AND status = 'active'
                 ORDER BY end_time
@@ -5788,31 +6272,52 @@ async def listar_eventos_clan(ctx):
 
         if not eventos:
             embed = create_embed(
-                "⚔️ Nenhum evento ativo",
-                "Não há eventos de clan ativos no momento.\nAdministradores podem criar com `RXcriareventoclan`",
+                "🎮 Nenhum evento ativo",
+                "Não há eventos Stumble Guys ativos no momento.\nAdministradores podem criar com `RXcriareventoclan`",
                 color=0xffaa00
             )
             await ctx.send(embed=embed)
             return
 
         embed = create_embed(
-            "⚔️ Eventos de Clan Ativos",
+            "🎮 Eventos Stumble Guys Ativos",
             f"Encontrados {len(eventos)} evento(s) ativo(s):",
             color=0xff6600
         )
 
         for evento in eventos[:5]:
-            clan1, clan2, event_type, bet_amount, end_time_str, participants_json, status = evento
+            clan_name, event_type, selected_map, end_time_str, participants_json, status, event_id = evento
             participants = json.loads(participants_json) if participants_json else []
 
+            # Emoji do mapa
+            map_emojis = {
+                "Block Dash": "🏃",
+                "Water Race": "🌊", 
+                "Lava Land": "🔥",
+                "Ice Cold": "❄️",
+                "Wind Rush": "🌪️",
+                "Speed Run": "⚡",
+                "Aguardando seleção": "❓"
+            }
+            
+            map_emoji = map_emojis.get(selected_map, "🗺️")
+
             embed.add_field(
-                name=f"⚔️ {clan1} vs {clan2}",
+                name=f"🏆 {clan_name} (ID: {event_id})",
                 value=f"**🎮 Tipo:** {event_type}\n"
-                      f"**💰 Aposta:** {bet_amount:,} moedas\n"
+                      f"**🗺️ Mapa:** {map_emoji} {selected_map}\n"
                       f"**👥 Participantes:** {len(participants)}\n"
-                      f"**⏰ Termina:** <t:{int(datetime.datetime.fromisoformat(end_time_str).timestamp())}:R>",
+                      f"**⏰ Termina:** <t:{int(datetime.datetime.fromisoformat(end_time_str).timestamp())}:R>\n"
+                      f"**🎯 Status:** {'Aguardando mapa' if selected_map == 'Aguardando seleção' else 'Pronto para jogar!'}",
                 inline=False
             )
+
+        embed.add_field(
+            name="📋 Como Finalizar",
+            value="Use `RXfinalizareventoclan <id> <resultado>`\n"
+                  "**Resultados:** `vitoria`, `derrota`, `empate`",
+            inline=False
+        )
 
         await ctx.send(embed=embed)
 
@@ -5821,8 +6326,8 @@ async def listar_eventos_clan(ctx):
 
 @bot.command(name='finalizareventoclan', aliases=['endclanevent'])
 @commands.has_permissions(administrator=True)
-async def finalizar_evento_clan(ctx, evento_id: int, clan_vencedor: str):
-    """[ADMIN] Finalizar evento de clan"""
+async def finalizar_evento_clan(ctx, evento_id: int, resultado: str = "empate"):
+    """[ADMIN] Finalizar evento Stumble Guys"""
     try:
         with db_lock:
             conn = get_db_connection()
@@ -5830,7 +6335,7 @@ async def finalizar_evento_clan(ctx, evento_id: int, clan_vencedor: str):
 
             # Buscar evento
             cursor.execute('''
-                SELECT clan1, clan2, bet_amount, participants, bets, message_id
+                SELECT clan1, selected_map, participants, message_id, end_time
                 FROM clan_events
                 WHERE id = ? AND guild_id = ? AND status = 'active'
             ''', (evento_id, ctx.guild.id))
@@ -5841,50 +6346,79 @@ async def finalizar_evento_clan(ctx, evento_id: int, clan_vencedor: str):
                 await ctx.send(embed=embed)
                 return
 
-            clan1, clan2, bet_amount, participants_json, bets_json, message_id = evento
-            clan_vencedor = clan_vencedor.upper()
-
-            if clan_vencedor not in [clan1, clan2]:
-                embed = create_embed("❌ Clan inválido", f"Use {clan1} ou {clan2}", color=0xff0000)
-                await ctx.send(embed=embed)
-                return
-
+            clan_name, selected_map, participants_json, message_id, end_time = evento
             participants = json.loads(participants_json) if participants_json else []
-            bets = json.loads(bets_json) if bets_json else {}
 
-            # Calcular prêmios
-            vencedores = [p for p in participants if bets.get(str(p), {}).get('clan') == clan_vencedor]
-            premio_total = len(participants) * bet_amount
-            premio_individual = premio_total // len(vencedores) if vencedores else 0
+            # Dar XP para participantes (sem moedas)
+            xp_bonus = 50 if resultado.lower() == "vitoria" else 25  # XP baseado no resultado
 
-            # Distribuir prêmios
-            for user_id in vencedores:
-                user_data = get_user_data(user_id)
-                if user_data:
-                    new_coins = user_data[1] + premio_individual + bet_amount  # Devolver aposta + prêmio
-                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user_id))
+            for user_id in participants:
+                add_xp(user_id, xp_bonus)
 
             # Marcar como finalizado
             cursor.execute('''
                 UPDATE clan_events
                 SET status = 'finished', winner_clan = ?
                 WHERE id = ?
-            ''', (clan_vencedor, evento_id))
+            ''', (resultado, evento_id))
 
             conn.commit()
             conn.close()
 
+        # Determinar emoji e cor baseado no resultado
+        if resultado.lower() == "vitoria":
+            emoji = "🏆"
+            cor = 0xffd700
+            mensagem_resultado = "VITÓRIA!"
+        elif resultado.lower() == "derrota":
+            emoji = "😢"
+            cor = 0xff6b6b
+            mensagem_resultado = "DERROTA"
+        else:
+            emoji = "🤝"
+            cor = 0x7289da
+            mensagem_resultado = "EMPATE"
+
         embed = create_embed(
-            f"🏆 {clan_vencedor} VENCEU!",
-            f"**Evento #{evento_id} finalizado!**\n\n"
-            f"**Clan Vencedor:** {clan_vencedor}\n"
-            f"**Vencedores:** {len(vencedores)} participantes\n"
-            f"**Prêmio individual:** {premio_individual:,} moedas\n"
-            f"**Total distribuído:** {premio_total:,} moedas\n"
-            f"**Finalizado por:** {ctx.author.mention}",
-            color=0xffd700
+            f"{emoji} {clan_name} - {mensagem_resultado}",
+            f"""**🎮 Evento Stumble Guys Finalizado!**
+
+**🏆 Clan:** {clan_name}
+**🗺️ Mapa:** {selected_map}
+**📊 Resultado:** {mensagem_resultado}
+**👥 Participantes:** {len(participants)}
+**⭐ XP concedido:** {xp_bonus} para cada participante
+**👑 Finalizado por:** {ctx.author.mention}
+
+**🎯 Resultados possíveis:**
+• `vitoria` - 50 XP para todos
+• `derrota` - 25 XP para todos  
+• `empate` - 25 XP para todos
+
+*Obrigado por participar! GG! 🎮*""",
+            color=cor
         )
         await ctx.send(embed=embed)
+
+        # Notificar participantes
+        notification_embed = create_embed(
+            f"🎮 Evento Finalizado - {mensagem_resultado}",
+            f"O evento Stumble Guys do **{clan_name}** foi finalizado!\n"
+            f"**Resultado:** {mensagem_resultado}\n"
+            f"**Mapa:** {selected_map}\n"
+            f"**XP recebido:** +{xp_bonus} XP",
+            color=cor
+        )
+
+        for user_id in participants:
+            try:
+                user = bot.get_user(user_id)
+                if user:
+                    await user.send(embed=notification_embed)
+            except:
+                pass
+
+        logger.info(f"Evento Stumble Guys finalizado: {clan_name} - {resultado}")
 
     except Exception as e:
         logger.error(f"Erro ao finalizar evento: {e}")
