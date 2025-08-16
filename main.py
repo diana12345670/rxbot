@@ -6781,7 +6781,7 @@ class XClanModal(discord.ui.Modal, title="🚨 CRIAR EVENTO XCLAN VS! 🚨"):
 
             # Notificar no canal específico
             try:
-                notification_channel = interaction.guild.get_channel(1400167287297937620)
+                notification_channel = interaction.guild.get_channel(1400166850045673482)
                 if notification_channel:
                     notify_embed = create_embed(
                         "🚨 NOVO EVENTO XCLAN CRIADO! 🚨",
