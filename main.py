@@ -1100,109 +1100,7 @@ async def on_reaction_add(reaction, user):
                 await message.edit(embed=embed)
                 del active_games[message.id]
 
-        elif game_data['type'] == 'clear_confirmation':
-            if str(reaction.emoji) == "✅":
-                amount = game_data['amount']
-                channel_id = game_data['channel']
-                channel = message.guild.get_channel(channel_id)
-
-                if not channel:
-                    embed = create_embed("❌ Erro", "Canal não encontrado!", color=0xff0000)
-                    await message.edit(embed=embed)
-                    del active_games[message.id]
-                    return
-
-                try:
-                    # Deletar a mensagem de confirmação primeiro
-                    try:
-                        await message.delete()
-                    except:
-                        pass
-
-                    # Limpar mensagens do canal
-                    deleted = await channel.purge(limit=amount)
-
-                    confirm_embed = create_embed(
-                        "🧹 Limpeza Concluída",
-                        f"**{len(deleted)} mensagens foram deletadas com sucesso!**",
-                        color=0x00ff00
-                    )
-                    await channel.send(embed=confirm_embed, delete_after=5)
-                    del active_games[message.id]
-                except Exception as e:
-                    logger.error(f"Erro na limpeza: {e}")
-                    embed = create_embed("❌ Erro na Limpeza", f"Erro: {str(e)[:100]}", color=0xff0000)
-                    try:
-                        await channel.send(embed=embed, delete_after=10)
-                    except:
-                        pass
-                    if message.id in active_games:
-                        del active_games[message.id]
-
-            elif str(reaction.emoji) == "❌":
-                embed = create_embed("❌ Limpeza Cancelada", "Operação cancelada pelo usuário.", color=0xff6b6b)
-                await message.edit(embed=embed)
-                del active_games[message.id]
-
-        elif game_data['type'] == 'ban_confirmation':
-            if user.id != game_data['user']:
-                try:
-                    await reaction.remove(user)
-                except:
-                    pass
-                return
-
-            if str(reaction.emoji) == "✅":
-                try:
-                    member_id = game_data['member_id']
-                    reason = game_data['reason']
-
-                    member = message.guild.get_member(member_id)
-                    if not member:
-                        embed = create_embed("❌ Erro", "Membro não encontrado!", color=0xff0000)
-                        await message.edit(embed=embed)
-                        del active_games[message.id]
-                        return
-
-                    # Executar ban
-                    await member.ban(reason=reason)
-
-                    # Confirmar ban
-                    embed = create_embed(
-                        "🔨 Membro Banido!",
-                        f"**Usuário:** {member.name}#{member.discriminator}\n"
-                        f"**Motivo:** {reason}\n"
-                        f"**Moderador:** {user.mention}",
-                        color=0xff0000
-                    )
-                    await message.edit(embed=embed)
-                    del active_games[message.id]
-
-                    # Log da moderação
-                    try:
-                        with db_lock:
-                            conn = get_db_connection()
-                            cursor = conn.cursor()
-                            cursor.execute('''
-                                INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                                VALUES (?, ?, ?, ?, ?)
-                            ''', (message.guild.id, member_id, user.id, 'ban', reason))
-                            conn.commit()
-                            conn.close()
-                    except Exception as e:
-                        logger.error(f"Erro ao salvar log de moderação: {e}")
-
-                except Exception as e:
-                    logger.error(f"Erro ao banir membro: {e}")
-                    embed = create_embed("❌ Erro", f"Erro ao banir membro: {str(e)[:100]}", color=0xff0000)
-                    await message.edit(embed=embed)
-                    if message.id in active_games:
-                        del active_games[message.id]
-
-            elif str(reaction.emoji) == "❌":
-                embed = create_embed("❌ Ban Cancelado", "Operação de ban cancelada.", color=0xffaa00)
-                await message.edit(embed=embed)
-                del active_games[message.id]
+        # Sistemas de confirmação antigos removidos - agora usam botões
 
         elif game_data['type'] == 'stumble_guys_event':
             if str(reaction.emoji) == "🎮":
@@ -1649,6 +1547,316 @@ async def on_member_join(member):
 # Sistema de emergência removido para economizar recursos
 
 # ============ SISTEMA DE TICKETS COMPLETO ============
+
+# ============ SISTEMA DE FEEDBACK PÚBLICO ============
+
+# Modal para feedback do staff
+class StaffFeedbackModal(discord.ui.Modal, title="📊 Avaliação do Staff"):
+    def __init__(self, staff_name):
+        super().__init__()
+        self.staff_name = staff_name
+
+    atendimento = discord.ui.TextInput(
+        label="⭐ Nota do Atendimento (0-10)",
+        placeholder="Digite uma nota de 0 a 10",
+        required=True,
+        max_length=2
+    )
+
+    qualidade = discord.ui.TextInput(
+        label="🎯 Nota da Qualidade (0-10)",
+        placeholder="Digite uma nota de 0 a 10", 
+        required=True,
+        max_length=2
+    )
+
+    rapidez = discord.ui.TextInput(
+        label="⚡ Nota da Rapidez (0-10)",
+        placeholder="Digite uma nota de 0 a 10",
+        required=True,
+        max_length=2
+    )
+
+    profissionalismo = discord.ui.TextInput(
+        label="🤝 Nota do Profissionalismo (0-10)",
+        placeholder="Digite uma nota de 0 a 10",
+        required=True,
+        max_length=2
+    )
+
+    comentarios = discord.ui.TextInput(
+        label="💭 Comentários (Opcional)",
+        placeholder="Deixe comentários sobre o atendimento...",
+        required=False,
+        max_length=500,
+        style=discord.TextStyle.paragraph
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # Validar notas
+            notas = {}
+            try:
+                notas['atendimento'] = int(self.atendimento.value)
+                notas['qualidade'] = int(self.qualidade.value)
+                notas['rapidez'] = int(self.rapidez.value)
+                notas['profissionalismo'] = int(self.profissionalismo.value)
+
+                # Verificar se todas as notas estão entre 0 e 10
+                for categoria, nota in notas.items():
+                    if nota < 0 or nota > 10:
+                        await interaction.response.send_message(f"❌ A nota de {categoria} deve estar entre 0 e 10!", ephemeral=True)
+                        return
+
+            except ValueError:
+                await interaction.response.send_message("❌ Todas as notas devem ser números válidos entre 0 e 10!", ephemeral=True)
+                return
+
+            # Calcular média
+            media = round(sum(notas.values()) / len(notas), 1)
+
+            # Determinar qualidade baseada na média
+            if media >= 9:
+                emoji = "🌟"
+                cor = 0x00ff00
+                qualidade_texto = "Excelente"
+            elif media >= 7:
+                emoji = "⭐"
+                cor = 0xffaa00
+                qualidade_texto = "Bom"
+            elif media >= 5:
+                emoji = "⚠️"
+                cor = 0xff6600
+                qualidade_texto = "Regular"
+            else:
+                emoji = "❌"
+                cor = 0xff0000
+                qualidade_texto = "Ruim"
+
+            # Salvar no banco de dados
+            try:
+                with db_lock:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+
+                    # Criar tabela de feedback de staff se não existir
+                    cursor.execute('''CREATE TABLE IF NOT EXISTS staff_feedback (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        guild_id INTEGER,
+                        staff_name TEXT,
+                        avaliador_id INTEGER,
+                        nota_atendimento INTEGER,
+                        nota_qualidade INTEGER,
+                        nota_rapidez INTEGER,
+                        nota_profissionalismo INTEGER,
+                        media_final REAL,
+                        comentarios TEXT,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )''')
+
+                    cursor.execute('''
+                        INSERT INTO staff_feedback (guild_id, staff_name, avaliador_id, nota_atendimento, nota_qualidade, nota_rapidez, nota_profissionalismo, media_final, comentarios)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        interaction.guild.id,
+                        self.staff_name,
+                        interaction.user.id,
+                        notas['atendimento'],
+                        notas['qualidade'],
+                        notas['rapidez'],
+                        notas['profissionalismo'],
+                        media,
+                        self.comentarios.value or "Sem comentários"
+                    ))
+
+                    conn.commit()
+                    conn.close()
+            except Exception as e:
+                logger.error(f"Erro ao salvar feedback do staff: {e}")
+
+            # Resposta ao usuário
+            embed = create_embed(
+                f"{emoji} Feedback Registrado - {qualidade_texto}",
+                f"""**📊 Avaliação do Staff: {self.staff_name}**
+
+**📋 Notas:**
+• ⭐ Atendimento: {notas['atendimento']}/10
+• 🎯 Qualidade: {notas['qualidade']}/10  
+• ⚡ Rapidez: {notas['rapidez']}/10
+• 🤝 Profissionalismo: {notas['profissionalismo']}/10
+
+**📈 Média Final: {media}/10**
+**🏆 Qualidade: {qualidade_texto}**
+
+**💭 Comentários:** {self.comentarios.value or "Nenhum"}
+
+**👤 Avaliado por:** {interaction.user.mention}
+**📅 Data:** <t:{int(datetime.datetime.now().timestamp())}:R>
+
+*Obrigado pela sua avaliação! Isso nos ajuda a melhorar nosso atendimento.*""",
+                color=cor
+            )
+
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+            # Enviar para canal de feedback
+            try:
+                feedback_channel = interaction.guild.get_channel(1401195599281393754)
+                if feedback_channel:
+                    public_embed = create_embed(
+                        f"{emoji} Nova Avaliação de Staff",
+                        f"""**👥 Staff Avaliado:** {self.staff_name}
+**📊 Média Final:** {media}/10 ({qualidade_texto})
+
+**📋 Detalhes:**
+• ⭐ Atendimento: {notas['atendimento']}/10
+• 🎯 Qualidade: {notas['qualidade']}/10  
+• ⚡ Rapidez: {notas['rapidez']}/10
+• 🤝 Profissionalismo: {notas['profissionalismo']}/10
+
+**💭 Comentários:** {self.comentarios.value or "Nenhum"}
+
+**👤 Avaliado por:** {interaction.user.mention}
+**📅 Data:** <t:{int(datetime.datetime.now().timestamp())}:F>
+**🆔 ID da Avaliação:** #{cursor.lastrowid if 'cursor' in locals() else 'N/A'}""",
+                        color=cor
+                    )
+                    await feedback_channel.send(embed=public_embed)
+            except Exception as e:
+                logger.error(f"Erro ao enviar feedback para canal: {e}")
+
+            logger.info(f"Feedback do staff registrado: {self.staff_name} - média {media}/10 por {interaction.user}")
+
+        except Exception as e:
+            logger.error(f"Erro no feedback do staff: {e}")
+            await interaction.response.send_message("❌ Erro ao processar feedback! Tente novamente.", ephemeral=True)
+
+# View para seleção de staff
+class StaffSelectionView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=300)  # 5 minutos
+        self.guild = guild
+        
+        # Buscar membros com cargos de staff
+        staff_members = []
+        staff_role_names = ['admin', 'administrador', 'mod', 'moderador', 'staff', 'suporte', 'helper', 'ajudante']
+        
+        for member in guild.members:
+            if member.bot:
+                continue
+            for role in member.roles:
+                if any(staff_name in role.name.lower() for staff_name in staff_role_names) or role.permissions.administrator:
+                    staff_members.append(member)
+                    break
+        
+        # Limitar a 25 opções (máximo do Discord)
+        staff_members = staff_members[:25]
+        
+        if staff_members:
+            # Criar select menu
+            options = []
+            for member in staff_members:
+                options.append(discord.SelectOption(
+                    label=member.display_name,
+                    value=str(member.id),
+                    description=f"Avaliar {member.display_name}",
+                    emoji="👥"
+                ))
+            
+            if options:
+                self.add_item(StaffSelect(options))
+
+class StaffSelect(discord.ui.Select):
+    def __init__(self, options):
+        super().__init__(
+            placeholder="Escolha o staff para avaliar...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        selected_member_id = int(self.values[0])
+        selected_member = interaction.guild.get_member(selected_member_id)
+        
+        if not selected_member:
+            await interaction.response.send_message("❌ Staff não encontrado!", ephemeral=True)
+            return
+        
+        # Abrir modal de feedback
+        await interaction.response.send_modal(StaffFeedbackModal(selected_member.display_name))
+
+# View principal do feedback
+class FeedbackMainView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)  # Sem timeout - botão permanente
+
+    @discord.ui.button(label="📊 Avaliar Staff", style=discord.ButtonStyle.primary, emoji="⭐")
+    async def avaliar_staff(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Criar view de seleção de staff
+        view = StaffSelectionView(interaction.guild)
+        
+        if not view.children:
+            await interaction.response.send_message("❌ Nenhum membro da staff encontrado neste servidor!", ephemeral=True)
+            return
+        
+        embed = create_embed(
+            "👥 Selecionar Staff para Avaliar",
+            "Escolha o membro da staff que você deseja avaliar no menu abaixo:",
+            color=0x7289da
+        )
+        
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+@bot.command(name='mensagemfeedback', aliases=['feedbackmessage'])
+@commands.has_permissions(administrator=True)
+async def mensagem_feedback(ctx):
+    """[ADMIN] Criar painel de feedback para staff"""
+    
+    embed = create_embed(
+        "📊 Sistema de Avaliação de Staff",
+        f"""**⭐ Avalie nosso atendimento!**
+
+**🎯 Como funciona:**
+1️⃣ Clique no botão "📊 Avaliar Staff"
+2️⃣ Escolha o membro da staff que te atendeu
+3️⃣ Preencha o formulário de avaliação
+4️⃣ Suas notas são calculadas automaticamente
+
+**📋 Critérios de Avaliação:**
+• ⭐ **Atendimento** - Cordialidade e educação
+• 🎯 **Qualidade** - Resolução do problema
+• ⚡ **Rapidez** - Tempo de resposta
+• 🤝 **Profissionalismo** - Postura e conhecimento
+
+**📊 Sistema de Notas:**
+• **0-4:** Ruim ❌
+• **5-6:** Regular ⚠️  
+• **7-8:** Bom ⭐
+• **9-10:** Excelente 🌟
+
+**✨ Benefícios:**
+• 💯 Avaliação justa e transparente
+• 📈 Melhoria contínua do atendimento
+• 🏆 Reconhecimento dos melhores
+• 📊 Estatísticas automáticas
+
+**👑 Painel criado por:** {ctx.author.mention}
+
+⬇️ **CLIQUE NO BOTÃO PARA AVALIAR:**""",
+        color=0x7289da
+    )
+
+    view = FeedbackMainView()
+    await ctx.send(embed=embed, view=view)
+
+    # Confirmar criação
+    confirm_embed = create_embed(
+        "✅ Painel de Feedback Criado!",
+        f"Sistema de avaliação de staff ativo!\nTodas as avaliações aparecerão em <#1401195599281393754>",
+        color=0x00ff00
+    )
+    await ctx.send(embed=confirm_embed, delete_after=10)
 
 # ============ SISTEMA DE TICKETS PÚBLICOS ============
 @bot.command(name='ticketpublico', aliases=['rxticketpublico'])
@@ -3212,6 +3420,10 @@ Mencione o bot para conversar!
 • `RXresultadotier <resultado>` - Enviar resultado teste tier
 • `RXfeedbacks` - Ver avaliações de tickets (com estatísticas)
 
+**📊 Sistema de Feedback de Staff:**
+• `RXmensagemfeedback` - Criar painel de avaliação de staff
+• `RXfeedbacksstaff` - Ver avaliações de staff (com ranking)
+
 **🎁 Sistema de Sorteios:**
 • `RXcriarsorteio <dados>` - Criar sorteios
 • `RXendgiveaway <id>` - Finalizar sorteio
@@ -3222,9 +3434,15 @@ Mencione o bot para conversar!
 • `RXeventosclan` - Ver eventos ativos
 • `RXfinalizareventoclan <id> <vencedor>` - Finalizar evento
 
-**💰 Economia Admin:**
-• `RXaddsaldo <@user> <valor>` - Adicionar saldo
-• `RXremovesaldo <@user> <valor>` - Remover saldo
+**🎯 Eventos Personalizados (NOVO):**
+• `RXcriar <tipo>` - Criar eventos com reações
+• `RXcriar xtreino` - Criar treino personalizado
+• `RXcriar xtreino Título | hoje | 20:00` - Formato rápido
+• Tipos: xtreino, treino, torneio, evento, meeting, party
+
+**💰 Economia Admin (RESTRITO):**
+• `RXaddsaldo <@user> <valor>` - Adicionar saldo (apenas IDs autorizados)
+• `RXremovesaldo <@user> <valor>` - Remover saldo (apenas IDs autorizados)
 
 **🛡️ Moderação Avançada:**
 • `RXban <@user> [motivo]` - Ban com confirmação
@@ -3238,7 +3456,7 @@ Mencione o bot para conversar!
 • `RXtestecompleto` - Teste de todos os sistemas
 • `RXbackup` - [ADMIN] Backup do banco de dados
 
-**💡 Total:** 300+ comandos | 8 sistemas de proteção 24/7""",
+**💡 Total:** 300+ comandos | Sistema de eventos personalizados""",
             color=0xff6b6b
         )
         await ctx.send(embed=embed)
@@ -3284,6 +3502,14 @@ Mencione o bot para conversar!
 • `RXresultadoxclan <resultado>` - [MOD] Enviar resultado do evento
 • Sistema completo com formulário interativo
 • Publicação automática com @everyone ping
+
+**🎯 EVENTOS PERSONALIZADOS (NOVO):**
+• `RXcriar xtreino` - Criar treino personalizado
+• `RXcriar xtreino Treino Block Dash | hoje | 20:00` - Formato rápido
+• `RXcriar torneio` - Criar torneio
+• `RXcriar evento` - Criar evento geral
+• `RXcriar meeting` - Criar reunião
+• Reações automáticas: ✅ (posso ir) ❌ (não posso) ❓ (talvez)
 
 **Para Membros do Clan:**
 • `RXeventosclan` - Ver eventos ativos
@@ -3334,7 +3560,56 @@ async def clear_messages(ctx, amount: int = 10):
         await ctx.send(embed=embed)
         return
 
-    # Sistema de confirmação para limpeza
+    # Sistema de confirmação com botões
+    class ClearConfirmView(discord.ui.View):
+        def __init__(self, amount, channel, moderator):
+            super().__init__(timeout=30)
+            self.amount = amount
+            self.channel = channel
+            self.moderator = moderator
+
+        @discord.ui.button(label="✅ Confirmar Limpeza", style=discord.ButtonStyle.danger)
+        async def confirm_clear(self, interaction: discord.Interaction, button: discord.ui.Button):
+            if interaction.user.id != self.moderator.id:
+                await interaction.response.send_message("❌ Apenas quem iniciou pode confirmar!", ephemeral=True)
+                return
+
+            try:
+                await interaction.response.defer()
+                
+                # Deletar a mensagem de confirmação primeiro
+                try:
+                    await interaction.delete_original_response()
+                except:
+                    pass
+
+                # Limpar mensagens do canal
+                deleted = await self.channel.purge(limit=self.amount)
+
+                confirm_embed = create_embed(
+                    "🧹 Limpeza Concluída",
+                    f"**{len(deleted)} mensagens foram deletadas com sucesso!**",
+                    color=0x00ff00
+                )
+                await self.channel.send(embed=confirm_embed, delete_after=5)
+
+            except Exception as e:
+                logger.error(f"Erro na limpeza: {e}")
+                embed = create_embed("❌ Erro na Limpeza", f"Erro: {str(e)[:100]}", color=0xff0000)
+                try:
+                    await self.channel.send(embed=embed, delete_after=10)
+                except:
+                    pass
+
+        @discord.ui.button(label="❌ Cancelar", style=discord.ButtonStyle.secondary)
+        async def cancel_clear(self, interaction: discord.Interaction, button: discord.ui.Button):
+            if interaction.user.id != self.moderator.id:
+                await interaction.response.send_message("❌ Apenas quem iniciou pode cancelar!", ephemeral=True)
+                return
+
+            embed = create_embed("❌ Limpeza Cancelada", "Operação cancelada pelo usuário.", color=0xff6b6b)
+            await interaction.response.edit_message(embed=embed, view=None)
+
     embed = create_embed(
         "🧹 Confirmação de Limpeza",
         f"""**⚠️ ATENÇÃO: Ação Irreversível**
@@ -3345,21 +3620,14 @@ async def clear_messages(ctx, amount: int = 10):
 **👤 Moderador:** {ctx.author.mention}
 **📊 Quantidade:** {amount} mensagens
 
-**Deseja realmente continuar?**""",
+**Deseja realmente continuar?**
+
+Use os botões abaixo para confirmar ou cancelar.""",
         color=0xff6b6b
     )
 
-    msg = await ctx.send(embed=embed)
-    await msg.add_reaction("✅")
-    await msg.add_reaction("❌")
-
-    # Armazenar para processar confirmação
-    active_games[msg.id] = {
-        'type': 'clear_confirmation',
-        'user': ctx.author.id,
-        'channel': ctx.channel.id,
-        'amount': amount
-    }
+    view = ClearConfirmView(amount, ctx.channel, ctx.author)
+    await ctx.send(embed=embed, view=view)
 
 @bot.command(name='ban', aliases=['banir'])
 @commands.has_permissions(ban_members=True)
@@ -3375,7 +3643,60 @@ async def ban_member(ctx, member: discord.Member, *, reason="Sem motivo especifi
         await ctx.send(embed=embed)
         return
 
-    # Sistema de confirmação para ban
+    # Sistema de confirmação com botões
+    class BanConfirmView(discord.ui.View):
+        def __init__(self, member, reason, moderator):
+            super().__init__(timeout=30)
+            self.member = member
+            self.reason = reason
+            self.moderator = moderator
+
+        @discord.ui.button(label="✅ Confirmar Ban", style=discord.ButtonStyle.danger)
+        async def confirm_ban(self, interaction: discord.Interaction, button: discord.ui.Button):
+            if interaction.user.id != self.moderator.id:
+                await interaction.response.send_message("❌ Apenas quem iniciou pode confirmar!", ephemeral=True)
+                return
+
+            try:
+                await self.member.ban(reason=self.reason)
+
+                embed = create_embed(
+                    "🔨 Membro Banido!",
+                    f"**Usuário:** {self.member.name}#{self.member.discriminator}\n"
+                    f"**Motivo:** {self.reason}\n"
+                    f"**Moderador:** {self.moderator.mention}",
+                    color=0xff0000
+                )
+                await interaction.response.edit_message(embed=embed, view=None)
+
+                # Log da moderação
+                try:
+                    with db_lock:
+                        conn = get_db_connection()
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
+                            VALUES (?, ?, ?, ?, ?)
+                        ''', (interaction.guild.id, self.member.id, self.moderator.id, 'ban', self.reason))
+                        conn.commit()
+                        conn.close()
+                except Exception as e:
+                    logger.error(f"Erro ao salvar log de moderação: {e}")
+
+            except Exception as e:
+                logger.error(f"Erro ao banir membro: {e}")
+                embed = create_embed("❌ Erro", f"Erro ao banir membro: {str(e)[:100]}", color=0xff0000)
+                await interaction.response.edit_message(embed=embed, view=None)
+
+        @discord.ui.button(label="❌ Cancelar", style=discord.ButtonStyle.secondary)
+        async def cancel_ban(self, interaction: discord.Interaction, button: discord.ui.Button):
+            if interaction.user.id != self.moderator.id:
+                await interaction.response.send_message("❌ Apenas quem iniciou pode cancelar!", ephemeral=True)
+                return
+
+            embed = create_embed("❌ Ban Cancelado", "Operação de ban cancelada.", color=0xffaa00)
+            await interaction.response.edit_message(embed=embed, view=None)
+
     embed = create_embed(
         "🔨 Confirmação de Ban",
         f"""**🚨 AÇÃO EXTREMAMENTE GRAVE**
@@ -3389,22 +3710,12 @@ async def ban_member(ctx, member: discord.Member, *, reason="Sem motivo especifi
 **⚠️ Esta ação é IRREVERSÍVEL!**
 **Tem certeza que deseja continuar?**
 
-Reaja com ✅ para confirmar ou ❌ para cancelar""",
+Use os botões abaixo para confirmar ou cancelar.""",
         color=0xff0000
     )
 
-    msg = await ctx.send(embed=embed)
-    await msg.add_reaction("✅")
-    await msg.add_reaction("❌")
-
-    # Armazenar para processar confirmação
-    active_games[msg.id] = {
-        'type': 'ban_confirmation',
-        'user': ctx.author.id,
-        'channel': ctx.channel.id,
-        'member_id': member.id,
-        'reason': reason
-    }
+    view = BanConfirmView(member, reason, ctx.author)
+    await ctx.send(embed=embed, view=view)
 
 # ============ COMANDOS DE ECONOMIA ============
 @bot.command(name='saldo', aliases=['balance', 'bal'])
@@ -3536,9 +3847,186 @@ async def user_rank(ctx, user: discord.Member = None):
     embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
     await ctx.send(embed=embed)
 
+# Modal para transferências
+class TransferModal(discord.ui.Modal, title="💰 Transferir Dinheiro"):
+    def __init__(self, user_id):
+        super().__init__()
+        self.user_id = user_id
+
+    destinatario = discord.ui.TextInput(
+        label="👤 Destinatário (mencione ou ID)",
+        placeholder="@usuario ou ID do usuário",
+        required=True,
+        max_length=100
+    )
+
+    valor = discord.ui.TextInput(
+        label="💰 Valor a Transferir",
+        placeholder="Ex: 1000, 5000, 10000...",
+        required=True,
+        max_length=10
+    )
+
+    motivo = discord.ui.TextInput(
+        label="📝 Motivo (Opcional)",
+        placeholder="Ex: pagamento, presente, aposta...",
+        required=False,
+        max_length=100
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # Processar destinatário
+            dest_input = self.destinatario.value.strip()
+            user = None
+            
+            # Tentar extrair ID de menção
+            if dest_input.startswith('<@') and dest_input.endswith('>'):
+                user_id = int(dest_input[2:-1].replace('!', ''))
+                user = interaction.guild.get_member(user_id)
+            elif dest_input.isdigit():
+                user = interaction.guild.get_member(int(dest_input))
+            else:
+                # Buscar por nome
+                user = discord.utils.find(lambda m: m.display_name.lower() == dest_input.lower() or m.name.lower() == dest_input.lower(), interaction.guild.members)
+
+            if not user:
+                await interaction.response.send_message("❌ Usuário não encontrado!", ephemeral=True)
+                return
+
+            if user.id == self.user_id:
+                await interaction.response.send_message("❌ Você não pode transferir para si mesmo!", ephemeral=True)
+                return
+
+            # Validar valor
+            try:
+                amount = int(self.valor.value)
+                if amount <= 0:
+                    raise ValueError
+            except ValueError:
+                await interaction.response.send_message("❌ Valor deve ser um número positivo!", ephemeral=True)
+                return
+
+            # Verificar saldo
+            sender_data = get_user_data(self.user_id)
+            if not sender_data:
+                await interaction.response.send_message("❌ Você não tem dados no sistema!", ephemeral=True)
+                return
+
+            sender_coins = sender_data[1]
+            if sender_coins < amount:
+                await interaction.response.send_message(
+                    f"💸 **Dinheiro insuficiente!**\n"
+                    f"Você tem: **{sender_coins:,} moedas**\n"
+                    f"Necessário: **{amount:,} moedas**",
+                    ephemeral=True
+                )
+                return
+
+            # Processar transferência
+            receiver_data = get_user_data(user.id)
+            if not receiver_data:
+                update_user_data(user.id)
+                receiver_data = get_user_data(user.id)
+
+            receiver_coins = receiver_data[1]
+
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+
+                # Atualizar saldos
+                cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (sender_coins - amount, self.user_id))
+                cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (receiver_coins + amount, user.id))
+
+                # Registrar transações
+                cursor.execute('''
+                    INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (self.user_id, interaction.guild.id, 'transfer_out', -amount, f"Transferiu para {user.name}: {self.motivo.value or 'Sem motivo'}"))
+
+                cursor.execute('''
+                    INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (user.id, interaction.guild.id, 'transfer_in', amount, f"Recebeu de {interaction.user.name}: {self.motivo.value or 'Sem motivo'}"))
+
+                conn.commit()
+                conn.close()
+
+            embed = create_embed(
+                "✅ Transferência Realizada!",
+                f"""**💰 Transferência concluída com sucesso!**
+
+**👤 De:** <@{self.user_id}>
+**👤 Para:** {user.mention}
+**💰 Valor:** {amount:,} moedas
+**📝 Motivo:** {self.motivo.value or "Não informado"}
+
+**💳 Novo saldo:** {sender_coins - amount:,} moedas
+
+*Transferência registrada no sistema.*""",
+                color=0x00ff00
+            )
+            await interaction.response.send_message(embed=embed)
+
+            # Notificar receptor
+            try:
+                dm_embed = create_embed(
+                    "💰 Dinheiro Recebido!",
+                    f"Você recebeu **{amount:,} moedas** de <@{self.user_id}>!\n"
+                    f"**Motivo:** {self.motivo.value or 'Não informado'}\n"
+                    f"**Seu novo saldo:** {receiver_coins + amount:,} moedas",
+                    color=0x00ff00
+                )
+                await user.send(embed=dm_embed)
+            except:
+                pass
+
+        except Exception as e:
+            logger.error(f"Erro na transferência: {e}")
+            await interaction.response.send_message("❌ Erro ao processar transferência! Tente novamente.", ephemeral=True)
+
+# View para transferências
+class TransferView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="💰 Transferir com Formulário", style=discord.ButtonStyle.success, emoji="💸")
+    async def transfer_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(TransferModal(interaction.user.id))
+
 @bot.command(name='transferir', aliases=['transfer', 'pay'])
-async def transferir(ctx, user: discord.Member, amount: int):
+async def transferir(ctx, user: discord.Member = None, amount: int = None):
     """Transferir dinheiro para outro usuário"""
+    # Se não forneceu argumentos, mostrar sistema moderno
+    if not user or not amount:
+        embed = create_embed(
+            "💰 Sistema de Transferências Avançado",
+            """**🚀 Sistema Moderno com Formulário!**
+
+Clique no botão abaixo para transferir dinheiro com formulário interativo!
+
+**✨ Vantagens do novo sistema:**
+• 📝 Formulário fácil de preencher
+• 🔍 Busca automática de usuários
+• ✅ Validação automática de dados
+• 📝 Campo para motivo da transferência
+• ⚡ Transferência instantânea
+
+**📋 Formato antigo ainda funciona:**
+`RXtransferir @usuário valor`
+
+**Exemplo:**
+`RXtransferir @João 5000`
+
+⬇️ **RECOMENDADO: Use o botão abaixo!**""",
+            color=0x00ff00
+        )
+        
+        view = TransferView()
+        await ctx.send(embed=embed, view=view)
+        return
+
     if amount <= 0:
         embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
         await ctx.send(embed=embed)
@@ -4137,6 +4625,140 @@ async def rank_list(ctx):
 
     await ctx.send(embed=embed)
 
+# Modal para criar sorteios
+class GiveawayModal(discord.ui.Modal, title="🎁 Criar Sorteio"):
+    def __init__(self, user_id):
+        super().__init__()
+        self.user_id = user_id
+
+    titulo = discord.ui.TextInput(
+        label="🎯 Título do Sorteio",
+        placeholder="Ex: iPhone 15, Nitro Discord, 10.000 moedas...",
+        required=True,
+        max_length=50
+    )
+
+    premio = discord.ui.TextInput(
+        label="🎁 Prêmio",
+        placeholder="Ex: iPhone 15 Pro Max, Discord Nitro 1 mês...",
+        required=True,
+        max_length=100
+    )
+
+    duracao = discord.ui.TextInput(
+        label="⏰ Duração",
+        placeholder="Ex: 30m, 2h, 1d, 7d",
+        required=True,
+        max_length=10
+    )
+
+    vencedores = discord.ui.TextInput(
+        label="🏆 Número de Vencedores",
+        placeholder="Ex: 1, 2, 3...",
+        required=True,
+        max_length=2
+    )
+
+    requisitos = discord.ui.TextInput(
+        label="📋 Requisitos (Opcional)",
+        placeholder="Ex: Seguir o servidor, ter 5+ mensagens...",
+        required=False,
+        max_length=200,
+        style=discord.TextStyle.paragraph
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # Validar número de vencedores
+            try:
+                winners_count = int(self.vencedores.value)
+                if winners_count < 1 or winners_count > 10:
+                    raise ValueError
+            except ValueError:
+                await interaction.response.send_message("❌ Número de vencedores deve ser entre 1 e 10!", ephemeral=True)
+                return
+
+            # Parse duration
+            time_units = {'m': 60, 'h': 3600, 'd': 86400}
+            duration_str = self.duracao.value.lower()
+            unit = duration_str[-1]
+
+            if unit not in time_units:
+                await interaction.response.send_message("❌ Duração inválida! Use: m (minutos), h (horas), d (dias)", ephemeral=True)
+                return
+
+            try:
+                amount = int(duration_str[:-1])
+                seconds = amount * time_units[unit]
+                end_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+            except ValueError:
+                await interaction.response.send_message("❌ Duração inválida! Use números válidos: 30m, 2h, 1d", ephemeral=True)
+                return
+
+            # Criar embed do sorteio
+            embed = create_embed(
+                f"🎁 {self.titulo.value}",
+                f"""**🎁 Prêmio:** {self.premio.value}
+**🏆 Vencedores:** {winners_count}
+**⏰ Termina:** <t:{int(end_time.timestamp())}:R>
+**👑 Criado por:** <@{self.user_id}>
+**📋 Requisitos:** {self.requisitos.value or "Nenhum requisito especial"}
+
+**🎉 Reaja com 🎉 para participar!**
+
+**⚠️ Boa sorte a todos!**""",
+                color=0xffd700
+            )
+
+            giveaway_msg = await interaction.response.send_message(embed=embed)
+            message = await interaction.original_response()
+            await message.add_reaction("🎉")
+
+            # Salvar no banco
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO giveaways (guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (interaction.guild.id, interaction.channel.id, self.user_id, self.titulo.value, self.premio.value, winners_count, end_time, message.id))
+                conn.commit()
+                conn.close()
+
+            # Confirmar criação
+            success_embed = create_embed(
+                "✅ Sorteio Criado!",
+                f"**{self.titulo.value}** foi criado com sucesso!\n\n"
+                f"📋 **Resumo:**\n"
+                f"• Prêmio: {self.premio.value}\n"
+                f"• Vencedores: {winners_count}\n"
+                f"• Duração: {self.duracao.value}\n"
+                f"• Requisitos: {self.requisitos.value or 'Nenhum'}\n\n"
+                f"🎯 **Criado por:** <@{self.user_id}>",
+                color=0x00ff00
+            )
+
+            await interaction.followup.send(embed=success_embed, ephemeral=True)
+            logger.info(f"Sorteio criado: {self.titulo.value} por {interaction.user}")
+
+        except Exception as e:
+            logger.error(f"Erro ao criar sorteio: {e}")
+            await interaction.response.send_message("❌ Erro ao criar sorteio! Tente novamente.", ephemeral=True)
+
+# View para criar sorteios com botão
+class GiveawayCreateView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🎁 Criar Sorteio", style=discord.ButtonStyle.primary, emoji="🎁")
+    async def create_giveaway(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Verificar permissões
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Apenas administradores podem criar sorteios!", ephemeral=True)
+            return
+        
+        await interaction.response.send_modal(GiveawayModal(interaction.user.id))
+
 # ============ COMANDOS DE SORTEIO ============
 @bot.command(name='criarsorteio', aliases=['giveaway'])
 @commands.has_permissions(administrator=True)
@@ -4144,16 +4766,31 @@ async def create_giveaway(ctx, *, giveaway_data=None):
     """[ADMIN] Criar um novo sorteio"""
     if not giveaway_data:
         embed = create_embed(
-            "🎁 Como criar um sorteio",
-            """**Formato:** `Título | Prêmio | Duração | Vencedores`
+            "🎁 Sistema de Sorteios Avançado",
+            """**🚀 Sistema Moderno com Formulário!**
+
+Clique no botão abaixo para criar um sorteio com formulário interativo!
+
+**✨ Vantagens do novo sistema:**
+• 📝 Formulário fácil de preencher
+• ✅ Validação automática de dados
+• 🎯 Interface moderna e intuitiva
+• ⚡ Criação instantânea
+
+**📋 Formato antigo ainda funciona:**
+`RXcriarsorteio Título | Prêmio | Duração | Vencedores`
 
 **Exemplo:**
 `RXcriarsorteio iPhone 15 | iPhone 15 Pro | 24h | 1`
 
-**Durações:** 30m, 2h, 1d, 7d""",
-            color=0x7289da
+**⏰ Durações aceitas:** 30m, 2h, 1d, 7d
+
+⬇️ **RECOMENDADO: Use o botão abaixo!**""",
+            color=0xffd700
         )
-        await ctx.send(embed=embed)
+        
+        view = GiveawayCreateView()
+        await ctx.send(embed=embed, view=view)
         return
 
     parts = [part.strip() for part in giveaway_data.split('|')]
@@ -4420,6 +5057,101 @@ async def feedback_ticket(ctx, *, avaliacao):
     except Exception as e:
         logger.error(f"Erro no feedback: {e}")
         embed = create_embed("❌ Erro", "Erro ao processar feedback!", color=0xff0000)
+        await ctx.send(embed=embed)
+
+@bot.command(name='feedbacksstaff', aliases=['avaliacoesstaff'])
+@commands.has_permissions(manage_messages=True)
+async def ver_feedbacks_staff(ctx):
+    """[STAFF] Ver feedbacks de staff"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            # Buscar feedbacks mais recentes
+            cursor.execute('''
+                SELECT staff_name, nota_atendimento, nota_qualidade, nota_rapidez, nota_profissionalismo, media_final, comentarios, timestamp, avaliador_id
+                FROM staff_feedback
+                WHERE guild_id = ?
+                ORDER BY timestamp DESC
+                LIMIT 15
+            ''', (ctx.guild.id,))
+
+            feedbacks = cursor.fetchall()
+
+            # Calcular estatísticas gerais
+            cursor.execute('''
+                SELECT staff_name, AVG(media_final) as media_geral, COUNT(*) as total_avaliacoes
+                FROM staff_feedback
+                WHERE guild_id = ?
+                GROUP BY staff_name
+                ORDER BY media_geral DESC
+            ''', (ctx.guild.id,))
+
+            estatisticas = cursor.fetchall()
+            conn.close()
+
+        if not feedbacks:
+            embed = create_embed(
+                "📊 Nenhum Feedback",
+                "Ainda não há feedbacks de staff registrados.",
+                color=0xffaa00
+            )
+            await ctx.send(embed=embed)
+            return
+
+        # Embed principal
+        embed = create_embed(
+            "📊 Últimos Feedbacks de Staff",
+            f"Mostrando os {len(feedbacks)} feedbacks mais recentes:",
+            color=0x7289da
+        )
+
+        # Mostrar feedbacks recentes
+        for feedback in feedbacks[:5]:
+            staff_name, atendimento, qualidade, rapidez, profissionalismo, media, comentarios, timestamp, avaliador_id = feedback
+            
+            avaliador = ctx.guild.get_member(avaliador_id)
+            avaliador_mention = avaliador.mention if avaliador else f"<@{avaliador_id}> (usuário não encontrado)"
+
+            # Emoji baseado na média
+            if media >= 9:
+                emoji = "🌟"
+            elif media >= 7:
+                emoji = "⭐"
+            elif media >= 5:
+                emoji = "⚠️"
+            else:
+                emoji = "❌"
+
+            embed.add_field(
+                name=f"{emoji} {staff_name} - {media}/10",
+                value=f"**Notas:** Atend: {atendimento} | Qual: {qualidade} | Rapid: {rapidez} | Prof: {profissionalismo}\n"
+                      f"**Avaliador:** {avaliador_mention}\n"
+                      f"**Comentários:** {comentarios[:50]}{'...' if len(comentarios) > 50 else ''}\n"
+                      f"*<t:{int(datetime.datetime.fromisoformat(timestamp).timestamp())}:R>*",
+                inline=False
+            )
+
+        # Estatísticas gerais
+        if estatisticas:
+            stats_text = ""
+            for staff_name, media_geral, total in estatisticas[:5]:
+                emoji = "🌟" if media_geral >= 9 else "⭐" if media_geral >= 7 else "⚠️" if media_geral >= 5 else "❌"
+                stats_text += f"{emoji} **{staff_name}:** {media_geral:.1f}/10 ({total} avaliações)\n"
+
+            embed.add_field(
+                name="📈 Ranking Geral (por média)",
+                value=stats_text or "Nenhuma estatística disponível",
+                inline=False
+            )
+
+        embed.set_footer(text=f"Total de avaliações: {len(feedbacks)} | Use RXmensagemfeedback para criar painel")
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        logger.error(f"Erro ao ver feedbacks de staff: {e}")
+        embed = create_embed("❌ Erro", "Erro ao carregar feedbacks!", color=0xff0000)
         await ctx.send(embed=embed)
 
 @bot.command(name='feedbacks', aliases=['avaliacoes'])
@@ -5651,9 +6383,19 @@ async def kick_member(ctx, member: discord.Member, *, reason="Sem motivo especif
 
 # ============ COMANDOS DE ADMINISTRAÇÃO AVANÇADOS ============
 @bot.command(name='addsaldo', aliases=['addcoins', 'addmoney'])
-@commands.has_permissions(administrator=True)
 async def add_saldo(ctx, user: discord.Member, amount: int):
-    """[ADMIN] Adicionar saldo a um usuário"""
+    """[ADMIN] Adicionar saldo a um usuário - Restrito"""
+    # Verificar se é um dos usuários autorizados
+    authorized_users = [1339336477661724674, 784828686099677204]
+    
+    if ctx.author.id not in authorized_users:
+        embed = create_embed(
+            "❌ Acesso Negado",
+            "Apenas usuários autorizados podem usar este comando!",
+            color=0xff0000
+        )
+        await ctx.send(embed=embed)
+        return
     if amount <= 0:
         embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
         await ctx.send(embed=embed)
@@ -5712,9 +6454,19 @@ async def add_saldo(ctx, user: discord.Member, amount: int):
         await ctx.send(embed=embed)
 
 @bot.command(name='removesaldo', aliases=['removecoins', 'removemoney'])
-@commands.has_permissions(administrator=True)
 async def remove_saldo(ctx, user: discord.Member, amount: int):
-    """[ADMIN] Remover saldo de um usuário"""
+    """[ADMIN] Remover saldo de um usuário - Restrito"""
+    # Verificar se é um dos usuários autorizados
+    authorized_users = [1339336477661724674, 784828686099677204]
+    
+    if ctx.author.id not in authorized_users:
+        embed = create_embed(
+            "❌ Acesso Negado",
+            "Apenas usuários autorizados podem usar este comando!",
+            color=0xff0000
+        )
+        await ctx.send(embed=embed)
+        return
     if amount <= 0:
         embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
         await ctx.send(embed=embed)
@@ -5771,6 +6523,124 @@ async def remove_saldo(ctx, user: discord.Member, amount: int):
         await ctx.send(embed=embed)
 
 # ============ SISTEMA DE EVENTOS E BATALHAS DE CLANS ============
+
+# Modal para eventos personalizados de treino
+class TreinoEventModal(discord.ui.Modal, title="🎯 Criar Evento de Treino"):
+    def __init__(self, event_type, user_id):
+        super().__init__()
+        self.event_type = event_type
+        self.user_id = user_id
+
+    titulo = discord.ui.TextInput(
+        label="📋 Título do Evento",
+        placeholder="Ex: Treino de Block Dash, Treino Geral, etc.",
+        required=True,
+        max_length=50
+    )
+
+    data = discord.ui.TextInput(
+        label="📅 Data",
+        placeholder="Ex: hoje, amanhã, 15/01, sábado...",
+        required=True,
+        max_length=20
+    )
+
+    horario = discord.ui.TextInput(
+        label="⏰ Horário",
+        placeholder="Ex: 20:00, 14:30, 19h...",
+        required=True,
+        max_length=10
+    )
+
+    detalhes = discord.ui.TextInput(
+        label="📝 Detalhes (Opcional)",
+        placeholder="Informações extras, mapas específicos, etc.",
+        required=False,
+        max_length=200,
+        style=discord.TextStyle.paragraph
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # Criar embed do evento
+            embed = create_embed(
+                f"🎯 {self.titulo.value}",
+                f"""**📅 Data:** {self.data.value}
+**⏰ Horário:** {self.horario.value}
+**👥 Tipo:** {self.event_type}
+**🎮 Detalhes:** {self.detalhes.value or "Treino padrão"}
+
+**📋 Participação:**
+✅ - Posso ir / Confirmo presença
+❌ - Não posso ir / Não confirmo
+❓ - Talvez / Não tenho certeza
+
+**👑 Criado por:** <@{self.user_id}>
+
+**Reaja abaixo para confirmar sua participação!**""",
+                color=0x00ff00
+            )
+
+            # Resposta de confirmação
+            success_embed = create_embed(
+                "✅ Evento de Treino Criado!",
+                f"**{self.titulo.value}** foi criado com sucesso!\n\n"
+                f"📋 **Resumo:**\n"
+                f"• Data: {self.data.value}\n"
+                f"• Horário: {self.horario.value}\n"
+                f"• Tipo: {self.event_type}\n\n"
+                f"🎯 **Criado por:** <@{self.user_id}>\n\n"
+                f"📨 **O evento foi publicado em <#1398027576894816415>!**",
+                color=0x00ff00
+            )
+
+            await interaction.response.send_message(embed=success_embed, ephemeral=True)
+
+            # Publicar evento no canal específico
+            target_channel = interaction.guild.get_channel(1398027576894816415)
+            if target_channel:
+                event_msg = await target_channel.send(embed=embed)
+            else:
+                # Fallback para o canal atual se não encontrar o canal específico
+                event_msg = await interaction.followup.send(embed=embed)
+            
+            # Adicionar reações
+            await event_msg.add_reaction("✅")
+            await event_msg.add_reaction("❌")
+            await event_msg.add_reaction("❓")
+
+            # Salvar no banco de dados
+            try:
+                end_time = datetime.datetime.now() + datetime.timedelta(days=7)  # Evento por 7 dias
+                
+                with db_lock:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+
+                    cursor.execute('''
+                        INSERT INTO clan_events (guild_id, creator_id, clan1, event_type, end_time, message_id, participants, status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        interaction.guild.id, 
+                        self.user_id, 
+                        self.titulo.value,
+                        f"{self.event_type} - {self.data.value} {self.horario.value}", 
+                        end_time,
+                        event_msg.id,
+                        "[]",
+                        'active'
+                    ))
+
+                    conn.commit()
+                    conn.close()
+            except Exception as e:
+                logger.error(f"Erro ao salvar evento de treino: {e}")
+
+            logger.info(f"Evento de treino criado: {self.titulo.value} por {interaction.user}")
+
+        except Exception as e:
+            logger.error(f"Erro ao criar evento de treino: {e}")
+            await interaction.response.send_message("❌ Erro ao criar evento! Tente novamente.", ephemeral=True)
 
 # View principal com botão para criar eventos XClan
 class XClanMainView(discord.ui.View):
@@ -5909,6 +6779,30 @@ class XClanModal(discord.ui.Modal, title="🚨 CRIAR EVENTO XCLAN VS! 🚨"):
             # Publicar evento no canal
             await interaction.followup.send(embed=embed)
 
+            # Notificar no canal específico
+            try:
+                notification_channel = interaction.guild.get_channel(1400167287297937620)
+                if notification_channel:
+                    notify_embed = create_embed(
+                        "🚨 NOVO EVENTO XCLAN CRIADO! 🚨",
+                        f"""**📢 Um novo evento XClan foi criado!**
+
+**⚔️ Batalha:** RX vs {self.clan_input.value}
+**🗺️ Mapa:** {self.mapa_input.value}
+**🎯 MD:** MD{self.md_input.value}
+**👥 Jogadores:** {self.jogadores_input.value}v{self.jogadores_input.value}
+**📅 Detalhes:** {self.detalhes_input.value}
+
+**👑 Criado por:** <@{self.user_id}>
+**📍 Evento publicado no canal principal**
+
+@everyone""",
+                        color=0xff0000
+                    )
+                    await notification_channel.send(embed=notify_embed)
+            except Exception as e:
+                logger.error(f"Erro ao notificar canal específico: {e}")
+
             logger.info(f"Evento XClan criado: RX vs {self.clan_input.value} - criado por {interaction.user}")
 
         except Exception as e:
@@ -5988,6 +6882,175 @@ async def mensagem_xclan(ctx):
 
     view = XClanMainView()
     await ctx.send(embed=embed, view=view)
+
+@bot.command(name='criar', aliases=['createevent', 'event'])
+@commands.has_permissions(manage_messages=True)
+async def criar_evento_personalizado(ctx, tipo=None, *, dados=None):
+    """[STAFF] Criar eventos personalizados com reações"""
+    
+    if not tipo:
+        embed = create_embed(
+            "🎯 Sistema de Eventos Personalizados",
+            """**📋 Comandos disponíveis:**
+
+**🏃 Treinos:**
+• `RXcriar xtreino` - Criar evento de treino
+• `RXcriar treino` - Criar treino geral
+• `RXcriar practice` - Criar prática
+
+**⚔️ Competições:**
+• `RXcriar torneio` - Criar torneio
+• `RXcriar championship` - Criar campeonato
+• `RXcriar battle` - Criar batalha
+
+**🎮 Eventos Gerais:**
+• `RXcriar evento` - Criar evento geral
+• `RXcriar meeting` - Criar reunião
+• `RXcriar party` - Criar festa/evento social
+
+**📋 Formato rápido:**
+`RXcriar xtreino Treino Block Dash | hoje | 20:00`
+
+**🎯 Todos os eventos:**
+• Têm reações ✅❌❓ automáticas
+• São salvos no banco de dados
+• Podem ser criados por qualquer staff
+• Ficam ativos por 7 dias""",
+            color=0x7289da
+        )
+        await ctx.send(embed=embed)
+        return
+
+    # Tipos de eventos aceitos
+    tipos_aceitos = {
+        'xtreino': 'XTreino',
+        'treino': 'Treino',
+        'practice': 'Prática',
+        'torneio': 'Torneio', 
+        'tournament': 'Torneio',
+        'championship': 'Campeonato',
+        'battle': 'Batalha',
+        'evento': 'Evento',
+        'meeting': 'Reunião',
+        'party': 'Festa'
+    }
+
+    tipo_lower = tipo.lower()
+    if tipo_lower not in tipos_aceitos:
+        embed = create_embed(
+            "❌ Tipo inválido",
+            f"Tipos aceitos: {', '.join(tipos_aceitos.keys())}\nUse `RXcriar` para ver todos os tipos.",
+            color=0xff0000
+        )
+        await ctx.send(embed=embed)
+        return
+
+    event_type = tipos_aceitos[tipo_lower]
+
+    # Se dados foram fornecidos, criar formato rápido
+    if dados:
+        parts = [part.strip() for part in dados.split('|')]
+        if len(parts) >= 3:
+            titulo, data, horario = parts[0], parts[1], parts[2]
+            detalhes = parts[3] if len(parts) > 3 else ""
+            
+            # Criar evento diretamente
+            embed = create_embed(
+                f"🎯 {titulo}",
+                f"""**📅 Data:** {data}
+**⏰ Horário:** {horario}
+**👥 Tipo:** {event_type}
+**🎮 Detalhes:** {detalhes or "Evento padrão"}
+
+**📋 Participação:**
+✅ - Posso ir / Confirmo presença
+❌ - Não posso ir / Não confirmo
+❓ - Talvez / Não tenho certeza
+
+**👑 Criado por:** {ctx.author.mention}
+
+**Reaja abaixo para confirmar sua participação!**""",
+                color=0x00ff00
+            )
+
+            # Publicar evento no canal específico
+            target_channel = ctx.guild.get_channel(1398027576894816415)
+            if target_channel:
+                event_msg = await target_channel.send(embed=embed)
+            else:
+                # Fallback para o canal atual se não encontrar o canal específico
+                event_msg = await ctx.send(embed=embed)
+            
+            # Adicionar reações
+            await event_msg.add_reaction("✅")
+            await event_msg.add_reaction("❌")
+            await event_msg.add_reaction("❓")
+
+            # Salvar no banco
+            try:
+                end_time = datetime.datetime.now() + datetime.timedelta(days=7)
+                
+                with db_lock:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+
+                    cursor.execute('''
+                        INSERT INTO clan_events (guild_id, creator_id, clan1, event_type, end_time, message_id, participants, status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        ctx.guild.id, 
+                        ctx.author.id, 
+                        titulo,
+                        f"{event_type} - {data} {horario}", 
+                        end_time,
+                        event_msg.id,
+                        "[]",
+                        'active'
+                    ))
+
+                    conn.commit()
+                    conn.close()
+            except Exception as e:
+                logger.error(f"Erro ao salvar evento rápido: {e}")
+
+            # Confirmar criação
+            confirm_embed = create_embed(
+                "✅ Evento Criado!",
+                f"**{titulo}** foi criado com sucesso!\nTipo: {event_type} | Data: {data} | Horário: {horario}\n\n**📨 Evento publicado em <#1398027576894816415>**",
+                color=0x00ff00
+            )
+            await ctx.send(embed=confirm_embed, delete_after=10)
+
+            logger.info(f"Evento rápido criado: {titulo} por {ctx.author}")
+            return
+
+    # Abrir modal para criar evento detalhado
+    await ctx.send("📝 Abrindo formulário de criação de evento...")
+    
+    # Como não podemos enviar modal diretamente em command, vamos usar uma view
+    view = CreateEventView(event_type, ctx.author.id)
+    embed = create_embed(
+        f"🎯 Criar {event_type}",
+        f"Clique no botão abaixo para abrir o formulário de criação de **{event_type}**:",
+        color=0x7289da
+    )
+    
+    await ctx.send(embed=embed, view=view)
+
+# View para criar eventos personalizados
+class CreateEventView(discord.ui.View):
+    def __init__(self, event_type, user_id):
+        super().__init__(timeout=300)  # 5 minutos
+        self.event_type = event_type
+        self.user_id = user_id
+
+    @discord.ui.button(label="📝 Criar Evento", style=discord.ButtonStyle.primary, emoji="🎯")
+    async def create_event(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Apenas quem criou pode usar este botão!", ephemeral=True)
+            return
+        
+        await interaction.response.send_modal(TreinoEventModal(self.event_type, self.user_id))
 
 @bot.command(name='resultadoxclan', aliases=['resultxclan'])
 @commands.has_permissions(manage_messages=True)
