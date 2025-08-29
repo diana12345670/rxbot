@@ -477,78 +477,6 @@ AUTO_WARN_WORDS = [
 # Loja de itens do bot
 LOJA_ITENS = {
     1: {
-        'nome': 'Boost de XP',
-        'preco': 500,
-        'descricao': 'Dobra o XP por 1 hora',
-        'emoji': '📈',
-        'raridade': 'Comum',
-        'efeito': 'xp_boost'
-    },
-    2: {
-        'nome': 'Salário VIP',
-        'preco': 1000,
-        'descricao': '+50% no trabalho por 7 dias',
-        'emoji': '💼',
-        'raridade': 'Incomum',
-        'efeito': 'work_boost'
-    },
-    3: {
-        'nome': 'Título Personalizado',
-        'preco': 2000,
-        'descricao': 'Defina seu próprio título',
-        'emoji': '👑',
-        'raridade': 'Raro',
-        'efeito': 'custom_title'
-    },
-    4: {
-        'nome': 'Proteção Anti-Roubo',
-        'preco': 800,
-        'descricao': 'Protege 90% das moedas por 3 dias',
-        'emoji': '🛡️',
-        'raridade': 'Incomum',
-        'efeito': 'protection'
-    },
-    5: {
-        'nome': 'Multiplicador de Daily',
-        'preco': 1500,
-        'descricao': 'Daily vale 3x mais por 5 dias',
-        'emoji': '🎁',
-        'raridade': 'Raro',
-        'efeito': 'daily_multiplier'
-    },
-    6: {
-        'nome': 'Tickets Prioritários',
-        'preco': 300,
-        'descricao': 'Tickets com atendimento VIP (5 usos)',
-        'emoji': '🎫',
-        'raridade': 'Comum',
-        'efeito': 'priority_tickets'
-    },
-    7: {
-        'nome': 'Reputação Extra',
-        'preco': 600,
-        'descricao': '+10 pontos de reputação',
-        'emoji': '⭐',
-        'raridade': 'Comum',
-        'efeito': 'reputation_boost'
-    },
-    8: {
-        'nome': 'Cofre Pessoal',
-        'preco': 2500,
-        'descricao': 'Banco com 0% de chance de roubo',
-        'emoji': '🔒',
-        'raridade': 'Épico',
-        'efeito': 'personal_vault'
-    },
-    9: {
-        'nome': 'Sorte Extrema',
-        'preco': 3000,
-        'descricao': '+20% de chance em jogos por 24h',
-        'emoji': '🍀',
-        'raridade': 'Épico',
-        'efeito': 'luck_boost'
-    },
-    10: {
         'nome': 'Desafio do Dia',
         'preco': 150,
         'descricao': 'Ganhe entre 0-500 moedas aleatórias',
@@ -556,7 +484,87 @@ LOJA_ITENS = {
         'raridade': 'Comum',
         'efeito': 'daily_challenge'
     },
+    2: {
+        'nome': 'Caixa Misteriosa',
+        'preco': 300,
+        'descricao': 'Ganhe item aleatório ou coins',
+        'emoji': '📦',
+        'raridade': 'Incomum',
+        'efeito': 'mystery_box'
+    },
+    3: {
+        'nome': 'Boost de XP',
+        'preco': 500,
+        'descricao': 'Dobra o XP por 1 hora',
+        'emoji': '📈',
+        'raridade': 'Comum',
+        'efeito': 'xp_boost'
+    },
+    4: {
+        'nome': 'Salário VIP',
+        'preco': 1000,
+        'descricao': '+50% no trabalho por 7 dias',
+        'emoji': '💼',
+        'raridade': 'Incomum',
+        'efeito': 'work_boost'
+    },
+    5: {
+        'nome': 'Título Personalizado',
+        'preco': 2000,
+        'descricao': 'Defina seu próprio título',
+        'emoji': '👑',
+        'raridade': 'Raro',
+        'efeito': 'custom_title'
+    },
+    6: {
+        'nome': 'Proteção Anti-Roubo',
+        'preco': 800,
+        'descricao': 'Protege 90% das moedas por 3 dias',
+        'emoji': '🛡️',
+        'raridade': 'Incomum',
+        'efeito': 'protection'
+    },
+    7: {
+        'nome': 'Multiplicador de Daily',
+        'preco': 1500,
+        'descricao': 'Daily vale 3x mais por 5 dias',
+        'emoji': '🎁',
+        'raridade': 'Raro',
+        'efeito': 'daily_multiplier'
+    },
+    8: {
+        'nome': 'Tickets Prioritários',
+        'preco': 300,
+        'descricao': 'Tickets com atendimento VIP (5 usos)',
+        'emoji': '🎫',
+        'raridade': 'Comum',
+        'efeito': 'priority_tickets'
+    },
+    9: {
+        'nome': 'Reputação Extra',
+        'preco': 600,
+        'descricao': '+10 pontos de reputação',
+        'emoji': '⭐',
+        'raridade': 'Comum',
+        'efeito': 'reputation_boost'
+    },
+    10: {
+        'nome': 'Cofre Pessoal',
+        'preco': 2500,
+        'descricao': 'Banco com 0% de chance de roubo',
+        'emoji': '🔒',
+        'raridade': 'Épico',
+        'efeito': 'personal_vault'
+    },
     11: {
+        'nome': 'Sorte Extrema',
+        'preco': 3000,
+        'descricao': '+20% de chance em jogos por 24h',
+        'emoji': '🍀',
+        'raridade': 'Épico',
+        'efeito': 'luck_boost'
+    },
+    12: {
         'nome': 'Badge Especial',
         'preco': 5000,
         'descricao': 'Badge exclusiva no perfil',
@@ -564,7 +572,7 @@ LOJA_ITENS = {
         'raridade': 'Lendário',
         'efeito': 'special_badge'
     },
-    12: {
+    13: {
         'nome': 'Chuva de Moedas',
         'preco': 1200,
         'descricao': 'Cria evento de chuva de moedas',
@@ -868,29 +876,25 @@ async def safe_interaction_response(interaction, embed, ephemeral=False):
     try:
         # Check if interaction is valid
         if not interaction or not hasattr(interaction, 'response'):
-            logger.error("Invalid interaction object")
             return
 
-        # Check if interaction expired (older than 15 minutes)
+        # Check if interaction expired (older than 14 minutes to be safe)
         import time
         if hasattr(interaction, 'created_at'):
             age = time.time() - interaction.created_at.timestamp()
-            if age > 900:  # 15 minutes
-                logger.warning("Interaction too old, skipping response")
+            if age > 840:  # 14 minutes
                 return
 
         # Check if already responded
         if interaction.response.is_done():
             try:
                 await interaction.followup.send(embed=embed, ephemeral=ephemeral)
-            except (discord.errors.InteractionResponded, discord.errors.NotFound, discord.errors.HTTPException) as e:
-                logger.info(f"Could not send followup: {e}")
+            except (discord.errors.InteractionResponded, discord.errors.NotFound, discord.errors.HTTPException):
                 pass
         else:
             try:
                 await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
-            except (discord.errors.InteractionResponded, discord.errors.NotFound, discord.errors.HTTPException) as e:
-                logger.info(f"Could not respond to interaction: {e}")
+            except (discord.errors.InteractionResponded, discord.errors.NotFound, discord.errors.HTTPException):
                 try:
                     await interaction.followup.send(embed=embed, ephemeral=ephemeral)
                 except:
@@ -1901,187 +1905,7 @@ async def slash_comprar(interaction: discord.Interaction, item_id: int):
         embed = create_embed("❌ Erro", "Erro ao processar compra!", color=0xff0000)
         await interaction.followup.send(embed=embed)
 
-@bot.tree.command(name="usar", description="Usar item do inventário")
-async def slash_usar(interaction: discord.Interaction, item_id: int):
-    """Slash command para usar item"""
-    try:
-        # Validar se o usuário e guild existem
-        if not interaction.user or not interaction.guild:
-            embed = create_embed("❌ Erro", "Este comando só pode ser usado em servidores!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
-            return
 
-        # Buscar inventário do usuário
-        try:
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute('SELECT inventory, settings FROM users WHERE user_id = ?', (interaction.user.id,))
-                result = cursor.fetchone()
-                conn.close()
-        except Exception as e:
-            logger.error(f"Erro ao buscar inventário: {e}")
-            embed = create_embed("❌ Erro", "Erro ao acessar inventário!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
-            return
-
-        if not result:
-            embed = create_embed("❌ Dados não encontrados", "Você não tem dados de usuário!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
-            return
-
-        inventory_data, settings_data = result[0], result[1]
-        inventory = json.loads(inventory_data) if inventory_data else {}
-        settings = json.loads(settings_data) if settings_data else {}
-
-        if str(item_id) not in inventory or inventory[str(item_id)] <= 0:
-            embed = create_embed("❌ Item não encontrado", "Você não possui este item!\nUse `/inventario` para ver seus itens.", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
-            return
-
-        if item_id not in LOJA_ITENS:
-            embed = create_embed("❌ Item inválido", "Este item não existe!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
-            return
-
-        item = LOJA_ITENS[item_id]
-
-        # Aplicar efeito do item
-        coins_ganhos = 0
-        efeito_aplicado = "Item usado com sucesso!"
-        
-        if item['efeito'] == 'xp_boost':
-            settings['xp_boost'] = time.time() + 3600  # 1 hora
-            efeito_aplicado = "XP dobrado por 1 hora!"
-            
-        elif item['efeito'] == 'work_boost':
-            settings['vip_salary'] = time.time() + (7 * 24 * 3600)  # 7 dias
-            efeito_aplicado = "+50% no trabalho por 7 dias!"
-            
-        elif item['efeito'] == 'custom_title':
-            settings['custom_title_available'] = True
-            efeito_aplicado = "Use `/settitle <título>` para definir seu título!"
-            
-        elif item['efeito'] == 'protection':
-            settings['anti_theft'] = time.time() + (3 * 24 * 3600)  # 3 dias
-            efeito_aplicado = "90% das moedas protegidas por 3 dias!"
-            
-        elif item['efeito'] == 'daily_multiplier':
-            settings['daily_multiplier'] = time.time() + (5 * 24 * 3600)  # 5 dias
-            efeito_aplicado = "Daily vale 3x mais por 5 dias!"
-            
-        elif item['efeito'] == 'priority_tickets':
-            settings['priority_tickets'] = settings.get('priority_tickets', 0) + 5
-            efeito_aplicado = "+5 tickets prioritários adicionados!"
-            
-        elif item['efeito'] == 'reputation_boost':
-            # Adicionar reputação diretamente
-            user_data = get_user_data(interaction.user.id)
-            current_rep = user_data[4] if user_data else 0
-            new_rep = current_rep + 10
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute('UPDATE users SET reputation = ? WHERE user_id = ?', (new_rep, interaction.user.id))
-                conn.commit()
-                conn.close()
-            efeito_aplicado = "+10 pontos de reputação adicionados!"
-            
-        elif item['efeito'] == 'personal_vault':
-            settings['personal_vault'] = time.time() + (30 * 24 * 3600)  # 30 dias
-            efeito_aplicado = "Cofre pessoal ativo por 30 dias!"
-            
-        elif item['efeito'] == 'luck_boost':
-            settings['luck_boost'] = time.time() + (24 * 3600)  # 24 horas
-            efeito_aplicado = "+20% de sorte em jogos por 24h!"
-            
-        elif item['efeito'] == 'daily_challenge':
-            coins_ganhos = random.randint(0, 500)
-            user_data = get_user_data(interaction.user.id)
-            current_coins = user_data[1] if user_data else 50
-            new_coins = current_coins + coins_ganhos
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, interaction.user.id))
-                conn.commit()
-                conn.close()
-            efeito_aplicado = f"Você ganhou {coins_ganhos:,} moedas no desafio!"
-            
-        elif item['efeito'] == 'special_badge':
-            settings['special_badge'] = True
-            efeito_aplicado = "Badge especial adicionada ao perfil!"
-            
-        elif item['efeito'] == 'coin_rain':
-            # Criar evento de chuva de moedas
-            total_coins = random.randint(1000, 3000)
-            max_participants = random.randint(5, 15)
-            
-            rain_embed = create_embed(
-                "💰 CHUVA DE MOEDAS!",
-                f"**{interaction.user.mention} criou uma chuva de moedas!**\n\n"
-                f"💰 **Total:** {total_coins:,} moedas\n"
-                f"👥 **Vagas:** {max_participants} pessoas\n"
-                f"⚡ **Como participar:** Reaja com 💰\n\n"
-                f"🏆 **Prêmio será dividido igualmente entre os participantes!**",
-                color=0xffd700
-            )
-            
-            rain_msg = await interaction.channel.send(embed=rain_embed)
-            await rain_msg.add_reaction("💰")
-            
-            # Armazenar dados do evento
-            active_games[rain_msg.id] = {
-                'type': 'coin_rain',
-                'total_coins': total_coins,
-                'max_participants': max_participants,
-                'participants': [],
-                'creator': interaction.user.id
-            }
-            
-            efeito_aplicado = f"Chuva de {total_coins:,} moedas criada no canal!"
-
-        # Remover item do inventário e salvar configurações
-        conn = None
-        try:
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-
-                # Remover item do inventário
-                inventory[str(item_id)] -= 1
-                if inventory[str(item_id)] <= 0:
-                    del inventory[str(item_id)]
-
-                cursor.execute('UPDATE users SET inventory = ?, settings = ? WHERE user_id = ?', 
-                             (json.dumps(inventory), json.dumps(settings), interaction.user.id))
-                conn.commit()
-                conn.close()
-                conn = None
-
-            embed = create_embed(
-                f"✅ {item['emoji']} {item['nome']} Usado!",
-                f"**Efeito:** {efeito_aplicado}\n\n"
-                f"**Descrição:** {item['descricao']}",
-                color=0x00ff00
-            )
-            
-            # Log do uso
-            logger.info(f"Item usado: {interaction.user.name} usou {item['nome']} (ID: {item_id}) - Coins ganhos: {coins_ganhos}")
-            
-            await safe_interaction_response(interaction, embed)
-
-        except Exception as db_error:
-            logger.error(f"Erro ao usar item: {db_error}")
-            if conn:
-                conn.close()
-            embed = create_embed("❌ Erro", "Erro ao usar item!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
-
-    except Exception as e:
-        logger.error(f"Erro geral no usar: {e}")
-        embed = create_embed("❌ Erro", "Ocorreu um erro inesperado!", color=0xff0000)
-        await safe_interaction_response(interaction, embed, ephemeral=True)
 
 @bot.tree.command(name="presentear", description="Presentear item para outro usuário")
 async def slash_presentear(interaction: discord.Interaction, usuario: discord.Member, item_id: int, quantidade: int = 1):
@@ -4126,7 +3950,7 @@ async def slash_vender(interaction: discord.Interaction, item_id: int, quantidad
     """Slash command para vender item"""
     try:
         await interaction.response.defer()
-        
+
         if quantidade <= 0:
             embed = create_embed("❌ Quantidade inválida", "Use quantidades positivas!", color=0xff0000)
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -4185,13 +4009,13 @@ async def slash_vender(interaction: discord.Interaction, item_id: int, quantidad
                 cursor = conn.cursor()
                 cursor.execute('UPDATE users SET inventory = ?, coins = ? WHERE user_id = ?',
                               (json.dumps(inventory), new_coins, interaction.user.id))
-                
+
                 # Registrar transação
                 cursor.execute('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
                     VALUES (?, ?, ?, ?, ?)
                 ''', (interaction.user.id, interaction.guild.id, 'item_sale', total_venda, f"Vendeu {quantidade}x {item['nome']}"))
-                
+
                 conn.commit()
                 conn.close()
         except Exception as e:
