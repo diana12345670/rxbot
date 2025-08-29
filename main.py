@@ -762,6 +762,23 @@ async def check_giveaways():
     except Exception as e:
         logger.error(f"Erro check_giveaways: {e}")
 
+# Utility function for interaction handling
+async def safe_interaction_response(interaction, embed, ephemeral=False):
+    """Safely respond to interaction, handling timeout errors"""
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embed, ephemeral=ephemeral)
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
+    except discord.errors.NotFound:
+        # Interaction expired, try followup
+        try:
+            await interaction.followup.send(embed=embed, ephemeral=ephemeral)
+        except:
+            pass
+    except Exception as e:
+        logger.error(f"Erro ao responder interação: {e}")
+
 # Utility functions with proper database handling
 def get_user_data(user_id):
     """Get user data with proper error handling"""
@@ -992,8 +1009,9 @@ async def slash_saldo(interaction: discord.Interaction, usuario: discord.Member 
     """Slash command para saldo"""
     try:
         await interaction.response.defer()
+        use_followup = True
     except:
-        return
+        use_followup = False
 
     target = usuario or interaction.user
     data = get_user_data(target.id)
@@ -1017,24 +1035,29 @@ async def slash_saldo(interaction: discord.Interaction, usuario: discord.Member 
         color=0xffd700
     )
     embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
-    try:
-        await interaction.followup.send(embed=embed)
-    except:
-        pass
+    await safe_interaction_response(interaction, embed)
 
 @bot.tree.command(name="daily", description="Recompensa diária")
 async def slash_daily(interaction: discord.Interaction):
     """Slash command para daily"""
-    await interaction.response.defer()
+    # Tentar defer primeiro, se falhar usar response direto
+    try:
+        await interaction.response.defer()
+        use_followup = True
+    except discord.errors.NotFound:
+        # Interação já expirou, tentar resposta direta
+        use_followup = False
+    except Exception:
+        use_followup = False
 
     user_id = interaction.user.id
-    data = get_user_data(user_id)
+    user_data = get_user_data(user_id)
 
-    if not data:
+    if not user_data:
         update_user_data(user_id)
-        data = get_user_data(user_id)
+        user_data = get_user_data(user_id)
 
-    last_daily = data[6]
+    last_daily = user_data[6] if len(user_data) > 6 else None
     today = datetime.date.today().isoformat()
 
     if last_daily == today:
@@ -1043,10 +1066,17 @@ async def slash_daily(interaction: discord.Interaction):
             "Você já coletou sua recompensa diária hoje!\nVolte amanhã para coletar novamente.",
             color=0xff6b6b
         )
-        await interaction.followup.send(embed=embed)
+        try:
+            if use_followup:
+                await interaction.followup.send(embed=embed)
+            else:
+                await interaction.response.send_message(embed=embed)
+        except:
+            pass
         return
 
-    new_coins = data[1] + DAILY_REWARD
+    current_coins = user_data[1] if len(user_data) > 1 else 50
+    new_coins = current_coins + DAILY_REWARD
 
     try:
         with db_lock:
@@ -1067,7 +1097,14 @@ async def slash_daily(interaction: discord.Interaction):
 🔥 *Continue coletando diariamente!*""",
         color=0x00ff00
     )
-    await interaction.followup.send(embed=embed)
+    
+    try:
+        if use_followup:
+            await interaction.followup.send(embed=embed)
+        else:
+            await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        logger.error(f"Erro ao responder daily: {e}")
 
 
     # Verificar cooldown (2 horas)
@@ -1694,7 +1731,7 @@ async def slash_trabalhar(interaction: discord.Interaction):
     except:
         # Interaction já foi processada
         return
-    
+
     user_data = get_user_data(interaction.user.id)
     if not user_data:
         update_user_data(interaction.user.id)
@@ -1780,7 +1817,7 @@ async def slash_trabalhar(interaction: discord.Interaction):
 async def slash_crime(interaction: discord.Interaction):
     """Slash command para crime"""
     await interaction.response.defer()
-    
+
     user_data = get_user_data(interaction.user.id)
     if not user_data:
         update_user_data(interaction.user.id)
@@ -2223,7 +2260,7 @@ async def slash_lembrete(interaction: discord.Interaction, tempo: str, texto: st
     # Parse do tempo
     time_units = {'m': 60, 's': 1, 'h': 3600, 'd': 86400}
     unit = tempo[-1].lower()
-    
+
     if unit not in time_units:
         embed = create_embed("❌ Tempo inválido", "Use: s (segundos), m (minutos), h (horas), d (dias)", color=0xff0000)
         await interaction.followup.send(embed=embed)
@@ -2340,7 +2377,7 @@ async def slash_avatar(interaction: discord.Interaction, usuario: discord.Member
     await interaction.response.defer()
 
     target = usuario or interaction.user
-    
+
     embed = create_embed(
         f"🖼️ Avatar de {target.display_name}",
         f"[Clique aqui para ver em alta resolução]({target.avatar.url if target.avatar else target.default_avatar.url}?size=1024)",
@@ -2355,7 +2392,7 @@ async def slash_serverinfo(interaction: discord.Interaction):
     await interaction.response.defer()
 
     guild = interaction.guild
-    
+
     embed = create_embed(
         f"🛡️ Informações do {guild.name}",
         f"""**👑 Dono:** {guild.owner.mention if guild.owner else 'Desconhecido'}
@@ -2370,10 +2407,10 @@ async def slash_serverinfo(interaction: discord.Interaction):
 **📊 ID do servidor:** {guild.id}""",
         color=0x7289da
     )
-    
+
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
-    
+
     await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="userinfo", description="Informações detalhadas de um usuário")
@@ -2445,7 +2482,7 @@ async def slash_stats(interaction: discord.Interaction):
     await interaction.response.defer()
 
     uptime = datetime.datetime.now() - global_stats['uptime_start']
-    
+
     embed = create_embed(
         "📊 Estatísticas do RXbot",
         f"""**⏱️ Uptime:** {format_time(int(uptime.total_seconds()))}
@@ -2487,7 +2524,7 @@ async def slash_clear(interaction: discord.Interaction, quantidade: int = 10):
 
     try:
         deleted = await interaction.channel.purge(limit=quantidade)
-        
+
         embed = create_embed(
             "🧹 Limpeza Concluída",
             f"**{len(deleted)} mensagens foram deletadas com sucesso!**\n"
@@ -2795,7 +2832,7 @@ async def slash_uptime(interaction: discord.Interaction):
     await interaction.response.defer()
 
     uptime = datetime.datetime.now() - global_stats['uptime_start']
-    
+
     embed = create_embed(
         "⏱️ Uptime do RXbot",
         f"**Online há:** {format_time(int(uptime.total_seconds()))}\n"
@@ -3025,7 +3062,7 @@ async def on_reaction_add(reaction, user):
                 except Exception as e:
                     logger.error(f"Erro ao processar participação no evento: {e}")
 
-        
+
 
         elif game_data['type'] == 'trade_invitation':
             # Apenas o usuário convidado pode aceitar/recusar
