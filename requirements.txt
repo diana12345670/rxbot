@@ -14,3 +14,7 @@ openai>=1.35.0
 transformers>=4.44.0
 torch>=2.2.0
 requests>=2.32.3
+
+# Música
+yt-dlp
+PyNaCl

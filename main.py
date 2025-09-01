@@ -72,6 +72,31 @@ try:
 except ImportError:
     gzip = None
 
+# Função helper para envio seguro de mensagens Discord
+async def safe_send_response(interaction: discord.Interaction, embed=None, content=None, ephemeral=False):
+    """Envia resposta de forma segura, verificando se já foi respondida"""
+    try:
+        if not interaction.response.is_done():
+            # Se ainda não respondeu, usa response.send_message
+            await interaction.response.send_message(embed=embed, content=content, ephemeral=ephemeral)
+        else:
+            # Se já respondeu, usa followup.send
+            await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral)
+    except discord.errors.NotFound:
+        # Se a interação expirou, tenta enviar no canal
+        if interaction.channel:
+            try:
+                await interaction.channel.send(embed=embed, content=content)
+            except:
+                pass
+    except Exception as e:
+        logger.error(f"Erro ao enviar resposta: {e}")
+        try:
+            if interaction.channel:
+                await interaction.channel.send("❌ Erro interno do bot.")
+        except:
+            pass
+
 try:
     import zipfile
 except ImportError:
@@ -391,6 +416,15 @@ def init_database():
                 feedback_text TEXT,
                 notas TEXT,
                 media_nota INTEGER,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+
+            # Tabela de logs de comandos
+            cursor.execute('''CREATE TABLE IF NOT EXISTS command_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                command TEXT,
+                guild_id INTEGER,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''')
 
@@ -888,7 +922,7 @@ async def safe_interaction_response(interaction, embed, ephemeral=False):
         # Check if already responded
         if interaction.response.is_done():
             try:
-                await interaction.followup.send(embed=embed, ephemeral=ephemeral)
+                await safe_send_response(interaction, embed=embed, ephemeral=ephemeral)
             except (discord.errors.InteractionResponded, discord.errors.NotFound, discord.errors.HTTPException):
                 pass
         else:
@@ -896,7 +930,7 @@ async def safe_interaction_response(interaction, embed, ephemeral=False):
                 await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
             except (discord.errors.InteractionResponded, discord.errors.NotFound, discord.errors.HTTPException):
                 try:
-                    await interaction.followup.send(embed=embed, ephemeral=ephemeral)
+                    await safe_send_response(interaction, embed=embed, ephemeral=ephemeral)
                 except:
                     pass
     except (discord.errors.NotFound, discord.errors.HTTPException):
@@ -1120,7 +1154,7 @@ Mencione o bot para conversar!
 • `/saldo [usuário]` - Ver saldo
 • `/daily` - Recompensa diária (100 moedas)
 • `/trabalhar` - Trabalhe por dinheiro
-• `/roubar <usuário>` - **NOVO!** Tentar roubar (1% chance banco!)
+• `/roubar <usuário>` - **NOVO!** Tentar roubar (60% chance de sucesso!)
 
 **🛒 Loja Premium:**
 • `/loja` - Ver loja com itens exclusivos
@@ -1548,6 +1582,134 @@ async def slash_monthly(interaction: discord.Interaction):
         logger.error(f"Erro no monthly: {e}")
         await interaction.response.send_message("Erro ao coletar monthly!", ephemeral=True)
 
+@bot.tree.command(name="roubar", description="Roube coins de outro usuário (60% de chance de sucesso)")
+async def slash_roubar(interaction: discord.Interaction, usuario: discord.Member):
+    """Slash command para roubar coins de outro usuário"""
+    try:
+        # Validar se o usuário e guild existem
+        if not interaction.user or not interaction.guild:
+            embed = create_embed("❌ Erro", "Este comando só pode ser usado em servidores!", color=0xff0000)
+            await safe_interaction_response(interaction, embed, ephemeral=True)
+            return
+        
+        # Não pode roubar de si mesmo
+        if interaction.user.id == usuario.id:
+            embed = create_embed("❌ Erro", "Você não pode roubar de si mesmo!", color=0xff0000)
+            await safe_interaction_response(interaction, embed, ephemeral=True)
+            return
+        
+        # Não pode roubar do bot
+        if usuario.bot:
+            embed = create_embed("❌ Erro", "Você não pode roubar de bots!", color=0xff0000)
+            await safe_interaction_response(interaction, embed, ephemeral=True)
+            return
+        
+        # Obter dados dos usuários
+        ladrão_data = get_user_data(interaction.user.id)
+        vítima_data = get_user_data(usuario.id)
+        
+        if not ladrão_data:
+            update_user_data(interaction.user.id)
+            ladrão_data = get_user_data(interaction.user.id)
+            
+        if not vítima_data:
+            update_user_data(usuario.id)
+            vítima_data = get_user_data(usuario.id)
+        
+        # Verificar se a vítima tem coins para roubar (apenas coins fora do banco)
+        coins_vítima = vítima_data[1] if len(vítima_data) > 1 else 50
+        if coins_vítima <= 0:
+            embed = create_embed("❌ Sem dinheiro", f"{usuario.mention} não tem coins na carteira para roubar!", color=0xff0000)
+            await safe_interaction_response(interaction, embed, ephemeral=True)
+            return
+        
+        # 60% de chance de sucesso
+        sucesso = random.randint(1, 100) <= 60
+        
+        if sucesso:
+            # Calcular quantos coins roubar (10% a 30% dos coins da vítima)
+            porcentagem = random.randint(10, 30)
+            coins_roubados = max(1, int(coins_vítima * porcentagem / 100))
+            
+            # Chance de roubar item também (20% de chance)
+            item_roubado = None
+            inventário_vítima = []
+            inventário_ladrão = []
+            
+            try:
+                inventário_vítima = json.loads(vítima_data[9]) if len(vítima_data) > 9 and vítima_data[9] else []
+                inventário_ladrão = json.loads(ladrão_data[9]) if len(ladrão_data) > 9 and ladrão_data[9] else []
+            except:
+                inventário_vítima = []
+                inventário_ladrão = []
+            
+            if inventário_vítima and random.randint(1, 100) <= 20:
+                item_roubado = random.choice(inventário_vítima)
+                inventário_vítima.remove(item_roubado)
+                inventário_ladrão.append(item_roubado)
+            
+            # Atualizar dados
+            coins_ladrão = ladrão_data[1] if len(ladrão_data) > 1 else 50
+            coins_vítima_novo = coins_vítima - coins_roubados
+            coins_ladrão_novo = coins_ladrão + coins_roubados
+            
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                # Atualizar ladrão
+                cursor.execute('UPDATE users SET coins = ?, inventory = ? WHERE user_id = ?',
+                              (coins_ladrão_novo, json.dumps(inventário_ladrão), interaction.user.id))
+                
+                # Atualizar vítima
+                cursor.execute('UPDATE users SET coins = ?, inventory = ? WHERE user_id = ?',
+                              (coins_vítima_novo, json.dumps(inventário_vítima), usuario.id))
+                
+                conn.commit()
+                conn.close()
+            
+            # Mensagem de sucesso
+            embed = create_embed(
+                "🦹‍♂️ Roubo Bem Sucedido!",
+                f"{interaction.user.mention} roubou **{coins_roubados:,} coins** de {usuario.mention}!",
+                color=0x00ff00
+            )
+            
+            if item_roubado:
+                embed.add_field(name="🎁 Bônus!", value=f"Também roubou o item: **{item_roubado}**", inline=False)
+            
+        else:
+            # Falhou no roubo - perde coins como punição
+            coins_ladrão = ladrão_data[1] if len(ladrão_data) > 1 else 50
+            penalidade = random.randint(10, 50)
+            penalidade = min(penalidade, coins_ladrão)  # Não pode perder mais do que tem
+            
+            if penalidade > 0:
+                coins_ladrão_novo = coins_ladrão - penalidade
+                
+                with db_lock:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?',
+                                  (coins_ladrão_novo, interaction.user.id))
+                    conn.commit()
+                    conn.close()
+            
+            embed = create_embed(
+                "🚨 Roubo Falhado!",
+                f"{interaction.user.mention} foi pego tentando roubar {usuario.mention}!",
+                color=0xff0000
+            )
+            
+            if penalidade > 0:
+                embed.add_field(name="💸 Punição", value=f"Perdeu **{penalidade:,} coins** como multa!", inline=False)
+        
+        await safe_interaction_response(interaction, embed)
+        
+    except Exception as e:
+        logger.error(f"Erro no comando roubar: {e}")
+        error_embed = create_embed("❌ Erro", "Erro ao tentar roubar!", color=0xff0000)
+        await safe_interaction_response(interaction, error_embed, ephemeral=True)
 
 
 # SLASH COMMANDS - ECONOMIA (Comandos únicos organizados)
@@ -1558,7 +1720,7 @@ async def slash_monthly(interaction: discord.Interaction):
 async def slash_loja(interaction: discord.Interaction):
     """Slash command para loja"""
     try:
-        await interaction.response.defer()
+        pass
     except:
         return
 
@@ -1588,7 +1750,7 @@ async def slash_loja(interaction: discord.Interaction):
 
     embed.set_footer(text=f"Use /inventario para ver seus itens | /usar <id> para usar itens")
     try:
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
     except:
         pass
 
@@ -1834,14 +1996,14 @@ async def on_ready():
 async def slash_comprar(interaction: discord.Interaction, item_id: int):
     """Slash command para comprar"""
     try:
-        await interaction.response.defer()
+        pass
     except (discord.errors.InteractionResponded, discord.errors.NotFound):
         # Interaction already handled or expired
         return
 
     if item_id not in LOJA_ITENS:
         embed = create_embed("❌ Item não encontrado", "Use `/loja` para ver itens disponíveis", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     item = LOJA_ITENS[item_id]
@@ -1860,7 +2022,7 @@ async def slash_comprar(interaction: discord.Interaction, item_id: int):
             f"Você tem apenas **{coins:,} moedas**.",
             color=0xff0000
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     try:
@@ -1898,38 +2060,38 @@ async def slash_comprar(interaction: discord.Interaction, item_id: int):
             f"Item adicionado ao seu inventário!",
             color=0x00ff00
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro na compra: {e}")
         embed = create_embed("❌ Erro", "Erro ao processar compra!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 
 
 @bot.tree.command(name="presentear", description="Presentear item para outro usuário")
 async def slash_presentear(interaction: discord.Interaction, usuario: discord.Member, item_id: int, quantidade: int = 1):
     """Slash command para presentear item"""
-    await interaction.response.defer()
+    
 
     if quantidade <= 0:
         embed = create_embed("❌ Quantidade inválida", "Use quantidades positivas!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
         return
 
     if usuario == interaction.user:
         embed = create_embed("❌ Impossível", "Você não pode dar itens para si mesmo!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
         return
 
     if usuario.bot:
         embed = create_embed("❌ Impossível", "Você não pode dar itens para bots!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
         return
 
     if item_id not in LOJA_ITENS:
         embed = create_embed("❌ Item inválido", "Este item não existe!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
         return
 
     try:
@@ -1943,7 +2105,7 @@ async def slash_presentear(interaction: discord.Interaction, usuario: discord.Me
             if not sender_result:
                 conn.close()
                 embed = create_embed("❌ Sem dados", "Você não tem dados no sistema!", color=0xff0000)
-                await interaction.followup.send(embed=embed, ephemeral=True)
+                await safe_send_response(interaction, embed=embed, ephemeral=True)
                 return
 
             sender_inventory_data = sender_result[0]
@@ -1958,7 +2120,7 @@ async def slash_presentear(interaction: discord.Interaction, usuario: discord.Me
                     f"Você tem apenas: {sender_inventory.get(str(item_id), 0)}",
                     color=0xff0000
                 )
-                await interaction.followup.send(embed=embed, ephemeral=True)
+                await safe_send_response(interaction, embed=embed, ephemeral=True)
                 return
 
             cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (usuario.id,))
@@ -2000,7 +2162,7 @@ async def slash_presentear(interaction: discord.Interaction, usuario: discord.Me
             f"Item transferido com sucesso!",
             color=0x00ff00
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
         try:
             dm_embed = create_embed(
@@ -2018,31 +2180,31 @@ async def slash_presentear(interaction: discord.Interaction, usuario: discord.Me
     except Exception as e:
         logger.error(f"Erro ao presentear item: {e}")
         embed = create_embed("❌ Erro", f"Erro ao presentear item: {str(e)[:100]}", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
 
 @bot.tree.command(name="daritem", description="Dar item para outro usuário")
 async def slash_daritem(interaction: discord.Interaction, usuario: discord.Member, item_id: int, quantidade: int = 1):
     """Slash command para dar item"""
-    await interaction.response.defer()
+    
 
     if quantidade <= 0:
         embed = create_embed("❌ Quantidade inválida", "Use quantidades positivas!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     if usuario == interaction.user:
         embed = create_embed("❌ Impossível", "Você não pode dar itens para si mesmo!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     if usuario.bot:
         embed = create_embed("❌ Impossível", "Você não pode dar itens para bots!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     if item_id not in LOJA_ITENS:
         embed = create_embed("❌ Item inválido", "Este item não existe!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     try:
@@ -2056,7 +2218,7 @@ async def slash_daritem(interaction: discord.Interaction, usuario: discord.Membe
             if not sender_result:
                 conn.close()
                 embed = create_embed("❌ Sem dados", "Você não tem dados no sistema!", color=0xff0000)
-                await interaction.followup.send(embed=embed)
+                await safe_send_response(interaction, embed=embed)
                 return
 
             sender_inventory_data = sender_result[0]
@@ -2071,7 +2233,7 @@ async def slash_daritem(interaction: discord.Interaction, usuario: discord.Membe
                     f"Você tem apenas: {sender_inventory.get(str(item_id), 0)}",
                     color=0xff0000
                 )
-                await interaction.followup.send(embed=embed)
+                await safe_send_response(interaction, embed=embed)
                 return
 
             cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (usuario.id,))
@@ -2112,7 +2274,7 @@ async def slash_daritem(interaction: discord.Interaction, usuario: discord.Membe
             f"Item transferido com sucesso!",
             color=0x00ff00
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
         try:
             dm_embed = create_embed(
@@ -2129,19 +2291,19 @@ async def slash_daritem(interaction: discord.Interaction, usuario: discord.Membe
     except Exception as e:
         logger.error(f"Erro ao transferir item: {e}")
         embed = create_embed("❌ Erro", f"Erro ao transferir item: {str(e)[:100]}", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="efeitos", description="Ver buffs e efeitos ativos")
 async def slash_efeitos(interaction: discord.Interaction, usuario: discord.Member = None):
     """Slash command para efeitos"""
-    await interaction.response.defer()
+    
 
     target = usuario or interaction.user
     user_data = get_user_data(target.id)
 
     if not user_data:
         embed = create_embed("❌ Dados não encontrados", f"{target.display_name} não está no sistema!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     settings_data = user_data[11]
@@ -2182,16 +2344,16 @@ async def slash_efeitos(interaction: discord.Interaction, usuario: discord.Membe
         )
 
     embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
-    await interaction.followup.send(embed=embed)
+    await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="depositar", description="Depositar dinheiro no banco")
 async def slash_depositar(interaction: discord.Interaction, valor: int):
     """Slash command para depositar"""
-    await interaction.response.defer()
+    
 
     if valor <= 0:
         embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     user_data = get_user_data(interaction.user.id)
@@ -2207,7 +2369,7 @@ async def slash_depositar(interaction: discord.Interaction, valor: int):
             f"Você só tem **{coins:,} moedas** na carteira!",
             color=0xff0000
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     try:
@@ -2227,21 +2389,21 @@ async def slash_depositar(interaction: discord.Interaction, valor: int):
             f"**Total:** {(coins - valor) + (bank + valor):,} moedas",
             color=0x00ff00
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro no depósito: {e}")
         embed = create_embed("❌ Erro", "Erro ao depositar!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="sacar", description="Sacar dinheiro do banco")
 async def slash_sacar(interaction: discord.Interaction, valor: int):
     """Slash command para sacar"""
-    await interaction.response.defer()
+    
 
     if valor <= 0:
         embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     user_data = get_user_data(interaction.user.id)
@@ -2257,7 +2419,7 @@ async def slash_sacar(interaction: discord.Interaction, valor: int):
             f"Você só tem **{bank:,} moedas** no banco!",
             color=0xff0000
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     try:
@@ -2277,18 +2439,18 @@ async def slash_sacar(interaction: discord.Interaction, valor: int):
             f"**Total:** {(coins + valor) + (bank - valor):,} moedas",
             color=0x00ff00
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro no saque: {e}")
         embed = create_embed("❌ Erro", "Erro ao sacar!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 # SLASH COMMANDS - UTILIDADES
 @bot.tree.command(name="lembrete", description="Criar um lembrete")
 async def slash_lembrete(interaction: discord.Interaction, tempo: str, texto: str):
     """Slash command para lembrete"""
-    await interaction.response.defer()
+    
 
     # Parse do tempo
     time_units = {'m': 60, 's': 1, 'h': 3600, 'd': 86400}
@@ -2296,7 +2458,7 @@ async def slash_lembrete(interaction: discord.Interaction, tempo: str, texto: st
 
     if unit not in time_units:
         embed = create_embed("❌ Tempo inválido", "Use: s (segundos), m (minutos), h (horas), d (dias)", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     try:
@@ -2305,7 +2467,7 @@ async def slash_lembrete(interaction: discord.Interaction, tempo: str, texto: st
         remind_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
     except ValueError:
         embed = create_embed("❌ Tempo inválido", "Use números válidos: 30m, 2h, 1d", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     try:
@@ -2327,17 +2489,17 @@ async def slash_lembrete(interaction: discord.Interaction, tempo: str, texto: st
             f"Vou te lembrar em {tempo}!",
             color=0x00ff00
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro ao criar lembrete: {e}")
         embed = create_embed("❌ Erro", "Erro ao criar lembrete!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="enquete", description="Criar uma enquete")
 async def slash_enquete(interaction: discord.Interaction, pergunta: str):
     """Slash command para enquete"""
-    await interaction.response.defer()
+    
 
     embed = create_embed(
         "📊 Enquete",
@@ -2346,14 +2508,14 @@ async def slash_enquete(interaction: discord.Interaction, pergunta: str):
     )
     embed.set_footer(text=f"Enquete criada por {interaction.user.display_name}")
 
-    message = await interaction.followup.send(embed=embed)
+    message = await safe_send_response(interaction, embed=embed)
     await message.add_reaction("✅")
     await message.add_reaction("❌")
 
 @bot.tree.command(name="base64", description="Converter texto para base64")
 async def slash_base64(interaction: discord.Interaction, texto: str):
     """Slash command para base64"""
-    await interaction.response.defer()
+    
 
     try:
         encoded = base64.b64encode(texto.encode('utf-8')).decode('utf-8')
@@ -2362,19 +2524,19 @@ async def slash_base64(interaction: discord.Interaction, texto: str):
             f"**Texto original:** {texto}\n**Base64:** `{encoded}`",
             color=0x00ff00
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
     except Exception as e:
         embed = create_embed("❌ Erro", f"Erro ao codificar: {e}", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="password", description="Gerar senha segura")
 async def slash_password(interaction: discord.Interaction, tamanho: int = 12):
     """Slash command para password"""
-    await interaction.response.defer()
+    
 
     if tamanho < 4 or tamanho > 50:
         embed = create_embed("❌ Tamanho inválido", "Use entre 4 e 50 caracteres", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     try:
@@ -2397,26 +2559,26 @@ async def slash_password(interaction: discord.Interaction, tamanho: int = 12):
             )
             await interaction.followup.send(embed=public_embed)
         except:
-            await interaction.followup.send(embed=embed)
+            await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         embed = create_embed("❌ Erro", f"Erro ao gerar senha: {e}", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="settitle", description="Definir título personalizado")
 async def slash_settitle(interaction: discord.Interaction, titulo: str):
     """Slash command para settitle"""
-    await interaction.response.defer()
+    
 
     if len(titulo) > 30:
         embed = create_embed("❌ Título muito longo", "Use no máximo 30 caracteres", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     user_data = get_user_data(interaction.user.id)
     if not user_data:
         embed = create_embed("❌ Dados não encontrados", "Você não tem dados no sistema!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     settings_data = user_data[11]
@@ -2428,7 +2590,7 @@ async def slash_settitle(interaction: discord.Interaction, titulo: str):
             "Você precisa comprar o item **Título Personalizado** na loja!\nUse `/loja` para ver.",
             color=0xff0000
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     settings['custom_title'] = titulo
@@ -2448,18 +2610,18 @@ async def slash_settitle(interaction: discord.Interaction, titulo: str):
             f"Agora aparecerá em seu perfil e rank!",
             color=0xffd700
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro ao definir título: {e}")
         embed = create_embed("❌ Erro", "Erro ao definir título!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 # SLASH COMMANDS - INFORMAÇÕES
 @bot.tree.command(name="avatar", description="Ver avatar de um usuário")
 async def slash_avatar(interaction: discord.Interaction, usuario: discord.Member = None):
     """Slash command para avatar"""
-    await interaction.response.defer()
+    
 
     target = usuario or interaction.user
 
@@ -2469,12 +2631,12 @@ async def slash_avatar(interaction: discord.Interaction, usuario: discord.Member
         color=0x7289da
     )
     embed.set_image(url=target.avatar.url if target.avatar else target.default_avatar.url)
-    await interaction.followup.send(embed=embed)
+    await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="serverinfo", description="Informações do servidor")
 async def slash_serverinfo(interaction: discord.Interaction):
     """Slash command para serverinfo"""
-    await interaction.response.defer()
+    
 
     guild = interaction.guild
 
@@ -2496,12 +2658,12 @@ async def slash_serverinfo(interaction: discord.Interaction):
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
 
-    await interaction.followup.send(embed=embed)
+    await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="userinfo", description="Informações detalhadas de um usuário")
 async def slash_userinfo(interaction: discord.Interaction, usuario: discord.Member = None):
     """Slash command para userinfo"""
-    await interaction.response.defer()
+    
 
     target = usuario or interaction.user
 
@@ -2530,12 +2692,12 @@ async def slash_userinfo(interaction: discord.Interaction, usuario: discord.Memb
     )
 
     embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
-    await interaction.followup.send(embed=embed)
+    await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="version", description="Informações da versão do bot")
 async def slash_version(interaction: discord.Interaction):
     """Slash command para version"""
-    await interaction.response.defer()
+    
 
     embed = create_embed(
         "🤖 RXbot - Informações de Versão",
@@ -2559,12 +2721,12 @@ async def slash_version(interaction: discord.Interaction):
         color=0x00ff00
     )
 
-    await interaction.followup.send(embed=embed)
+    await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="estatisticas_bot", description="Estatísticas do bot")
 async def slash_estatisticas_bot(interaction: discord.Interaction):
     """Slash command para stats"""
-    await interaction.response.defer()
+    
 
     uptime = datetime.datetime.now() - global_stats['uptime_start']
 
@@ -2588,23 +2750,22 @@ async def slash_estatisticas_bot(interaction: discord.Interaction):
         color=0x7289da
     )
 
-    await interaction.followup.send(embed=embed)
+    await safe_send_response(interaction, embed=embed)
 
 # SLASH COMMANDS - MODERAÇÃO
 @bot.tree.command(name="clear", description="Limpar mensagens do canal")
 async def slash_clear(interaction: discord.Interaction, quantidade: int = 10):
     """Slash command para clear"""
-    await interaction.response.defer()
 
     # Verificar permissões
     if not interaction.user.guild_permissions.manage_messages:
         embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Mensagens'!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     if quantidade < 1 or quantidade > 100:
         embed = create_embed("❌ Quantidade inválida", "Use entre 1 e 100 mensagens", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     try:
@@ -2616,31 +2777,31 @@ async def slash_clear(interaction: discord.Interaction, quantidade: int = 10):
             f"**Moderador:** {interaction.user.mention}",
             color=0x00ff00
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro na limpeza: {e}")
         embed = create_embed("❌ Erro na Limpeza", f"Erro: {str(e)[:100]}", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="warn", description="Dar advertência a um usuário")
 async def slash_warn(interaction: discord.Interaction, usuario: discord.Member, motivo: str = "Sem motivo especificado"):
     """Slash command para warn"""
-    await interaction.response.defer()
+    
 
     if not interaction.user.guild_permissions.manage_messages:
         embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Mensagens'!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     if usuario == interaction.user:
         embed = create_embed("❌ Impossível", "Você não pode se advertir!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     if usuario.top_role >= interaction.user.top_role:
         embed = create_embed("❌ Sem permissão", "Você não pode advertir este usuário!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     try:
@@ -2675,7 +2836,7 @@ async def slash_warn(interaction: discord.Interaction, usuario: discord.Member, 
             f"**Total de warns:** {new_warns}",
             color=0xff6600
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
         try:
             dm_embed = create_embed(
@@ -2693,7 +2854,7 @@ async def slash_warn(interaction: discord.Interaction, usuario: discord.Member, 
     except Exception as e:
         logger.error(f"Erro ao aplicar warn: {e}")
         embed = create_embed("❌ Erro", "Erro ao aplicar advertência!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="addcoins", description="Adicionar moedas a um usuário (Admin)")
 async def slash_addcoins(interaction: discord.Interaction, usuario: discord.Member, quantidade: int, motivo: str = "Adição manual"):
@@ -2782,7 +2943,7 @@ async def slash_addcoins(interaction: discord.Interaction, usuario: discord.Memb
 @bot.tree.command(name="warns", description="Ver advertências de um usuário")
 async def slash_warns(interaction: discord.Interaction, usuario: discord.Member = None):
     """Slash command para warns"""
-    await interaction.response.defer()
+    
 
     target = usuario or interaction.user
 
@@ -2801,31 +2962,31 @@ async def slash_warns(interaction: discord.Interaction, usuario: discord.Member 
         )
 
         embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro ao verificar warns: {e}")
         embed = create_embed("❌ Erro", "Erro ao verificar advertências!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="ban", description="Banir um membro")
 async def slash_ban(interaction: discord.Interaction, usuario: discord.Member, motivo: str = "Sem motivo especificado"):
     """Slash command para ban"""
-    await interaction.response.defer()
+    
 
     if not interaction.user.guild_permissions.ban_members:
         embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Banir Membros'!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     if usuario == interaction.user:
         embed = create_embed("❌ Impossível", "Você não pode se banir!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     if usuario.top_role >= interaction.user.top_role:
         embed = create_embed("❌ Sem permissão", "Você não pode banir este usuário!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     try:
@@ -2838,7 +2999,7 @@ async def slash_ban(interaction: discord.Interaction, usuario: discord.Member, m
             f"**Moderador:** {interaction.user.mention}",
             color=0xff0000
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
         try:
             with db_lock:
@@ -2856,26 +3017,26 @@ async def slash_ban(interaction: discord.Interaction, usuario: discord.Member, m
     except Exception as e:
         logger.error(f"Erro ao banir membro: {e}")
         embed = create_embed("❌ Erro", f"Erro ao banir membro: {str(e)[:100]}", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="kick", description="Expulsar um membro")
 async def slash_kick(interaction: discord.Interaction, usuario: discord.Member, motivo: str = "Sem motivo especificado"):
     """Slash command para kick"""
-    await interaction.response.defer()
+    
 
     if not interaction.user.guild_permissions.kick_members:
         embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Expulsar Membros'!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     if usuario == interaction.user:
         embed = create_embed("❌ Impossível", "Você não pode se expulsar!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     if usuario.top_role >= interaction.user.top_role:
         embed = create_embed("❌ Sem permissão", "Você não pode expulsar este usuário!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     try:
@@ -2888,7 +3049,7 @@ async def slash_kick(interaction: discord.Interaction, usuario: discord.Member, 
             f"**Moderador:** {interaction.user.mention}",
             color=0xff6600
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
         try:
             with db_lock:
@@ -2906,13 +3067,13 @@ async def slash_kick(interaction: discord.Interaction, usuario: discord.Member, 
     except Exception as e:
         logger.error(f"Erro ao expulsar membro: {e}")
         embed = create_embed("❌ Erro", f"Erro ao expulsar membro: {str(e)[:100]}", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 # SLASH COMMANDS - MAIS COMANDOS
 @bot.tree.command(name="texto_reverso", description="Inverter texto")
 async def slash_texto_reverso(interaction: discord.Interaction, texto: str):
     """Slash command para reverse"""
-    await interaction.response.defer()
+    
 
     reversed_text = texto[::-1]
     embed = create_embed(
@@ -2920,12 +3081,12 @@ async def slash_texto_reverso(interaction: discord.Interaction, texto: str):
         f"**Original:** {texto}\n**Invertido:** {reversed_text}",
         color=0x00ff00
     )
-    await interaction.followup.send(embed=embed)
+    await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="uppercase", description="Converter texto para maiúsculas")
 async def slash_uppercase(interaction: discord.Interaction, texto: str):
     """Slash command para uppercase"""
-    await interaction.response.defer()
+    
 
     upper_text = texto.upper()
     embed = create_embed(
@@ -2933,12 +3094,12 @@ async def slash_uppercase(interaction: discord.Interaction, texto: str):
         f"**Original:** {texto}\n**Maiúsculas:** {upper_text}",
         color=0x00ff00
     )
-    await interaction.followup.send(embed=embed)
+    await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="lowercase", description="Converter texto para minúsculas")
 async def slash_lowercase(interaction: discord.Interaction, texto: str):
     """Slash command para lowercase"""
-    await interaction.response.defer()
+    
 
     lower_text = texto.lower()
     embed = create_embed(
@@ -2946,12 +3107,12 @@ async def slash_lowercase(interaction: discord.Interaction, texto: str):
         f"**Original:** {texto}\n**Minúsculas:** {lower_text}",
         color=0x00ff00
     )
-    await interaction.followup.send(embed=embed)
+    await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="membercount", description="Contagem de membros do servidor")
 async def slash_membercount(interaction: discord.Interaction):
     """Slash command para membercount"""
-    await interaction.response.defer()
+    
 
     guild = interaction.guild
 
@@ -2981,12 +3142,12 @@ async def slash_membercount(interaction: discord.Interaction):
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
 
-    await interaction.followup.send(embed=embed)
+    await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="level", description="Ver informações de level e XP")
 async def slash_level(interaction: discord.Interaction, usuario: discord.Member = None):
     """Slash command para level"""
-    await interaction.response.defer()
+    
 
     target = usuario or interaction.user
 
@@ -3032,17 +3193,17 @@ async def slash_level(interaction: discord.Interaction, usuario: discord.Member 
         )
 
         embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro no comando level: {e}")
         embed = create_embed("❌ Erro", "Erro ao carregar informações de level.", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="top", description="Ranking geral do servidor")
 async def slash_top(interaction: discord.Interaction):
     """Slash command para top"""
-    await interaction.response.defer()
+    
 
     try:
         with db_lock:
@@ -3088,17 +3249,17 @@ async def slash_top(interaction: discord.Interaction):
             embed.add_field(name="💰 Top Economia", value=coins_text, inline=True)
 
         embed.set_footer(text=f"Sua posição: #{await get_user_position(interaction.user.id, interaction.guild.id)} | Use /leaderboard para ver mais")
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro no comando top: {e}")
         embed = create_embed("❌ Erro", "Erro ao carregar rankings.", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="uptime", description="Tempo que o bot está online")
 async def slash_uptime(interaction: discord.Interaction):
     """Slash command para uptime"""
-    await interaction.response.defer()
+    
 
     uptime = datetime.datetime.now() - global_stats['uptime_start']
 
@@ -3109,12 +3270,12 @@ async def slash_uptime(interaction: discord.Interaction):
         f"**Status:** 🟢 Online e estável",
         color=0x00ff00
     )
-    await interaction.followup.send(embed=embed)
+    await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="sorteios", description="Ver sorteios ativos")
 async def slash_sorteios(interaction: discord.Interaction):
     """Slash command para sorteios"""
-    await interaction.response.defer()
+    
 
     try:
         with db_lock:
@@ -3136,7 +3297,7 @@ async def slash_sorteios(interaction: discord.Interaction):
                 "Não há sorteios ativos no momento.\nAdministradores podem criar com `/criarsorteio`",
                 color=0xffaa00
             )
-            await interaction.followup.send(embed=embed)
+            await safe_send_response(interaction, embed=embed)
             return
 
         embed = create_embed(
@@ -3157,17 +3318,17 @@ async def slash_sorteios(interaction: discord.Interaction):
                 inline=False
             )
 
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Error listing giveaways: {e}")
         embed = create_embed("❌ Erro", "Erro ao carregar sorteios!", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="ticket", description="Criar ticket de suporte")
 async def slash_ticket(interaction: discord.Interaction, motivo: str = None):
     """Slash command para ticket"""
-    await interaction.response.defer()
+    
 
     if not motivo:
         embed = create_embed(
@@ -3180,7 +3341,7 @@ async def slash_ticket(interaction: discord.Interaction, motivo: str = None):
             "• `/ticket Sugestão de melhoria`",
             color=0x7289da
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
         return
 
     # Criar ticket usando a função existente
@@ -3195,7 +3356,7 @@ async def slash_ticket(interaction: discord.Interaction, motivo: str = None):
                 "Você já tem muitos tickets abertos! Feche alguns antes de criar novos.",
                 color=0xff6600
             )
-            await interaction.followup.send(embed=embed)
+            await safe_send_response(interaction, embed=embed)
             return
 
         ctx_mock = type('MockCtx', (), {
@@ -3212,17 +3373,17 @@ async def slash_ticket(interaction: discord.Interaction, motivo: str = None):
             f"Seu ticket foi criado com sucesso!\n**Motivo:** {motivo}\n\nVerifique a categoria **📋 Tickets** para encontrar seu canal.",
             color=0x00ff00
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro ao criar ticket: {e}")
         embed = create_embed("❌ Erro", "Erro ao criar ticket! Tente novamente.", color=0xff0000)
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="ranklist", description="Lista de todos os ranks")
 async def slash_ranklist(interaction: discord.Interaction):
     """Slash command para ranklist"""
-    await interaction.response.defer()
+    
 
     embed = create_embed(
         "🏆 Sistema de Ranks do RXbot",
@@ -3237,7 +3398,7 @@ async def slash_ranklist(interaction: discord.Interaction):
     embed.add_field(name="📋 Lista de Ranks", value=rank_text, inline=False)
     embed.add_field(name="💡 Dicas", value=f"• Ganhe {XP_PER_MESSAGE} XP por mensagem\n• Use `/rank` para ver seu progresso\n• Use `/leaderboard` para ver o ranking", inline=False)
 
-    await interaction.followup.send(embed=embed)
+    await safe_send_response(interaction, embed=embed)
 
 # 4. COMANDOS DE RANKS (30 comandos)
 @bot.tree.command(name="rank", description="Ver rank de usuário")
@@ -3301,7 +3462,7 @@ async def slash_rank(interaction: discord.Interaction, usuario: discord.Member =
 async def slash_leaderboard(interaction: discord.Interaction, tipo: str = "xp"):
     """Slash command para leaderboard"""
     try:
-        await interaction.response.defer()
+        
 
         with db_lock:
             conn = get_db_connection()
@@ -3334,7 +3495,7 @@ async def slash_leaderboard(interaction: discord.Interaction, tipo: str = "xp"):
 
         if not results:
             embed = create_embed("📊 Ranking Vazio", "Ainda não há dados suficientes para o ranking!", color=0xffaa00)
-            await interaction.followup.send(embed=embed)
+            await safe_send_response(interaction, embed=embed)
             return
 
         embed = create_embed(title, f"Top {len(results)} usuários do servidor:", color=0xffd700)
@@ -3367,7 +3528,7 @@ async def slash_leaderboard(interaction: discord.Interaction, tipo: str = "xp"):
             embed.add_field(name=field_name, value=leaderboard_text[:1024], inline=False)
 
         embed.set_footer(text=f"Use: /leaderboard xp/coins • Sua posição: #{await get_user_position(interaction.user.id, interaction.guild.id)}")
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro no leaderboard: {e}")
@@ -3379,203 +3540,24 @@ async def slash_leaderboard(interaction: discord.Interaction, tipo: str = "xp"):
 
 # ==== NOVOS COMANDOS SLASH ADICIONAIS ====
 
-@bot.tree.command(name="roubar", description="Tentar roubar moedas de outro usuário")
-async def slash_roubar(interaction: discord.Interaction, usuario: discord.Member):
-    """Comando especial para roubar moedas com mecânica especial"""
-    await interaction.response.defer()
-
-    if usuario == interaction.user:
-        embed = create_embed("❌ Impossível", "Você não pode roubar de si mesmo!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        return
-
-    if usuario.bot:
-        embed = create_embed("❌ Impossível", "Você não pode roubar de bots!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        return
-
-    try:
-        # Verificar cooldown (anti-spam)
-        user_data = get_user_data(interaction.user.id)
-        if not user_data:
-            update_user_data(interaction.user.id)
-            user_data = get_user_data(interaction.user.id)
-
-        # Cooldown de 2 horas
-        last_crime = user_data[8] if len(user_data) > 8 else None
-        if last_crime:
-            last_time = datetime.datetime.fromisoformat(last_crime)
-            if datetime.datetime.now() - last_time < datetime.timedelta(hours=2):
-                remaining = datetime.timedelta(hours=2) - (datetime.datetime.now() - last_time)
-                embed = create_embed(
-                    "⏰ Cooldown Ativo", 
-                    f"Você precisa esperar mais **{remaining.seconds//3600}h {(remaining.seconds%3600)//60}m** para roubar novamente!",
-                    color=0xff6b6b
-                )
-                await interaction.followup.send(embed=embed, ephemeral=True)
-                return
-
-        # Dados do alvo
-        target_data = get_user_data(usuario.id)
-        if not target_data:
-            update_user_data(usuario.id)
-            target_data = get_user_data(usuario.id)
-
-        target_coins = target_data[1] if len(target_data) > 1 else 50
-        target_bank = target_data[5] if len(target_data) > 5 else 0
-
-        # Sistema de roubo com probabilidades especiais
-        chance_sucesso = random.randint(1, 100)
-
-        if target_coins <= 10:
-            embed = create_embed(
-                "💸 Alvo pobre",
-                f"{usuario.display_name} não tem moedas suficientes para roubar!\n(Mínimo: 11 moedas)",
-                color=0xff6b6b
-            )
-            await interaction.followup.send(embed=embed)
-            return
-
-        # 1% de chance de roubar do banco
-        if chance_sucesso == 1 and target_bank > 0:
-            # JACKPOT - Roubar do banco!
-            max_steal = min(target_bank, target_bank // 4)  # Max 25% do banco
-            stolen_amount = random.randint(max_steal // 2, max_steal)
-
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-
-                # Remover do banco do alvo
-                new_target_bank = target_bank - stolen_amount
-                cursor.execute('UPDATE users SET bank = ? WHERE user_id = ?', 
-                             (new_target_bank, usuario.id))
-
-                # Adicionar ao ladrão
-                thief_coins = user_data[1] if len(user_data) > 1 else 50
-                new_thief_coins = thief_coins + stolen_amount
-                cursor.execute('UPDATE users SET coins = ?, last_crime = ? WHERE user_id = ?',
-                             (new_thief_coins, datetime.datetime.now().isoformat(), interaction.user.id))
-
-                conn.commit()
-                conn.close()
-
-            embed = create_embed(
-                "🎯 JACKPOT! Banco Roubado!",
-                f"""**🔥 ROUBO ÉPICO! 1% DE CHANCE! 🔥**
-
-**Vítima:** {usuario.display_name}
-**💰 Roubado do BANCO:** {stolen_amount:,} moedas
-**🏦 Banco restante da vítima:** {new_target_bank:,} moedas
-**💵 Seu novo saldo:** {new_thief_coins:,} moedas
-
-**🎰 Você teve a sorte de 1 em 100!**""",
-                color=0xff0000
-            )
-
-        elif chance_sucesso <= 30:  # 30% chance sucesso no roubo normal
-            # Roubo bem-sucedido da carteira
-            max_steal = min(target_coins, target_coins // 3)  # Max 33% da carteira
-            stolen_amount = random.randint(max_steal // 2, max_steal)
-
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-
-                # Remover da carteira do alvo
-                new_target_coins = target_coins - stolen_amount
-                cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', 
-                             (new_target_coins, usuario.id))
-
-                # Adicionar ao ladrão
-                thief_coins = user_data[1] if len(user_data) > 1 else 50
-                new_thief_coins = thief_coins + stolen_amount
-                cursor.execute('UPDATE users SET coins = ?, last_crime = ? WHERE user_id = ?',
-                             (new_thief_coins, datetime.datetime.now().isoformat(), interaction.user.id))
-
-                conn.commit()
-                conn.close()
-
-            embed = create_embed(
-                "💰 Roubo Bem-Sucedido!",
-                f"""**Vítima:** {usuario.display_name}
-**💸 Roubado:** {stolen_amount:,} moedas
-**💵 Carteira restante da vítima:** {new_target_coins:,} moedas
-**💰 Seu novo saldo:** {new_thief_coins:,} moedas
-
-*Dica: Guarde no banco para se proteger!*""",
-                color=0x00ff00
-            )
-
-        else:
-            # Roubo falhou - perder dinheiro
-            thief_coins = user_data[1] if len(user_data) > 1 else 50
-            penalty = min(thief_coins // 4, 500)  # Perder até 25% ou 500 moedas
-
-            if penalty > 0:
-                with db_lock:
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-
-                    new_thief_coins = thief_coins - penalty
-                    cursor.execute('UPDATE users SET coins = ?, last_crime = ? WHERE user_id = ?',
-                                 (new_thief_coins, datetime.datetime.now().isoformat(), interaction.user.id))
-
-                    conn.commit()
-                    conn.close()
-
-                embed = create_embed(
-                    "🚨 Roubo Falhado!",
-                    f"""**Você foi pego em flagrante!**
-
-**Multa paga:** {penalty:,} moedas
-**Seu novo saldo:** {new_thief_coins:,} moedas
-
-**💡 Dica:** Apenas 30% dos roubos são bem-sucedidos!
-**🏦 Super Dica:** 1% de chance de roubar do banco!""",
-                    color=0xff0000
-                )
-            else:
-                # Atualizar apenas o cooldown
-                with db_lock:
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute('UPDATE users SET last_crime = ? WHERE user_id = ?',
-                                 (datetime.datetime.now().isoformat(), interaction.user.id))
-                    conn.commit()
-                    conn.close()
-
-                embed = create_embed(
-                    "🚨 Roubo Falhado!",
-                    f"Você foi pego tentando roubar {usuario.display_name}, mas não tinha dinheiro para a multa!\n\n*Volte quando tiver mais moedas...*",
-                    color=0xff6b6b
-                )
-
-        await interaction.followup.send(embed=embed)
-
-    except Exception as e:
-        logger.error(f"Erro no comando roubar: {e}")
-        embed = create_embed("❌ Erro", "Erro ao processar roubo!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
 @bot.tree.command(name="transferir", description="Transferir moedas para outro usuário")
 async def slash_transferir(interaction: discord.Interaction, usuario: discord.Member, quantidade: int):
     """Slash command para transferir moedas"""
-    await interaction.response.defer()
+    
 
     if usuario == interaction.user:
         embed = create_embed("❌ Impossível", "Você não pode transferir para si mesmo!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
         return
 
     if usuario.bot:
         embed = create_embed("❌ Impossível", "Você não pode transferir para bots!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
         return
 
     if quantidade <= 0:
         embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
         return
 
     try:
@@ -3592,7 +3574,7 @@ async def slash_transferir(interaction: discord.Interaction, usuario: discord.Me
                 f"Você tem apenas **{sender_coins:,} moedas**!\nNão é possível transferir **{quantidade:,} moedas**.",
                 color=0xff0000
             )
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await safe_send_response(interaction, embed=embed, ephemeral=True)
             return
 
         # Verificar/criar dados do destinatário
@@ -3641,17 +3623,17 @@ async def slash_transferir(interaction: discord.Interaction, usuario: discord.Me
 **Saldo de {usuario.display_name}:** {new_receiver_coins:,} moedas""",
             color=0x00ff00
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro na transferência: {e}")
         embed = create_embed("❌ Erro", "Erro ao processar transferência!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
 
 @bot.tree.command(name="roles", description="Ver todos os cargos do servidor")
 async def slash_roles(interaction: discord.Interaction):
     """Slash command para listar roles"""
-    await interaction.response.defer()
+    
 
     try:
         roles = interaction.guild.roles[1:]  # Remove @everyone
@@ -3676,17 +3658,17 @@ async def slash_roles(interaction: discord.Interaction):
         if len(roles) > 50:
             embed.set_footer(text=f"Mostrando 50 de {len(roles)} cargos")
 
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro no comando roles: {e}")
         embed = create_embed("❌ Erro", "Erro ao carregar cargos!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
 
 @bot.tree.command(name="channels", description="Ver todos os canais do servidor")
 async def slash_channels(interaction: discord.Interaction):
     """Slash command para listar canais"""
-    await interaction.response.defer()
+    
 
     try:
         text_channels = interaction.guild.text_channels
@@ -3714,12 +3696,12 @@ async def slash_channels(interaction: discord.Interaction):
         if voice_list:
             embed.add_field(name="🎤 Canais de Voz", value=voice_list, inline=True)
 
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro no comando channels: {e}")
         embed = create_embed("❌ Erro", "Erro ao carregar canais!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
 
 @bot.tree.command(name="id", description="Ver ID de usuário, canal ou servidor")
 async def slash_id(interaction: discord.Interaction, usuario: discord.Member = None):
@@ -3949,16 +3931,16 @@ async def slash_nuke(interaction: discord.Interaction):
 async def slash_vender(interaction: discord.Interaction, item_id: int, quantidade: int = 1):
     """Slash command para vender item"""
     try:
-        await interaction.response.defer()
+        
 
         if quantidade <= 0:
             embed = create_embed("❌ Quantidade inválida", "Use quantidades positivas!", color=0xff0000)
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await safe_send_response(interaction, embed=embed, ephemeral=True)
             return
 
         if item_id not in LOJA_ITENS:
             embed = create_embed("❌ Item inválido", "Este item não existe!", color=0xff0000)
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await safe_send_response(interaction, embed=embed, ephemeral=True)
             return
 
         try:
@@ -3971,12 +3953,12 @@ async def slash_vender(interaction: discord.Interaction, item_id: int, quantidad
         except Exception as e:
             logger.error(f"Erro ao buscar dados do usuário: {e}")
             embed = create_embed("❌ Erro", "Erro ao acessar dados!", color=0xff0000)
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await safe_send_response(interaction, embed=embed, ephemeral=True)
             return
 
         if not result:
             embed = create_embed("❌ Dados não encontrados", "Você não tem dados de usuário!", color=0xff0000)
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await safe_send_response(interaction, embed=embed, ephemeral=True)
             return
 
         inventory_data, current_coins = result[0], result[1]
@@ -3989,7 +3971,7 @@ async def slash_vender(interaction: discord.Interaction, item_id: int, quantidad
                 f"Você tem: {inventory.get(str(item_id), 0)}x",
                 color=0xff0000
             )
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await safe_send_response(interaction, embed=embed, ephemeral=True)
             return
 
         item = LOJA_ITENS[item_id]
@@ -4021,7 +4003,7 @@ async def slash_vender(interaction: discord.Interaction, item_id: int, quantidad
         except Exception as e:
             logger.error(f"Erro ao vender item: {e}")
             embed = create_embed("❌ Erro", "Erro ao processar venda!", color=0xff0000)
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await safe_send_response(interaction, embed=embed, ephemeral=True)
             return
 
         embed = create_embed(
@@ -4034,33 +4016,33 @@ async def slash_vender(interaction: discord.Interaction, item_id: int, quantidad
             f"*Itens são vendidos por 70% do preço da loja*",
             color=0x00ff00
         )
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
 
     except Exception as e:
         logger.error(f"Erro geral na venda: {e}")
         embed = create_embed("❌ Erro", "Ocorreu um erro inesperado!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
 
 @bot.tree.command(name="trocar", description="Propor troca de itens com outro usuário")
 async def slash_trocar(interaction: discord.Interaction, usuario: discord.Member, seu_item: int, item_dele: int):
     """Slash command para trocar itens"""
-    await interaction.response.defer()
+    
 
     if usuario == interaction.user:
         embed = create_embed("❌ Impossível", "Você não pode trocar consigo mesmo!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
         return
 
     if usuario.bot:
         embed = create_embed("❌ Impossível", "Você não pode trocar com bots!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
         return
 
     try:
         # Verificar se os itens existem
         if seu_item not in LOJA_ITENS or item_dele not in LOJA_ITENS:
             embed = create_embed("❌ Item inválido", "Um dos itens não existe na loja!", color=0xff0000)
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await safe_send_response(interaction, embed=embed, ephemeral=True)
             return
 
         embed = create_embed(
@@ -4078,7 +4060,7 @@ async def slash_trocar(interaction: discord.Interaction, usuario: discord.Member
             color=0x7289da
         )
 
-        message = await interaction.followup.send(embed=embed)
+        message = await safe_send_response(interaction, embed=embed)
         await message.add_reaction("✅")
         await message.add_reaction("❌")
 
@@ -4087,7 +4069,7 @@ async def slash_trocar(interaction: discord.Interaction, usuario: discord.Member
     except Exception as e:
         logger.error(f"Erro na troca: {e}")
         embed = create_embed("❌ Erro", "Erro ao processar troca!", color=0xff0000)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
 
 # ========== NOVOS COMANDOS ÚNICOS PARA CHEGAR AOS 300+ ==========
 
@@ -4760,14 +4742,10 @@ async def slash_acao(interaction: discord.Interaction, operacao: str, empresa: s
     """Sistema de ações"""
     try:
         # Defer immediately to avoid timeout
-        try:
-            await interaction.response.defer()
-        except (discord.errors.InteractionResponded, discord.errors.NotFound):
-            return
 
         if operacao.lower() not in ['comprar', 'vender']:
             embed = create_embed("❌ Operação inválida", "Use: comprar ou vender", color=0xff0000)
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await safe_send_response(interaction, embed=embed, ephemeral=True)
             return
 
         empresas = {
@@ -4862,7 +4840,7 @@ async def slash_acao(interaction: discord.Interaction, operacao: str, empresa: s
                 color=0x00ff00
             )
 
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
     except Exception as e:
         logger.error(f"Erro nas ações: {e}")
         try:
@@ -5500,7 +5478,7 @@ async def slash_massban(interaction: discord.Interaction, usuarios: str, motivo:
         banned_count = 0
         failed_bans = []
 
-        await interaction.response.defer()
+        
 
         for user_id in user_ids:
             try:
@@ -5542,7 +5520,7 @@ async def slash_massban(interaction: discord.Interaction, usuarios: str, motivo:
             color=0xff0000
         )
 
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
     except Exception as e:
         logger.error(f"Erro no massban: {e}")
         await interaction.followup.send("Erro no banimento em massa!", ephemeral=True)
@@ -5572,7 +5550,7 @@ async def slash_purge(interaction: discord.Interaction, quantidade: int, filtro:
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        await interaction.response.defer()
+        
 
         def check_message(message):
             if filtro.lower() == 'todas':
@@ -5600,7 +5578,7 @@ async def slash_purge(interaction: discord.Interaction, quantidade: int, filtro:
             color=0x00ff00
         )
 
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await safe_send_response(interaction, embed=embed, ephemeral=True)
     except Exception as e:
         logger.error(f"Erro no purge: {e}")
         await interaction.followup.send("Erro na limpeza de mensagens!", ephemeral=True)
@@ -5614,7 +5592,7 @@ async def slash_lockserver(interaction: discord.Interaction, motivo: str = "Emer
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        await interaction.response.defer()
+        
 
         locked_channels = 0
         failed_channels = []
@@ -5639,7 +5617,7 @@ async def slash_lockserver(interaction: discord.Interaction, motivo: str = "Emer
             color=0xff6b6b
         )
 
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
     except Exception as e:
         logger.error(f"Erro no lockserver: {e}")
         await interaction.followup.send("Erro ao bloquear servidor!", ephemeral=True)
@@ -5653,7 +5631,7 @@ async def slash_unlockserver(interaction: discord.Interaction):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        await interaction.response.defer()
+        
 
         unlocked_channels = 0
         failed_channels = []
@@ -5677,7 +5655,7 @@ async def slash_unlockserver(interaction: discord.Interaction):
             color=0x00ff00
         )
 
-        await interaction.followup.send(embed=embed)
+        await safe_send_response(interaction, embed=embed)
     except Exception as e:
         logger.error(f"Erro no unlockserver: {e}")
         await interaction.followup.send("Erro ao desbloquear servidor!", ephemeral=True)
@@ -8815,7 +8793,7 @@ async def clear_messages(ctx, amount: int = 10):
                 return
 
             try:
-                await interaction.response.defer()
+                
 
                 # Deletar a mensagem de confirmação primeiro
                 try:
@@ -11921,7 +11899,7 @@ class TreinoEventModal(discord.ui.Modal, title="🎯 Criar Evento de Treino"):
                 event_msg = await target_channel.send(embed=embed)
             else:
                 # Fallback para o canal atual se não encontrar o canal específico
-                event_msg = await interaction.followup.send(embed=embed)
+                event_msg = await safe_send_response(interaction, embed=embed)
 
             # Adicionar reações
             await event_msg.add_reaction("✅")
@@ -12096,7 +12074,7 @@ class XClanModal(discord.ui.Modal, title="🚨 CRIAR EVENTO XCLAN VS! 🚨"):
             await interaction.response.send_message(embed=success_embed, ephemeral=True)
 
             # Publicar evento no canal
-            await interaction.followup.send(embed=embed)
+            await safe_send_response(interaction, embed=embed)
 
             # Notificar no canal específico
             try:
