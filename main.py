@@ -428,6 +428,37 @@ def init_database():
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''')
 
+            # Tabela de copinhas Stumble Guys
+            cursor.execute('''CREATE TABLE IF NOT EXISTS copinhas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER,
+                creator_id INTEGER,
+                channel_id INTEGER,
+                message_id INTEGER,
+                title TEXT,
+                map_name TEXT,
+                team_format TEXT,
+                max_players INTEGER,
+                participants TEXT DEFAULT '[]',
+                current_round TEXT DEFAULT 'inscricoes',
+                matches TEXT DEFAULT '[]',
+                status TEXT DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+
+            # Tabela de partidas da copinha
+            cursor.execute('''CREATE TABLE IF NOT EXISTS copinha_matches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                copinha_id INTEGER,
+                round_name TEXT,
+                match_number INTEGER,
+                players TEXT DEFAULT '[]',
+                winner_id INTEGER,
+                ticket_channel_id INTEGER,
+                status TEXT DEFAULT 'waiting',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+
             conn.commit()
             logger.info("✅ Database initialized successfully!")
 
@@ -1282,6 +1313,25 @@ async def slash_piada(interaction: discord.Interaction):
         error_embed = create_embed("❌ Erro", "Erro na piada!", color=0xff0000)
         await safe_interaction_response(interaction, error_embed, ephemeral=True)
 
+@bot.tree.command(name="copinha", description="Criar uma copinha/torneio de Stumble Guys")
+async def slash_copinha(interaction: discord.Interaction):
+    """Slash command para criar copinha de Stumble Guys"""
+    try:
+        # Verificar se é moderador ou administrador
+        if not any(role.permissions.manage_messages for role in interaction.user.roles):
+            embed = create_embed("❌ Permissão negada", "Apenas moderadores podem criar copinhas!", color=0xff0000)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # Abrir modal de configuração
+        modal = CopinhaConfigModal()
+        await interaction.response.send_modal(modal)
+        
+    except Exception as e:
+        logger.error(f"Erro no comando copinha: {e}")
+        error_embed = create_embed("❌ Erro", "Erro ao criar copinha!", color=0xff0000)
+        await safe_interaction_response(interaction, error_embed, ephemeral=True)
+
 # 3. COMANDOS DE ECONOMIA (50 comandos)
 @bot.tree.command(name="saldo", description="Ver saldo de moedas")
 async def slash_saldo(interaction: discord.Interaction, usuario: discord.Member = None):
@@ -1591,102 +1641,102 @@ async def slash_roubar(interaction: discord.Interaction, usuario: discord.Member
             embed = create_embed("❌ Erro", "Este comando só pode ser usado em servidores!", color=0xff0000)
             await safe_interaction_response(interaction, embed, ephemeral=True)
             return
-        
+
         # Não pode roubar de si mesmo
         if interaction.user.id == usuario.id:
             embed = create_embed("❌ Erro", "Você não pode roubar de si mesmo!", color=0xff0000)
             await safe_interaction_response(interaction, embed, ephemeral=True)
             return
-        
+
         # Não pode roubar do bot
         if usuario.bot:
             embed = create_embed("❌ Erro", "Você não pode roubar de bots!", color=0xff0000)
             await safe_interaction_response(interaction, embed, ephemeral=True)
             return
-        
+
         # Obter dados dos usuários
         ladrão_data = get_user_data(interaction.user.id)
         vítima_data = get_user_data(usuario.id)
-        
+
         if not ladrão_data:
             update_user_data(interaction.user.id)
             ladrão_data = get_user_data(interaction.user.id)
-            
+
         if not vítima_data:
             update_user_data(usuario.id)
             vítima_data = get_user_data(usuario.id)
-        
+
         # Verificar se a vítima tem coins para roubar (apenas coins fora do banco)
         coins_vítima = vítima_data[1] if len(vítima_data) > 1 else 50
         if coins_vítima <= 0:
             embed = create_embed("❌ Sem dinheiro", f"{usuario.mention} não tem coins na carteira para roubar!", color=0xff0000)
             await safe_interaction_response(interaction, embed, ephemeral=True)
             return
-        
+
         # 60% de chance de sucesso
         sucesso = random.randint(1, 100) <= 60
-        
+
         if sucesso:
             # Calcular quantos coins roubar (10% a 30% dos coins da vítima)
             porcentagem = random.randint(10, 30)
             coins_roubados = max(1, int(coins_vítima * porcentagem / 100))
-            
+
             # Chance de roubar item também (20% de chance)
             item_roubado = None
             inventário_vítima = []
             inventário_ladrão = []
-            
+
             try:
                 inventário_vítima = json.loads(vítima_data[9]) if len(vítima_data) > 9 and vítima_data[9] else []
                 inventário_ladrão = json.loads(ladrão_data[9]) if len(ladrão_data) > 9 and ladrão_data[9] else []
             except:
                 inventário_vítima = []
                 inventário_ladrão = []
-            
+
             if inventário_vítima and random.randint(1, 100) <= 20:
                 item_roubado = random.choice(inventário_vítima)
                 inventário_vítima.remove(item_roubado)
                 inventário_ladrão.append(item_roubado)
-            
+
             # Atualizar dados
             coins_ladrão = ladrão_data[1] if len(ladrão_data) > 1 else 50
             coins_vítima_novo = coins_vítima - coins_roubados
             coins_ladrão_novo = coins_ladrão + coins_roubados
-            
+
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                
+
                 # Atualizar ladrão
                 cursor.execute('UPDATE users SET coins = ?, inventory = ? WHERE user_id = ?',
                               (coins_ladrão_novo, json.dumps(inventário_ladrão), interaction.user.id))
-                
+
                 # Atualizar vítima
                 cursor.execute('UPDATE users SET coins = ?, inventory = ? WHERE user_id = ?',
                               (coins_vítima_novo, json.dumps(inventário_vítima), usuario.id))
-                
+
                 conn.commit()
                 conn.close()
-            
+
             # Mensagem de sucesso
             embed = create_embed(
                 "🦹‍♂️ Roubo Bem Sucedido!",
                 f"{interaction.user.mention} roubou **{coins_roubados:,} coins** de {usuario.mention}!",
                 color=0x00ff00
             )
-            
+
             if item_roubado:
                 embed.add_field(name="🎁 Bônus!", value=f"Também roubou o item: **{item_roubado}**", inline=False)
-            
+
         else:
             # Falhou no roubo - perde coins como punição
             coins_ladrão = ladrão_data[1] if len(ladrão_data) > 1 else 50
             penalidade = random.randint(10, 50)
             penalidade = min(penalidade, coins_ladrão)  # Não pode perder mais do que tem
-            
+
             if penalidade > 0:
                 coins_ladrão_novo = coins_ladrão - penalidade
-                
+
                 with db_lock:
                     conn = get_db_connection()
                     cursor = conn.cursor()
@@ -1694,18 +1744,18 @@ async def slash_roubar(interaction: discord.Interaction, usuario: discord.Member
                                   (coins_ladrão_novo, interaction.user.id))
                     conn.commit()
                     conn.close()
-            
+
             embed = create_embed(
                 "🚨 Roubo Falhado!",
                 f"{interaction.user.mention} foi pego tentando roubar {usuario.mention}!",
                 color=0xff0000
             )
-            
+
             if penalidade > 0:
                 embed.add_field(name="💸 Punição", value=f"Perdeu **{penalidade:,} coins** como multa!", inline=False)
-        
+
         await safe_interaction_response(interaction, embed)
-        
+
     except Exception as e:
         logger.error(f"Erro no comando roubar: {e}")
         error_embed = create_embed("❌ Erro", "Erro ao tentar roubar!", color=0xff0000)
@@ -2072,7 +2122,7 @@ async def slash_comprar(interaction: discord.Interaction, item_id: int):
 @bot.tree.command(name="presentear", description="Presentear item para outro usuário")
 async def slash_presentear(interaction: discord.Interaction, usuario: discord.Member, item_id: int, quantidade: int = 1):
     """Slash command para presentear item"""
-    
+
 
     if quantidade <= 0:
         embed = create_embed("❌ Quantidade inválida", "Use quantidades positivas!", color=0xff0000)
@@ -2185,7 +2235,7 @@ async def slash_presentear(interaction: discord.Interaction, usuario: discord.Me
 @bot.tree.command(name="daritem", description="Dar item para outro usuário")
 async def slash_daritem(interaction: discord.Interaction, usuario: discord.Member, item_id: int, quantidade: int = 1):
     """Slash command para dar item"""
-    
+
 
     if quantidade <= 0:
         embed = create_embed("❌ Quantidade inválida", "Use quantidades positivas!", color=0xff0000)
@@ -2296,7 +2346,7 @@ async def slash_daritem(interaction: discord.Interaction, usuario: discord.Membe
 @bot.tree.command(name="efeitos", description="Ver buffs e efeitos ativos")
 async def slash_efeitos(interaction: discord.Interaction, usuario: discord.Member = None):
     """Slash command para efeitos"""
-    
+
 
     target = usuario or interaction.user
     user_data = get_user_data(target.id)
@@ -2349,7 +2399,7 @@ async def slash_efeitos(interaction: discord.Interaction, usuario: discord.Membe
 @bot.tree.command(name="depositar", description="Depositar dinheiro no banco")
 async def slash_depositar(interaction: discord.Interaction, valor: int):
     """Slash command para depositar"""
-    
+
 
     if valor <= 0:
         embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
@@ -2399,7 +2449,7 @@ async def slash_depositar(interaction: discord.Interaction, valor: int):
 @bot.tree.command(name="sacar", description="Sacar dinheiro do banco")
 async def slash_sacar(interaction: discord.Interaction, valor: int):
     """Slash command para sacar"""
-    
+
 
     if valor <= 0:
         embed = create_embed("❌ Valor inválido", "Use valores positivos!", color=0xff0000)
@@ -2450,7 +2500,7 @@ async def slash_sacar(interaction: discord.Interaction, valor: int):
 @bot.tree.command(name="lembrete", description="Criar um lembrete")
 async def slash_lembrete(interaction: discord.Interaction, tempo: str, texto: str):
     """Slash command para lembrete"""
-    
+
 
     # Parse do tempo
     time_units = {'m': 60, 's': 1, 'h': 3600, 'd': 86400}
@@ -2499,7 +2549,7 @@ async def slash_lembrete(interaction: discord.Interaction, tempo: str, texto: st
 @bot.tree.command(name="enquete", description="Criar uma enquete")
 async def slash_enquete(interaction: discord.Interaction, pergunta: str):
     """Slash command para enquete"""
-    
+
 
     embed = create_embed(
         "📊 Enquete",
@@ -2515,7 +2565,7 @@ async def slash_enquete(interaction: discord.Interaction, pergunta: str):
 @bot.tree.command(name="base64", description="Converter texto para base64")
 async def slash_base64(interaction: discord.Interaction, texto: str):
     """Slash command para base64"""
-    
+
 
     try:
         encoded = base64.b64encode(texto.encode('utf-8')).decode('utf-8')
@@ -2532,7 +2582,7 @@ async def slash_base64(interaction: discord.Interaction, texto: str):
 @bot.tree.command(name="password", description="Gerar senha segura")
 async def slash_password(interaction: discord.Interaction, tamanho: int = 12):
     """Slash command para password"""
-    
+
 
     if tamanho < 4 or tamanho > 50:
         embed = create_embed("❌ Tamanho inválido", "Use entre 4 e 50 caracteres", color=0xff0000)
@@ -2568,7 +2618,7 @@ async def slash_password(interaction: discord.Interaction, tamanho: int = 12):
 @bot.tree.command(name="settitle", description="Definir título personalizado")
 async def slash_settitle(interaction: discord.Interaction, titulo: str):
     """Slash command para settitle"""
-    
+
 
     if len(titulo) > 30:
         embed = create_embed("❌ Título muito longo", "Use no máximo 30 caracteres", color=0xff0000)
@@ -2621,7 +2671,7 @@ async def slash_settitle(interaction: discord.Interaction, titulo: str):
 @bot.tree.command(name="avatar", description="Ver avatar de um usuário")
 async def slash_avatar(interaction: discord.Interaction, usuario: discord.Member = None):
     """Slash command para avatar"""
-    
+
 
     target = usuario or interaction.user
 
@@ -2636,7 +2686,7 @@ async def slash_avatar(interaction: discord.Interaction, usuario: discord.Member
 @bot.tree.command(name="serverinfo", description="Informações do servidor")
 async def slash_serverinfo(interaction: discord.Interaction):
     """Slash command para serverinfo"""
-    
+
 
     guild = interaction.guild
 
@@ -2663,7 +2713,7 @@ async def slash_serverinfo(interaction: discord.Interaction):
 @bot.tree.command(name="userinfo", description="Informações detalhadas de um usuário")
 async def slash_userinfo(interaction: discord.Interaction, usuario: discord.Member = None):
     """Slash command para userinfo"""
-    
+
 
     target = usuario or interaction.user
 
@@ -2697,7 +2747,7 @@ async def slash_userinfo(interaction: discord.Interaction, usuario: discord.Memb
 @bot.tree.command(name="version", description="Informações da versão do bot")
 async def slash_version(interaction: discord.Interaction):
     """Slash command para version"""
-    
+
 
     embed = create_embed(
         "🤖 RXbot - Informações de Versão",
@@ -2726,7 +2776,7 @@ async def slash_version(interaction: discord.Interaction):
 @bot.tree.command(name="estatisticas_bot", description="Estatísticas do bot")
 async def slash_estatisticas_bot(interaction: discord.Interaction):
     """Slash command para stats"""
-    
+
 
     uptime = datetime.datetime.now() - global_stats['uptime_start']
 
@@ -2787,7 +2837,7 @@ async def slash_clear(interaction: discord.Interaction, quantidade: int = 10):
 @bot.tree.command(name="warn", description="Dar advertência a um usuário")
 async def slash_warn(interaction: discord.Interaction, usuario: discord.Member, motivo: str = "Sem motivo especificado"):
     """Slash command para warn"""
-    
+
 
     if not interaction.user.guild_permissions.manage_messages:
         embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Mensagens'!", color=0xff0000)
@@ -2943,7 +2993,7 @@ async def slash_addcoins(interaction: discord.Interaction, usuario: discord.Memb
 @bot.tree.command(name="warns", description="Ver advertências de um usuário")
 async def slash_warns(interaction: discord.Interaction, usuario: discord.Member = None):
     """Slash command para warns"""
-    
+
 
     target = usuario or interaction.user
 
@@ -2972,7 +3022,7 @@ async def slash_warns(interaction: discord.Interaction, usuario: discord.Member 
 @bot.tree.command(name="ban", description="Banir um membro")
 async def slash_ban(interaction: discord.Interaction, usuario: discord.Member, motivo: str = "Sem motivo especificado"):
     """Slash command para ban"""
-    
+
 
     if not interaction.user.guild_permissions.ban_members:
         embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Banir Membros'!", color=0xff0000)
@@ -3022,7 +3072,7 @@ async def slash_ban(interaction: discord.Interaction, usuario: discord.Member, m
 @bot.tree.command(name="kick", description="Expulsar um membro")
 async def slash_kick(interaction: discord.Interaction, usuario: discord.Member, motivo: str = "Sem motivo especificado"):
     """Slash command para kick"""
-    
+
 
     if not interaction.user.guild_permissions.kick_members:
         embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Expulsar Membros'!", color=0xff0000)
@@ -3073,7 +3123,7 @@ async def slash_kick(interaction: discord.Interaction, usuario: discord.Member, 
 @bot.tree.command(name="texto_reverso", description="Inverter texto")
 async def slash_texto_reverso(interaction: discord.Interaction, texto: str):
     """Slash command para reverse"""
-    
+
 
     reversed_text = texto[::-1]
     embed = create_embed(
@@ -3086,7 +3136,7 @@ async def slash_texto_reverso(interaction: discord.Interaction, texto: str):
 @bot.tree.command(name="uppercase", description="Converter texto para maiúsculas")
 async def slash_uppercase(interaction: discord.Interaction, texto: str):
     """Slash command para uppercase"""
-    
+
 
     upper_text = texto.upper()
     embed = create_embed(
@@ -3099,7 +3149,7 @@ async def slash_uppercase(interaction: discord.Interaction, texto: str):
 @bot.tree.command(name="lowercase", description="Converter texto para minúsculas")
 async def slash_lowercase(interaction: discord.Interaction, texto: str):
     """Slash command para lowercase"""
-    
+
 
     lower_text = texto.lower()
     embed = create_embed(
@@ -3112,7 +3162,7 @@ async def slash_lowercase(interaction: discord.Interaction, texto: str):
 @bot.tree.command(name="membercount", description="Contagem de membros do servidor")
 async def slash_membercount(interaction: discord.Interaction):
     """Slash command para membercount"""
-    
+
 
     guild = interaction.guild
 
@@ -3147,7 +3197,7 @@ async def slash_membercount(interaction: discord.Interaction):
 @bot.tree.command(name="level", description="Ver informações de level e XP")
 async def slash_level(interaction: discord.Interaction, usuario: discord.Member = None):
     """Slash command para level"""
-    
+
 
     target = usuario or interaction.user
 
@@ -3203,7 +3253,7 @@ async def slash_level(interaction: discord.Interaction, usuario: discord.Member 
 @bot.tree.command(name="top", description="Ranking geral do servidor")
 async def slash_top(interaction: discord.Interaction):
     """Slash command para top"""
-    
+
 
     try:
         with db_lock:
@@ -3259,7 +3309,7 @@ async def slash_top(interaction: discord.Interaction):
 @bot.tree.command(name="uptime", description="Tempo que o bot está online")
 async def slash_uptime(interaction: discord.Interaction):
     """Slash command para uptime"""
-    
+
 
     uptime = datetime.datetime.now() - global_stats['uptime_start']
 
@@ -3275,7 +3325,7 @@ async def slash_uptime(interaction: discord.Interaction):
 @bot.tree.command(name="sorteios", description="Ver sorteios ativos")
 async def slash_sorteios(interaction: discord.Interaction):
     """Slash command para sorteios"""
-    
+
 
     try:
         with db_lock:
@@ -3328,7 +3378,7 @@ async def slash_sorteios(interaction: discord.Interaction):
 @bot.tree.command(name="ticket", description="Criar ticket de suporte")
 async def slash_ticket(interaction: discord.Interaction, motivo: str = None):
     """Slash command para ticket"""
-    
+
 
     if not motivo:
         embed = create_embed(
@@ -3383,7 +3433,7 @@ async def slash_ticket(interaction: discord.Interaction, motivo: str = None):
 @bot.tree.command(name="ranklist", description="Lista de todos os ranks")
 async def slash_ranklist(interaction: discord.Interaction):
     """Slash command para ranklist"""
-    
+
 
     embed = create_embed(
         "🏆 Sistema de Ranks do RXbot",
@@ -3462,7 +3512,7 @@ async def slash_rank(interaction: discord.Interaction, usuario: discord.Member =
 async def slash_leaderboard(interaction: discord.Interaction, tipo: str = "xp"):
     """Slash command para leaderboard"""
     try:
-        
+
 
         with db_lock:
             conn = get_db_connection()
@@ -3543,7 +3593,7 @@ async def slash_leaderboard(interaction: discord.Interaction, tipo: str = "xp"):
 @bot.tree.command(name="transferir", description="Transferir moedas para outro usuário")
 async def slash_transferir(interaction: discord.Interaction, usuario: discord.Member, quantidade: int):
     """Slash command para transferir moedas"""
-    
+
 
     if usuario == interaction.user:
         embed = create_embed("❌ Impossível", "Você não pode transferir para si mesmo!", color=0xff0000)
@@ -3633,7 +3683,7 @@ async def slash_transferir(interaction: discord.Interaction, usuario: discord.Me
 @bot.tree.command(name="roles", description="Ver todos os cargos do servidor")
 async def slash_roles(interaction: discord.Interaction):
     """Slash command para listar roles"""
-    
+
 
     try:
         roles = interaction.guild.roles[1:]  # Remove @everyone
@@ -3668,7 +3718,7 @@ async def slash_roles(interaction: discord.Interaction):
 @bot.tree.command(name="channels", description="Ver todos os canais do servidor")
 async def slash_channels(interaction: discord.Interaction):
     """Slash command para listar canais"""
-    
+
 
     try:
         text_channels = interaction.guild.text_channels
@@ -3931,7 +3981,7 @@ async def slash_nuke(interaction: discord.Interaction):
 async def slash_vender(interaction: discord.Interaction, item_id: int, quantidade: int = 1):
     """Slash command para vender item"""
     try:
-        
+
 
         if quantidade <= 0:
             embed = create_embed("❌ Quantidade inválida", "Use quantidades positivas!", color=0xff0000)
@@ -4026,7 +4076,7 @@ async def slash_vender(interaction: discord.Interaction, item_id: int, quantidad
 @bot.tree.command(name="trocar", description="Propor troca de itens com outro usuário")
 async def slash_trocar(interaction: discord.Interaction, usuario: discord.Member, seu_item: int, item_dele: int):
     """Slash command para trocar itens"""
-    
+
 
     if usuario == interaction.user:
         embed = create_embed("❌ Impossível", "Você não pode trocar consigo mesmo!", color=0xff0000)
@@ -5478,7 +5528,7 @@ async def slash_massban(interaction: discord.Interaction, usuarios: str, motivo:
         banned_count = 0
         failed_bans = []
 
-        
+
 
         for user_id in user_ids:
             try:
@@ -5550,7 +5600,7 @@ async def slash_purge(interaction: discord.Interaction, quantidade: int, filtro:
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        
+
 
         def check_message(message):
             if filtro.lower() == 'todas':
@@ -5592,7 +5642,7 @@ async def slash_lockserver(interaction: discord.Interaction, motivo: str = "Emer
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        
+
 
         locked_channels = 0
         failed_channels = []
@@ -5631,7 +5681,7 @@ async def slash_unlockserver(interaction: discord.Interaction):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        
+
 
         unlocked_channels = 0
         failed_channels = []
@@ -6684,6 +6734,673 @@ class CoinGiveawayModal(discord.ui.Modal, title="💰 Criar Sorteio de Coins"):
         except Exception as e:
             logger.error(f"Erro ao criar sorteio de coins: {e}")
             await interaction.response.send_message("❌ Erro ao criar sorteio! Tente novamente.", ephemeral=True)
+
+# Modal para configurar copinha Stumble Guys
+class CopinhaConfigModal(discord.ui.Modal, title="🏆 Configurar Copinha Stumble Guys"):
+    def __init__(self):
+        super().__init__()
+
+    titulo = discord.ui.TextInput(
+        label="🎯 Nome da Copinha",
+        placeholder="Ex: Copa RX de Stumble Guys",
+        required=True,
+        max_length=50
+    )
+
+    mapa = discord.ui.TextInput(
+        label="🗺️ Mapa",
+        placeholder="Ex: Block Dash, Super Slide, Dizzy Heights...",
+        required=True,
+        max_length=30
+    )
+
+    formato = discord.ui.TextInput(
+        label="👥 Formato",
+        placeholder="Ex: 1v1, 2v2, 3v3",
+        required=True,
+        max_length=10
+    )
+
+    max_players = discord.ui.TextInput(
+        label="👑 Máximo de Jogadores",
+        placeholder="Ex: 4, 8, 16, 32",
+        required=True,
+        max_length=2
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # Validar formato
+            formato_lower = self.formato.value.lower()
+            if not any(f in formato_lower for f in ['1v1', '2v2', '3v3', '1x1', '2x2', '3x3']):
+                await interaction.response.send_message("❌ Formato deve ser 1v1, 2v2 ou 3v3!", ephemeral=True)
+                return
+
+            # Validar máximo de jogadores
+            try:
+                max_players = int(self.max_players.value)
+                if max_players < 4 or max_players > 32 or (max_players & (max_players - 1)) != 0:
+                    raise ValueError
+            except ValueError:
+                await interaction.response.send_message("❌ Máximo de jogadores deve ser 4, 8, 16 ou 32!", ephemeral=True)
+                return
+
+            # Mapas disponíveis do Stumble Guys com emojis
+            mapas_emojis = {
+                'block dash': '🧱',
+                'super slide': '🛝',
+                'dizzy heights': '🌪️',
+                'gate crash': '🚪',
+                'hit parade': '🎯',
+                'the whirlygig': '🌀',
+                'see saw': '⚖️',
+                'tip toe': '👣',
+                'perfect match': '🎮',
+                'fall mountain': '🏔️'
+            }
+            
+            mapa_emoji = '🗺️'
+            for mapa_nome, emoji in mapas_emojis.items():
+                if mapa_nome in self.mapa.value.lower():
+                    mapa_emoji = emoji
+                    break
+
+            # Criar embed da copinha
+            embed = create_embed(
+                f"🏆 {self.titulo.value}",
+                f"""**🗺️ Mapa:** {mapa_emoji} {self.mapa.value}
+**👥 Formato:** {self.formato.value}
+**👑 Máximo de Jogadores:** {max_players}
+**📊 Status:** Inscrições Abertas
+**👑 Organizador:** {interaction.user.mention}
+
+**📝 Regras:**
+• Apenas jogadores do servidor podem participar
+• Sem apostas - apenas diversão e glória!
+• Um moderador definirá os vencedores de cada partida
+• As partidas serão organizadas em tickets privados
+
+**🎮 Clique em "Participar" para se inscrever!**
+**Inscritos: 0/{max_players}**""",
+                color=0x00ff00
+            )
+
+            # Criar view com botão de participar
+            view = CopinhaParticipationView()
+            await interaction.response.send_message(embed=embed, view=view)
+            
+            # Buscar a mensagem criada
+            message = await interaction.original_response()
+
+            # Salvar no banco de dados
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (interaction.guild.id, interaction.user.id, interaction.channel.id, message.id, self.titulo.value, self.mapa.value, self.formato.value, max_players))
+                
+                copinha_id = cursor.lastrowid
+                view.copinha_id = copinha_id  # Passar o ID para a view
+                
+                conn.commit()
+                conn.close()
+
+            logger.info(f"Copinha criada: {self.titulo.value} por {interaction.user}")
+
+        except Exception as e:
+            logger.error(f"Erro ao criar copinha: {e}")
+            await interaction.response.send_message("❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+
+# View para participar da copinha
+class CopinhaParticipationView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.copinha_id = None
+
+    @discord.ui.button(label="🎮 Participar", style=discord.ButtonStyle.success, emoji="🎮")
+    async def participate(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            # Buscar dados da copinha
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('SELECT * FROM copinhas WHERE message_id = ? AND status = "active"', (interaction.message.id,))
+                copinha = cursor.fetchone()
+                
+                if not copinha:
+                    await interaction.response.send_message("❌ Copinha não encontrada ou já finalizada!", ephemeral=True)
+                    conn.close()
+                    return
+
+                # Verificar participantes atuais (índice 9 é participants)
+                try:
+                    participants = json.loads(copinha[9]) if copinha[9] else []
+                except (json.JSONDecodeError, TypeError):
+                    participants = []
+                
+                # Verificar se já está inscrito
+                if interaction.user.id in participants:
+                    await interaction.response.send_message("❌ Você já está inscrito nesta copinha!", ephemeral=True)
+                    conn.close()
+                    return
+
+                # Verificar se há vagas
+                if len(participants) >= copinha[8]:  # max_players (índice 8)
+                    await interaction.response.send_message("❌ Copinha lotada! Não há mais vagas.", ephemeral=True)
+                    conn.close()
+                    return
+
+                # Adicionar participante
+                participants.append(interaction.user.id)
+                cursor.execute('UPDATE copinhas SET participants = ? WHERE id = ?', 
+                              (json.dumps(participants), copinha[0]))
+                conn.commit()
+                conn.close()
+
+            # Atualizar embed
+            mapa_emoji = '🗺️'
+            mapas_emojis = {
+                'block dash': '🧱', 'super slide': '🛝', 'dizzy heights': '🌪️',
+                'gate crash': '🚪', 'hit parade': '🎯', 'the whirlygig': '🌀',
+                'see saw': '⚖️', 'tip toe': '👣', 'perfect match': '🎮', 'fall mountain': '🏔️'
+            }
+            
+            for mapa_nome, emoji in mapas_emojis.items():
+                if mapa_nome in copinha[6].lower():  # map_name (índice 6)
+                    mapa_emoji = emoji
+                    break
+
+            embed = create_embed(
+                f"🏆 {copinha[5]}",  # title (índice 5)
+                f"""**🗺️ Mapa:** {mapa_emoji} {copinha[6]}
+**👥 Formato:** {copinha[7]}  
+**👑 Máximo de Jogadores:** {copinha[8]}
+**📊 Status:** {'Lotado - Iniciando Brackets!' if len(participants) == copinha[8] else 'Inscrições Abertas'}
+**👑 Organizador:** <@{copinha[2]}>
+
+**📝 Regras:**
+• Apenas jogadores do servidor podem participar
+• Sem apostas - apenas diversão e glória!
+• Um moderador definirá os vencedores de cada partida
+• As partidas serão organizadas em tickets privados
+
+**🎮 Clique em "Participar" para se inscrever!**
+**Inscritos: {len(participants)}/{copinha[8]}**""",
+                color=0xffd700 if len(participants) == copinha[8] else 0x00ff00
+            )
+
+            if len(participants) == copinha[8]:
+                # Desabilitar botão se lotou
+                button.disabled = True
+                await interaction.response.edit_message(embed=embed, view=self)
+                
+                # Iniciar criação dos brackets/tickets
+                await self.create_tournament_brackets(interaction, copinha, participants)
+            else:
+                await interaction.response.edit_message(embed=embed, view=self)
+                await interaction.followup.send(f"✅ {interaction.user.mention} se inscreveu na copinha!", ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Erro ao participar da copinha: {e}")
+            logger.error(f"Dados da copinha: {copinha if 'copinha' in locals() else 'Não encontrada'}")
+            await interaction.response.send_message("❌ Erro ao se inscrever! Tente novamente.", ephemeral=True)
+
+    async def create_tournament_brackets(self, interaction, copinha, participants):
+        try:
+            # Embaralhar participantes para brackets aleatórios
+            import random
+            random.shuffle(participants)
+            
+            # Calcular rounds necessários
+            import math
+            total_rounds = int(math.log2(len(participants)))
+            
+            # Criar primeira fase
+            matches = []
+            for i in range(0, len(participants), 2):
+                match = {
+                    'round': 'Primeira Fase',
+                    'players': [participants[i], participants[i+1]] if i+1 < len(participants) else [participants[i]],
+                    'match_number': (i // 2) + 1
+                }
+                matches.append(match)
+
+            # Salvar matches no banco
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                for match in matches:
+                    cursor.execute('''
+                        INSERT INTO copinha_matches (copinha_id, round_name, match_number, players)
+                        VALUES (?, ?, ?, ?)
+                    ''', (copinha[0], match['round'], match['match_number'], json.dumps(match['players'])))
+                
+                # Atualizar status da copinha
+                cursor.execute('UPDATE copinhas SET current_round = ?, status = ? WHERE id = ?', 
+                              ('Primeira Fase', 'running', copinha[0]))
+                conn.commit()
+                conn.close()
+
+            # Criar tickets para cada partida
+            await self.create_match_tickets(interaction, copinha, matches)
+
+        except Exception as e:
+            logger.error(f"Erro ao criar brackets: {e}")
+
+    async def create_match_tickets(self, interaction, copinha, matches):
+        try:
+            guild = interaction.guild
+            
+            # Buscar categoria de tickets ou criar
+            ticket_category = None
+            for category in guild.categories:
+                if 'ticket' in category.name.lower() or 'copinha' in category.name.lower():
+                    ticket_category = category
+                    break
+            
+            if not ticket_category:
+                ticket_category = await guild.create_category(f"🏆 Copinha {copinha[5][:20]}")
+
+            for i, match in enumerate(matches):
+                # Criar canal privado para a partida
+                player_names = []
+                overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                    guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                }
+                
+                # Dar permissão aos jogadores
+                for player_id in match['players']:
+                    member = guild.get_member(player_id)
+                    if member:
+                        overwrites[member] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                        player_names.append(member.display_name)
+                
+                # Dar permissão a moderadores
+                for role in guild.roles:
+                    if any(perm_name in role.name.lower() for perm_name in ['mod', 'admin', 'staff']):
+                        overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+                channel_name = f"partida-{match['match_number']}-{'-vs-'.join(player_names[:2])}"[:100]
+                match_channel = await guild.create_text_channel(
+                    channel_name,
+                    category=ticket_category,
+                    overwrites=overwrites
+                )
+
+                # Salvar canal no banco
+                with db_lock:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute('UPDATE copinha_matches SET ticket_channel_id = ? WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
+                                  (match_channel.id, copinha[0], match['match_number'], 'Primeira Fase'))
+                    conn.commit()
+                    conn.close()
+
+                # Criar embed da partida
+                players_text = " vs ".join([f"<@{pid}>" for pid in match['players']])
+                
+                mapa_emoji = '🗺️'
+                mapas_emojis = {
+                    'block dash': '🧱', 'super slide': '🛝', 'dizzy heights': '🌪️',
+                    'gate crash': '🚪', 'hit parade': '🎯', 'the whirlygig': '🌀',
+                    'see saw': '⚖️', 'tip toe': '👣', 'perfect match': '🎮', 'fall mountain': '🏔️'
+                }
+                
+                for mapa_nome, emoji in mapas_emojis.items():
+                    if mapa_nome in copinha[6].lower():
+                        mapa_emoji = emoji
+                        break
+
+                embed = create_embed(
+                    f"🏆 {copinha[5]} - {match['round']}",
+                    f"""**🥊 Partida #{match['match_number']}**
+
+**👥 Jogadores:**
+{players_text}
+
+**🗺️ Mapa:** {mapa_emoji} {copinha[6]}
+**👥 Formato:** {copinha[7]}
+
+**📋 Instruções:**
+1. Os jogadores devem combinar horário
+2. Joguem a partida no Stumble Guys
+3. Um moderador definirá o vencedor
+4. O vencedor avança para a próxima fase
+
+**⚠️ Aguardando resultado do moderador...**""",
+                    color=0xff9900
+                )
+
+                view = MatchResultView(copinha[0], match['match_number'], 'Primeira Fase')
+                await match_channel.send(embed=embed, view=view)
+
+            # Notificar no canal original
+            await interaction.followup.send(
+                f"🏆 **Copinha iniciada!** Foram criados {len(matches)} tickets de partida na categoria {ticket_category.mention}. "
+                f"Cada jogador pode ver apenas sua partida. Moderadores, definam os vencedores nos tickets!", 
+                ephemeral=False
+            )
+
+        except Exception as e:
+            logger.error(f"Erro ao criar tickets: {e}")
+
+# View para definir resultado da partida
+class MatchResultView(discord.ui.View):
+    def __init__(self, copinha_id, match_number, round_name):
+        super().__init__(timeout=None)
+        self.copinha_id = copinha_id
+        self.match_number = match_number
+        self.round_name = round_name
+
+    @discord.ui.button(label="👑 Definir Vencedor", style=discord.ButtonStyle.primary, emoji="🏆")
+    async def define_winner(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Verificar se é moderador
+        if not any(role.permissions.manage_messages for role in interaction.user.roles):
+            await interaction.response.send_message("❌ Apenas moderadores podem definir vencedores!", ephemeral=True)
+            return
+
+        try:
+            # Buscar dados da partida
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('SELECT players FROM copinha_matches WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
+                              (self.copinha_id, self.match_number, self.round_name))
+                result = cursor.fetchone()
+                conn.close()
+
+            if not result:
+                await interaction.response.send_message("❌ Partida não encontrada!", ephemeral=True)
+                return
+
+            players = json.loads(result[0])
+            
+            # Criar select com os jogadores
+            select = discord.ui.Select(
+                placeholder="Escolha o vencedor da partida...",
+                options=[discord.SelectOption(
+                    label=f"{interaction.guild.get_member(player_id).display_name}" if interaction.guild.get_member(player_id) else f"Player {player_id}",
+                    value=str(player_id),
+                    emoji="👑"
+                ) for player_id in players]
+            )
+
+            async def select_winner_callback(select_interaction):
+                winner_id = int(select.values[0])
+                await self.set_match_winner(select_interaction, winner_id)
+
+            select.callback = select_winner_callback
+            view = discord.ui.View()
+            view.add_item(select)
+            
+            await interaction.response.send_message("🏆 Selecione o vencedor da partida:", view=view, ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Erro ao definir vencedor: {e}")
+            await interaction.response.send_message("❌ Erro ao definir vencedor!", ephemeral=True)
+
+    async def set_match_winner(self, interaction, winner_id):
+        try:
+            # Atualizar banco com vencedor
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('UPDATE copinha_matches SET winner_id = ?, status = ? WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
+                              (winner_id, 'completed', self.copinha_id, self.match_number, self.round_name))
+                
+                # Buscar dados da copinha e partida
+                cursor.execute('SELECT * FROM copinhas WHERE id = ?', (self.copinha_id,))
+                copinha = cursor.fetchone()
+                
+                cursor.execute('SELECT players FROM copinha_matches WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
+                              (self.copinha_id, self.match_number, self.round_name))
+                match_result = cursor.fetchone()
+                
+                conn.commit()
+                conn.close()
+
+            winner = interaction.guild.get_member(winner_id)
+            players = json.loads(match_result[0])
+            
+            # Atualizar embed do canal
+            players_text = " vs ".join([f"<@{pid}>" for pid in players])
+            
+            embed = create_embed(
+                f"🏆 {copinha[5]} - {self.round_name}",
+                f"""**🥊 Partida #{self.match_number}** ✅
+
+**👥 Jogadores:**
+{players_text}
+
+**🏆 VENCEDOR: {winner.mention}**
+**👑 Definido por:** {interaction.user.mention}
+
+**📅 Resultado:** <t:{int(datetime.datetime.now().timestamp())}:R>
+
+**✅ Partida finalizada! O vencedor avançará para a próxima fase.**""",
+                color=0x00ff00
+            )
+
+            # Desabilitar botões
+            for item in self.children:
+                item.disabled = True
+
+            await interaction.response.edit_message(content=f"✅ Vencedor definido: {winner.mention}!", view=None)
+            
+            # Atualizar o embed da partida
+            original_channel = interaction.guild.get_channel(interaction.channel.id)
+            if original_channel:
+                async for message in original_channel.history(limit=50):
+                    if message.author == interaction.guild.me and message.embeds:
+                        await message.edit(embed=embed, view=self)
+                        break
+
+            # Verificar se todas as partidas da fase terminaram
+            await self.check_round_completion(interaction, copinha)
+
+        except Exception as e:
+            logger.error(f"Erro ao definir vencedor: {e}")
+            await interaction.response.send_message("❌ Erro ao salvar vencedor!", ephemeral=True)
+
+    async def check_round_completion(self, interaction, copinha):
+        try:
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                # Verificar quantas partidas desta fase estão completas
+                cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = ? AND round_name = ? AND status = "completed"',
+                              (self.copinha_id, self.round_name))
+                completed = cursor.fetchone()[0]
+                
+                cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = ? AND round_name = ?',
+                              (self.copinha_id, self.round_name))
+                total = cursor.fetchone()[0]
+                
+                if completed == total:
+                    # Todas as partidas terminaram, criar próxima fase
+                    cursor.execute('SELECT winner_id FROM copinha_matches WHERE copinha_id = ? AND round_name = ? AND status = "completed"',
+                                  (self.copinha_id, self.round_name))
+                    winners = [row[0] for row in cursor.fetchall()]
+                    
+                    conn.close()
+                    
+                    if len(winners) == 1:
+                        # Final! Anunciar vencedor
+                        await self.announce_tournament_winner(interaction, copinha, winners[0])
+                    elif len(winners) > 1:
+                        # Criar próxima fase
+                        await self.create_next_round(interaction, copinha, winners)
+                else:
+                    conn.close()
+
+        except Exception as e:
+            logger.error(f"Erro ao verificar completude da fase: {e}")
+
+    async def create_next_round(self, interaction, copinha, winners):
+        try:
+            # Determinar nome da próxima fase
+            round_names = {
+                'Primeira Fase': 'Semifinal' if len(winners) <= 4 else 'Quartas de Final',
+                'Quartas de Final': 'Semifinal',
+                'Semifinal': 'Final'
+            }
+            
+            next_round = round_names.get(self.round_name, 'Próxima Fase')
+            
+            # Criar partidas da próxima fase
+            matches = []
+            for i in range(0, len(winners), 2):
+                if i+1 < len(winners):
+                    match = {
+                        'round': next_round,
+                        'players': [winners[i], winners[i+1]],
+                        'match_number': (i // 2) + 1
+                    }
+                    matches.append(match)
+
+            # Salvar no banco
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                for match in matches:
+                    cursor.execute('''
+                        INSERT INTO copinha_matches (copinha_id, round_name, match_number, players)
+                        VALUES (?, ?, ?, ?)
+                    ''', (self.copinha_id, match['round'], match['match_number'], json.dumps(match['players'])))
+                
+                cursor.execute('UPDATE copinhas SET current_round = ? WHERE id = ?', 
+                              (next_round, self.copinha_id))
+                conn.commit()
+                conn.close()
+
+            # Criar tickets para próxima fase
+            guild = interaction.guild
+            ticket_category = interaction.channel.category
+
+            for match in matches:
+                # Criar canal para a nova partida
+                player_names = []
+                overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                    guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                }
+                
+                for player_id in match['players']:
+                    member = guild.get_member(player_id)
+                    if member:
+                        overwrites[member] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                        player_names.append(member.display_name)
+                
+                # Dar permissão a moderadores
+                for role in guild.roles:
+                    if any(perm_name in role.name.lower() for perm_name in ['mod', 'admin', 'staff']):
+                        overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+                channel_name = f"{next_round.lower().replace(' ', '-')}-{match['match_number']}-{'-vs-'.join(player_names[:2])}"[:100]
+                match_channel = await guild.create_text_channel(
+                    channel_name,
+                    category=ticket_category,
+                    overwrites=overwrites
+                )
+
+                # Salvar canal no banco
+                with db_lock:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute('UPDATE copinha_matches SET ticket_channel_id = ? WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
+                                  (match_channel.id, self.copinha_id, match['match_number'], next_round))
+                    conn.commit()
+                    conn.close()
+
+                # Embed da nova partida
+                players_text = " vs ".join([f"<@{pid}>" for pid in match['players']])
+                
+                embed = create_embed(
+                    f"🏆 {copinha[5]} - {next_round}",
+                    f"""**🥊 {next_round} - Partida #{match['match_number']}**
+
+**👥 Jogadores:**
+{players_text}
+
+**🗺️ Mapa:** {copinha[6]}
+**👥 Formato:** {copinha[7]}
+
+**📋 Instruções:**
+1. Os jogadores devem combinar horário
+2. Joguem a partida no Stumble Guys
+3. Um moderador definirá o vencedor
+4. O vencedor avança para {'A FINAL!' if next_round == 'Final' else 'a próxima fase'}
+
+**⚠️ Aguardando resultado do moderador...**""",
+                    color=0xff9900 if next_round != 'Final' else 0xffd700
+                )
+
+                view = MatchResultView(self.copinha_id, match['match_number'], next_round)
+                await match_channel.send(embed=embed, view=view)
+
+            # Notificar no canal original
+            original_channel = interaction.guild.get_channel(copinha[3])  # channel_id
+            if original_channel:
+                await original_channel.send(
+                    f"🎉 **{self.round_name} finalizada!** A **{next_round}** foi criada com {len(matches)} partida(s). "
+                    f"Boa sorte aos classificados! 🏆"
+                )
+
+        except Exception as e:
+            logger.error(f"Erro ao criar próxima fase: {e}")
+
+    async def announce_tournament_winner(self, interaction, copinha, winner_id):
+        try:
+            winner = interaction.guild.get_member(winner_id)
+            
+            # Atualizar status da copinha
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('UPDATE copinhas SET status = ? WHERE id = ?', ('finished', self.copinha_id))
+                conn.commit()
+                conn.close()
+
+            # Criar embed de vitória
+            embed = create_embed(
+                f"🏆 {copinha[5]} - CAMPEÃO!",
+                f"""**🎉 A COPINHA TERMINOU! 🎉**
+
+**👑 CAMPEÃO: {winner.mention}**
+
+**📊 Detalhes do Torneio:**
+**🗺️ Mapa:** {copinha[6]}
+**👥 Formato:** {copinha[7]}
+**👥 Participantes:** {copinha[9]}
+**👑 Organizador:** <@{copinha[2]}>
+
+**🎊 PARABÉNS AO CAMPEÃO! 🎊**
+
+*{winner.display_name} é o grande vencedor da copinha! 🏆*
+
+**📅 Finalizado:** <t:{int(datetime.datetime.now().timestamp())}:F>""",
+                color=0xffd700
+            )
+
+            # Tentar adicionar avatar do vencedor
+            if winner.avatar:
+                embed.set_thumbnail(url=winner.avatar.url)
+
+            # Anunciar no canal original
+            original_channel = interaction.guild.get_channel(copinha[3])
+            if original_channel:
+                await original_channel.send(embed=embed)
+
+            logger.info(f"Copinha {copinha[5]} finalizada com vencedor: {winner}")
+
+        except Exception as e:
+            logger.error(f"Erro ao anunciar vencedor: {e}")
 
 # Views com botões para substituir confirmações de emoji
 class ConfirmButtonView(discord.ui.View):
@@ -8793,7 +9510,7 @@ async def clear_messages(ctx, amount: int = 10):
                 return
 
             try:
-                
+
 
                 # Deletar a mensagem de confirmação primeiro
                 try:
