@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}RXbot Dashboard - Comandos{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5 text-center mb-4">
+            <i class="fas fa-terminal me-3"></i>Lista de Comandos
+        </h1>
+        <p class="lead text-center text-muted mb-4">
+            Total de <strong>98 comandos slash</strong> disponíveis! Use <code>/</code> ou <code>RX</code> antes dos comandos.
+        </p>
+    </div>
+</div>
+
+{% for category, category_commands in commands.items() %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card command-category">
+            <div class="card-header bg-primary text-white d-flex align-items-center">
+                <h5 class="mb-0">
+                    {% if category == 'Diversão' %}
+                        <i class="fas fa-gamepad me-2"></i>
+                    {% elif category == 'Economia' %}
+                        <i class="fas fa-coins me-2"></i>
+                    {% elif category == 'Copinha/Torneios' %}
+                        <i class="fas fa-trophy me-2"></i>
+                    {% elif category == 'Moderação' %}
+                        <i class="fas fa-shield-alt me-2"></i>
+                    {% else %}
+                        <i class="fas fa-tools me-2"></i>
+                    {% endif %}
+                    {{ category }}
+                </h5>
+                <span class="badge bg-light text-dark ms-auto">{{ category_commands|length }} comandos</span>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for command in category_commands %}
+                    <div class="col-lg-6 col-xl-4 mb-3">
+                        <div class="command-item p-3 border rounded">
+                            <h6 class="command-name text-primary mb-2">
+                                <code>{{ command.name }}</code>
+                            </h6>
+                            <p class="command-description text-muted mb-0">
+                                {{ command.description }}
+                            </p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Como Usar os Comandos
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-slash me-2 text-primary"></i>Comandos Slash</h6>
+                        <p class="mb-3">Use o prefixo <code>/</code> seguido do nome do comando:</p>
+                        <div class="example-box p-3 bg-light rounded">
+                            <code>/ping</code><br>
+                            <code>/copinha</code><br>
+                            <code>/saldo</code>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-robot me-2 text-success"></i>Comandos com Prefixo RX</h6>
+                        <p class="mb-3">Use o prefixo <code>RX</code> seguido do nome do comando:</p>
+                        <div class="example-box p-3 bg-light rounded">
+                            <code>RX ping</code><br>
+                            <code>RX copinha</code><br>
+                            <code>RX saldo</code>
+                        </div>
+                    </div>
+                </div>
+                <hr>
+                <div class="alert alert-primary" role="alert">
+                    <i class="fas fa-lightbulb me-2"></i>
+                    <strong>Dica:</strong> Ambos os sistemas funcionam igualmente! Use o que preferir. Os comandos slash (/) são mais modernos e têm autocomplete.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

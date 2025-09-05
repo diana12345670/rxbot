@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}RXbot Dashboard - Suporte{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5 text-center mb-4">
+            <i class="fas fa-headset me-3"></i>Central de Suporte
+        </h1>
+        <p class="lead text-center text-muted">
+            Precisa de ajuda? Estamos aqui para te auxiliar!
+        </p>
+    </div>
+</div>
+
+<div class="row g-4 mb-5">
+    <div class="col-lg-4">
+        <div class="card support-card h-100 text-center">
+            <div class="card-body">
+                <div class="support-icon bg-primary text-white rounded-circle mx-auto mb-3">
+                    <i class="fas fa-ticket-alt"></i>
+                </div>
+                <h5 class="card-title">Sistema de Tickets</h5>
+                <p class="card-text">
+                    Crie um ticket privado no Discord para suporte personalizado
+                </p>
+                <div class="support-steps">
+                    <small class="text-muted">
+                        1. Use o comando <code>/ticket</code><br>
+                        2. Descreva seu problema<br>
+                        3. Um moderador te ajudará
+                    </small>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <span class="badge bg-success">Recomendado</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card support-card h-100 text-center">
+            <div class="card-body">
+                <div class="support-icon bg-info text-white rounded-circle mx-auto mb-3">
+                    <i class="fas fa-comments"></i>
+                </div>
+                <h5 class="card-title">Chat Direto</h5>
+                <p class="card-text">
+                    Fale diretamente com nossa equipe de suporte no Discord
+                </p>
+                <div class="support-steps">
+                    <small class="text-muted">
+                        1. Procure por moderadores online<br>
+                        2. Envie mensagem direta<br>
+                        3. Explique sua situação
+                    </small>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <span class="badge bg-info">Rápido</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card support-card h-100 text-center">
+            <div class="card-body">
+                <div class="support-icon bg-warning text-white rounded-circle mx-auto mb-3">
+                    <i class="fas fa-bug"></i>
+                </div>
+                <h5 class="card-title">Reportar Bug</h5>
+                <p class="card-text">
+                    Encontrou um problema? Nos ajude a melhorar reportando
+                </p>
+                <div class="support-steps">
+                    <small class="text-muted">
+                        1. Descreva o erro detalhadamente<br>
+                        2. Informe passos para reproduzir<br>
+                        3. Envie prints se possível
+                    </small>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <span class="badge bg-warning">Importante</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-clock me-2"></i>Horários de Atendimento
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-calendar-day me-2 text-success"></i>Dias da Semana</h6>
+                        <p class="mb-3">Segunda a Sexta: <strong>9h às 18h</strong></p>
+                        
+                        <h6><i class="fas fa-calendar-week me-2 text-info"></i>Fins de Semana</h6>
+                        <p class="mb-3">Sábado e Domingo: <strong>10h às 16h</strong></p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-globe me-2 text-warning"></i>Fuso Horário</h6>
+                        <p class="mb-3">Horário de Brasília (GMT-3)</p>
+                        
+                        <h6><i class="fas fa-bell me-2 text-danger"></i>Emergências</h6>
+                        <p class="mb-3">Para problemas críticos, use o sistema de tickets 24/7</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-question-circle me-2"></i>Problemas Comuns
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="common-issues">
+                    <div class="issue-item mb-3">
+                        <h6 class="text-primary">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Comando não funciona
+                        </h6>
+                        <small class="text-muted">
+                            Verifique se o bot tem as permissões necessárias no servidor
+                        </small>
+                    </div>
+                    
+                    <div class="issue-item mb-3">
+                        <h6 class="text-primary">
+                            <i class="fas fa-coins me-2"></i>
+                            Perdi minhas moedas
+                        </h6>
+                        <small class="text-muted">
+                            Use /saldo para verificar. Coins não desaparecem sozinhas
+                        </small>
+                    </div>
+                    
+                    <div class="issue-item mb-3">
+                        <h6 class="text-primary">
+                            <i class="fas fa-trophy me-2"></i>
+                            Copinha não iniciou
+                        </h6>
+                        <small class="text-muted">
+                            Verifique se atingiu o número mínimo de participantes
+                        </small>
+                    </div>
+                    
+                    <div class="issue-item">
+                        <h6 class="text-primary">
+                            <i class="fas fa-robot me-2"></i>
+                            Bot não responde
+                        </h6>
+                        <small class="text-muted">
+                            Pode ser manutenção temporária. Tente novamente em alguns minutos
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-lightbulb me-2"></i>Dicas de Suporte
+                </h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled support-tips">
+                    <li class="mb-3">
+                        <i class="fas fa-check-circle text-success me-2"></i>
+                        <strong>Sea específico:</strong> Descreva exatamente o que aconteceu
+                    </li>
+                    <li class="mb-3">
+                        <i class="fas fa-check-circle text-success me-2"></i>
+                        <strong>Forneça contexto:</strong> Que comando usou e quando
+                    </li>
+                    <li class="mb-3">
+                        <i class="fas fa-check-circle text-success me-2"></i>
+                        <strong>Envie prints:</strong> Imagens ajudam muito a entender
+                    </li>
+                    <li class="mb-3">
+                        <i class="fas fa-check-circle text-success me-2"></i>
+                        <strong>Seja paciente:</strong> Respondemos o mais rápido possível
+                    </li>
+                    <li>
+                        <i class="fas fa-check-circle text-success me-2"></i>
+                        <strong>Use o FAQ:</strong> Sua dúvida pode já ter resposta
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="alert alert-primary" role="alert">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-info-circle me-3"></i>
+                <div>
+                    <h6 class="alert-heading mb-1">Lembre-se</h6>
+                    Nossa equipe está sempre trabalhando para melhorar o RXbot. Seu feedback é muito importante para nós!
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

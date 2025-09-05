@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}RXbot Dashboard - Tutoriais{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5 text-center mb-4">
+            <i class="fas fa-graduation-cap me-3"></i>Tutoriais e Guias
+        </h1>
+        <p class="lead text-center text-muted">
+            Aprenda a usar todas as funcionalidades do RXbot com nossos guias passo a passo
+        </p>
+    </div>
+</div>
+
+{% for tutorial in tutorials %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card tutorial-card">
+            <div class="card-header bg-primary text-white d-flex align-items-center">
+                <div class="tutorial-number bg-light text-primary rounded-circle me-3">
+                    {{ loop.index }}
+                </div>
+                <div>
+                    <h5 class="mb-1">{{ tutorial.title }}</h5>
+                    <small class="opacity-75">{{ tutorial.description }}</small>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="tutorial-steps">
+                            {% for step in tutorial.steps %}
+                            <div class="step-item d-flex align-items-start mb-3">
+                                <div class="step-number bg-success text-white rounded-circle me-3">
+                                    {{ loop.index }}
+                                </div>
+                                <div class="step-content">
+                                    <p class="mb-0">{{ step }}</p>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="tutorial-info bg-light p-3 rounded">
+                            <h6><i class="fas fa-clock me-2 text-primary"></i>Tempo Estimado</h6>
+                            <p class="mb-3 text-muted">
+                                {% if tutorial.title == 'Como Criar sua Primeira Copinha' %}
+                                    2-3 minutos
+                                {% elif tutorial.title == 'Sistema de Economia do Bot' %}
+                                    5-7 minutos
+                                {% else %}
+                                    3-5 minutos
+                                {% endif %}
+                            </p>
+
+                            <h6><i class="fas fa-user me-2 text-info"></i>Dificuldade</h6>
+                            <p class="mb-3">
+                                {% if tutorial.title == 'Como Criar sua Primeira Copinha' %}
+                                    <span class="badge bg-success">Fácil</span>
+                                {% elif tutorial.title == 'Sistema de Economia do Bot' %}
+                                    <span class="badge bg-warning">Médio</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Avançado</span>
+                                {% endif %}
+                            </p>
+
+                            <h6><i class="fas fa-tags me-2 text-warning"></i>Categoria</h6>
+                            <p class="mb-0">
+                                {% if tutorial.title == 'Como Criar sua Primeira Copinha' %}
+                                    <span class="badge bg-primary">Torneios</span>
+                                {% elif tutorial.title == 'Sistema de Economia do Bot' %}
+                                    <span class="badge bg-success">Economia</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Moderação</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted">
+                        <i class="fas fa-lightbulb me-1"></i>
+                        Siga os passos na ordem para melhores resultados
+                    </small>
+                    <div>
+                        <a href="/faq" class="btn btn-sm btn-outline-primary me-2">
+                            <i class="fas fa-question me-1"></i>FAQ
+                        </a>
+                        <a href="/support" class="btn btn-sm btn-primary">
+                            <i class="fas fa-headset me-1"></i>Suporte
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Dicas Importantes
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="tip-box p-3 border-start border-primary border-3 mb-3">
+                            <h6 class="text-primary">
+                                <i class="fas fa-shield-alt me-2"></i>Permissões
+                            </h6>
+                            <p class="mb-0 small">
+                                Certifique-se de que o bot tem as permissões necessárias no servidor para executar os comandos
+                            </p>
+                        </div>
+
+                        <div class="tip-box p-3 border-start border-success border-3 mb-3">
+                            <h6 class="text-success">
+                                <i class="fas fa-users me-2"></i>Moderadores
+                            </h6>
+                            <p class="mb-0 small">
+                                Comandos de moderação só funcionam se você tiver as permissões adequadas no servidor
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="tip-box p-3 border-start border-info border-3 mb-3">
+                            <h6 class="text-info">
+                                <i class="fas fa-clock me-2"></i>Cooldowns
+                            </h6>
+                            <p class="mb-0 small">
+                                Alguns comandos têm tempo de espera para evitar spam. Aguarde antes de usar novamente
+                            </p>
+                        </div>
+
+                        <div class="tip-box p-3 border-start border-warning border-3 mb-3">
+                            <h6 class="text-warning">
+                                <i class="fas fa-database me-2"></i>Dados
+                            </h6>
+                            <p class="mb-0 small">
+                                Seus dados (coins, itens, etc.) são salvos automaticamente. Não é preciso fazer backup manual
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12 text-center">
+        <div class="alert alert-success" role="alert">
+            <h6 class="alert-heading">
+                <i class="fas fa-rocket me-2"></i>Pronto para começar?
+            </h6>
+            <p class="mb-3">
+                Agora que você conhece os tutoriais, experimente os comandos no Discord!
+            </p>
+            <a href="/commands" class="btn btn-success me-2">
+                <i class="fas fa-terminal me-1"></i>Ver Todos os Comandos
+            </a>
+            <a href="/faq" class="btn btn-outline-success">
+                <i class="fas fa-question me-1"></i>Consultar FAQ
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

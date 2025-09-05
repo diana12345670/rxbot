@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}RXbot Dashboard - Início{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="hero-section text-center py-5 bg-gradient rounded">
+            <h1 class="display-4 mb-3" style="color: var(--primary-color);">
+                <i class="fas fa-robot me-3"></i>RXbot Dashboard
+            </h1>
+            <p class="lead mb-4" style="color: var(--primary-color);">
+                Bot Discord completo com sistema de copinhas/torneios do Stumble Guys
+            </p>
+            <div class="d-flex justify-content-center gap-3 flex-wrap">
+                <a href="/commands" class="btn btn-light btn-lg">
+                    <i class="fas fa-terminal me-2"></i>Ver Comandos
+                </a>
+                <a href="/tutorials" class="btn btn-outline-light btn-lg">
+                    <i class="fas fa-graduation-cap me-2"></i>Tutoriais
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-5">
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body text-center">
+                <div class="stat-icon bg-primary text-white rounded-circle mx-auto mb-3">
+                    <i class="fas fa-terminal"></i>
+                </div>
+                <h3 class="card-title">{{ stats.total_commands }}</h3>
+                <p class="card-text">Comandos Slash</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body text-center">
+                <div class="stat-icon bg-success text-white rounded-circle mx-auto mb-3">
+                    <i class="fas fa-users"></i>
+                </div>
+                <h3 class="card-title">{{ stats.total_users }}</h3>
+                <p class="card-text">Usuários Registrados</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body text-center">
+                <div class="stat-icon bg-warning text-white rounded-circle mx-auto mb-3">
+                    <i class="fas fa-trophy"></i>
+                </div>
+                <h3 class="card-title">{{ stats.total_copinhas }}</h3>
+                <p class="card-text">Copinhas Criadas</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body text-center">
+                <div class="stat-icon bg-info text-white rounded-circle mx-auto mb-3">
+                    <i class="fas fa-ticket-alt"></i>
+                </div>
+                <h3 class="card-title">{{ stats.total_tickets }}</h3>
+                <p class="card-text">Tickets Ativos</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card feature-card h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-trophy me-2"></i>Sistema de Copinhas
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">
+                    Sistema completo de torneios para Stumble Guys com:
+                </p>
+                <ul class="list-unstyled">
+                    <li><i class="fas fa-shield-alt text-warning me-2"></i>Apenas moderadores podem criar</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Criação automática de brackets</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Tickets privados para partidas</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Formatos 1v1, 2v2, 3v3</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Até 32 participantes</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Progressão automática</li>
+                </ul>
+                <a href="/tutorials" class="btn btn-primary">Ver Tutorial</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card feature-card h-100">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-coins me-2"></i>Sistema de Economia
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">
+                    Sistema de moedas completo com:
+                </p>
+                <ul class="list-unstyled">
+                    <li><i class="fas fa-check text-success me-2"></i>Recompensas diárias, semanais e mensais</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Sistema de trabalho</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Roubar coins de outros usuários</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Loja com itens especiais</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Inventário personalizado</li>
+                </ul>
+                <a href="/commands" class="btn btn-success">Ver Comandos</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-rocket me-2"></i>Recursos Principais
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <div class="d-flex align-items-start">
+                            <div class="feature-icon bg-primary text-white rounded me-3">
+                                <i class="fas fa-gamepad"></i>
+                            </div>
+                            <div>
+                                <h6>Sistema Dual de Comandos</h6>
+                                <small class="text-muted">Use tanto /comando quanto RX comando</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="d-flex align-items-start">
+                            <div class="feature-icon bg-warning text-white rounded me-3">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <div>
+                                <h6>Moderação Completa</h6>
+                                <small class="text-muted">Ban, kick, mute, warn e muito mais</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="d-flex align-items-start">
+                            <div class="feature-icon bg-success text-white rounded me-3">
+                                <i class="fas fa-dice"></i>
+                            </div>
+                            <div>
+                                <h6>Jogos e Diversão</h6>
+                                <small class="text-muted">Jokenpô, dados, quiz e mais</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
