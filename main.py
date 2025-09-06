@@ -1052,45 +1052,30 @@ async def safe_interaction_response(interaction, embed, ephemeral=False):
 def get_user_data(user_id):
     """Get user data with proper error handling"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
-            data = cursor.fetchone()
-            conn.close()
-            return data
+        return execute_query('SELECT * FROM users WHERE user_id = ?', (user_id,), fetch_one=True)
     except Exception as e:
         logger.error(f"Error getting user data: {e}")
         return None
 
 def update_user_data(user_id, **kwargs):
     """Update user data with proper error handling"""
-    conn = None
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
+        # Check if user exists
+        user_exists = execute_query('SELECT user_id FROM users WHERE user_id = ?', (user_id,), fetch_one=True)
+        if not user_exists:
+            execute_query('INSERT INTO users (user_id) VALUES (?)', (user_id,))
 
-            # Check if user exists
-            cursor.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
-            if not cursor.fetchone():
-                cursor.execute('INSERT INTO users (user_id) VALUES (?)', (user_id,))
+        # Update fields
+        for field, value in kwargs.items():
+            if field in ['coins', 'xp', 'level', 'reputation', 'bank', 'total_messages', 'voice_time', 'warnings']:
+                execute_query(f'UPDATE users SET {field} = ? WHERE user_id = ?', (value, user_id))
+            elif field in ['inventory', 'achievements', 'settings']:
+                execute_query(f'UPDATE users SET {field} = ? WHERE user_id = ?', (json.dumps(value), user_id))
+            elif field in ['last_daily', 'last_weekly', 'last_monthly']:
+                execute_query(f'UPDATE users SET {field} = ? WHERE user_id = ?', (value, user_id))
 
-            # Update fields
-            for field, value in kwargs.items():
-                if field in ['coins', 'xp', 'level', 'reputation', 'bank', 'total_messages', 'voice_time', 'warnings']:
-                    cursor.execute(f'UPDATE users SET {field} = ? WHERE user_id = ?', (value, user_id))
-                elif field in ['inventory', 'achievements', 'settings']:
-                    cursor.execute(f'UPDATE users SET {field} = ? WHERE user_id = ?', (json.dumps(value), user_id))
-                elif field in ['last_daily', 'last_weekly', 'last_monthly']:
-                    cursor.execute(f'UPDATE users SET {field} = ? WHERE user_id = ?', (value, user_id))
-
-            conn.commit()
-            conn.close()
     except Exception as e:
         logger.error(f"Error updating user data: {e}")
-        if conn:
-            conn.close()
 
 def add_xp(user_id, amount):
     """Add XP with level and rank calculation"""
@@ -1100,8 +1085,14 @@ def add_xp(user_id, amount):
             update_user_data(user_id, xp=amount, level=1)
             return False, 1, False, 1
 
-        current_xp = data[2]
-        current_level = data[3]
+        # Handle both PostgreSQL (dict) and SQLite (tuple) formats
+        if isinstance(data, dict):
+            current_xp = data.get('xp', 0)
+            current_level = data.get('level', 1)
+        else:
+            current_xp = data[2] if len(data) > 2 else 0
+            current_level = data[3] if len(data) > 3 else 1
+        
         new_xp = current_xp + amount
 
         # Calculate new level
@@ -6910,20 +6901,11 @@ class CopinhaConfigModal(discord.ui.Modal, title="🏆 Configurar Copinha Stumbl
             # Buscar a mensagem criada
             message = await interaction.original_response()
 
-            # Salvar no banco de dados
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (interaction.guild.id, interaction.user.id, interaction.channel.id, message.id, self.titulo.value, self.mapa.value, self.formato.value, max_players))
-
-                copinha_id = cursor.lastrowid
-                view.copinha_id = copinha_id  # Passar o ID para a view
-
-                conn.commit()
-                conn.close()
+            # Salvar no banco de dados usando execute_query
+            execute_query('''
+                INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (interaction.guild.id, interaction.user.id, interaction.channel.id, message.id, self.titulo.value, self.mapa.value, self.formato.value, max_players))
 
             logger.info(f"Copinha criada: {self.titulo.value} por {interaction.user}")
 
@@ -6940,44 +6922,56 @@ class CopinhaParticipationView(discord.ui.View):
     @discord.ui.button(label="🎮 Participar", style=discord.ButtonStyle.success, emoji="🎮")
     async def participate(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            # Buscar dados da copinha
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute('SELECT * FROM copinhas WHERE message_id = ? AND status = "active"', (interaction.message.id,))
-                copinha = cursor.fetchone()
+            # Buscar dados da copinha usando execute_query
+            copinha = execute_query('SELECT * FROM copinhas WHERE message_id = ? AND status = ?', (interaction.message.id, "active"), fetch_one=True)
+            
+            if not copinha:
+                logger.error("Dados da copinha: Não encontrada")
+                await interaction.response.send_message("❌ Copinha não encontrada ou já finalizada!", ephemeral=True)
+                return
 
-                if not copinha:
-                    await interaction.response.send_message("❌ Copinha não encontrada ou já finalizada!", ephemeral=True)
-                    conn.close()
-                    return
+            # Verificar participantes atuais - compatível com PostgreSQL e SQLite
+            if isinstance(copinha, dict):
+                participants_data = copinha.get('participants', '[]')
+                max_players = copinha.get('max_players', 4)
+                copinha_id = copinha.get('id')
+            else:
+                participants_data = copinha[9] if len(copinha) > 9 else '[]'
+                max_players = copinha[8] if len(copinha) > 8 else 4
+                copinha_id = copinha[0] if len(copinha) > 0 else None
 
-                # Verificar participantes atuais (índice 9 é participants)
-                try:
-                    participants = json.loads(copinha[9]) if copinha[9] else []
-                except (json.JSONDecodeError, TypeError):
-                    participants = []
+            try:
+                participants = json.loads(participants_data) if participants_data else []
+            except (json.JSONDecodeError, TypeError):
+                participants = []
 
-                # Verificar se já está inscrito
-                if interaction.user.id in participants:
-                    await interaction.response.send_message("❌ Você já está inscrito nesta copinha!", ephemeral=True)
-                    conn.close()
-                    return
+            # Verificar se já está inscrito
+            if interaction.user.id in participants:
+                await interaction.response.send_message("❌ Você já está inscrito nesta copinha!", ephemeral=True)
+                return
 
-                # Verificar se há vagas
-                if len(participants) >= copinha[8]:  # max_players (índice 8)
-                    await interaction.response.send_message("❌ Copinha lotada! Não há mais vagas.", ephemeral=True)
-                    conn.close()
-                    return
+            # Verificar se há vagas
+            if len(participants) >= max_players:
+                await interaction.response.send_message("❌ Copinha lotada! Não há mais vagas.", ephemeral=True)
+                return
 
-                # Adicionar participante
-                participants.append(interaction.user.id)
-                cursor.execute('UPDATE copinhas SET participants = ? WHERE id = ?', 
-                              (json.dumps(participants), copinha[0]))
-                conn.commit()
-                conn.close()
+            # Adicionar participante
+            participants.append(interaction.user.id)
+            execute_query('UPDATE copinhas SET participants = ? WHERE id = ?', 
+                         (json.dumps(participants), copinha_id))
 
-            # Atualizar embed
+            # Atualizar embed - compatível com PostgreSQL e SQLite
+            if isinstance(copinha, dict):
+                title = copinha.get('title', 'Copinha')
+                map_name = copinha.get('map_name', 'Desconhecido')
+                team_format = copinha.get('team_format', '1v1')
+                creator_id = copinha.get('creator_id')
+            else:
+                title = copinha[5] if len(copinha) > 5 else 'Copinha'
+                map_name = copinha[6] if len(copinha) > 6 else 'Desconhecido'
+                team_format = copinha[7] if len(copinha) > 7 else '1v1'
+                creator_id = copinha[2] if len(copinha) > 2 else None
+
             mapa_emoji = '🗺️'
             mapas_emojis = {
                 'block dash': '🧱', 'super slide': '🛝', 'dizzy heights': '🌪️',
@@ -6986,17 +6980,17 @@ class CopinhaParticipationView(discord.ui.View):
             }
 
             for mapa_nome, emoji in mapas_emojis.items():
-                if mapa_nome in copinha[6].lower():  # map_name (índice 6)
+                if mapa_nome in map_name.lower():
                     mapa_emoji = emoji
                     break
 
             embed = create_embed(
-                f"🏆 {copinha[5]}",  # title (índice 5)
-                f"""**🗺️ Mapa:** {mapa_emoji} {copinha[6]}
-**👥 Formato:** {copinha[7]}  
-**👑 Máximo de Jogadores:** {copinha[8]}
-**📊 Status:** {'Lotado - Iniciando Brackets!' if len(participants) == copinha[8] else 'Inscrições Abertas'}
-**👑 Organizador:** <@{copinha[2]}>
+                f"🏆 {title}",
+                f"""**🗺️ Mapa:** {mapa_emoji} {map_name}
+**👥 Formato:** {team_format}  
+**👑 Máximo de Jogadores:** {max_players}
+**📊 Status:** {'Lotado - Iniciando Brackets!' if len(participants) == max_players else 'Inscrições Abertas'}
+**👑 Organizador:** <@{creator_id}>
 
 **📝 Regras:**
 • Apenas jogadores do servidor podem participar
@@ -7005,11 +6999,11 @@ class CopinhaParticipationView(discord.ui.View):
 • As partidas serão organizadas em tickets privados
 
 **🎮 Clique em "Participar" para se inscrever!**
-**Inscritos: {len(participants)}/{copinha[8]}**""",
-                color=0xffd700 if len(participants) == copinha[8] else 0x00ff00
+**Inscritos: {len(participants)}/{max_players}**""",
+                color=0xffd700 if len(participants) == max_players else 0x00ff00
             )
 
-            if len(participants) == copinha[8]:
+            if len(participants) == max_players:
                 # Desabilitar botão se lotou
                 button.disabled = True
                 await interaction.response.edit_message(embed=embed, view=self)
@@ -7045,22 +7039,18 @@ class CopinhaParticipationView(discord.ui.View):
                 }
                 matches.append(match)
 
-            # Salvar matches no banco
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
+            # Salvar matches no banco - compatível com PostgreSQL e SQLite
+            copinha_id = copinha.get('id') if isinstance(copinha, dict) else copinha[0]
+            
+            for match in matches:
+                execute_query('''
+                    INSERT INTO copinha_matches (copinha_id, round_name, match_number, players)
+                    VALUES (?, ?, ?, ?)
+                ''', (copinha_id, match['round'], match['match_number'], json.dumps(match['players'])))
 
-                for match in matches:
-                    cursor.execute('''
-                        INSERT INTO copinha_matches (copinha_id, round_name, match_number, players)
-                        VALUES (?, ?, ?, ?)
-                    ''', (copinha[0], match['round'], match['match_number'], json.dumps(match['players'])))
-
-                # Atualizar status da copinha
-                cursor.execute('UPDATE copinhas SET current_round = ?, status = ? WHERE id = ?', 
-                              ('Primeira Fase', 'running', copinha[0]))
-                conn.commit()
-                conn.close()
+            # Atualizar status da copinha
+            execute_query('UPDATE copinhas SET current_round = ?, status = ? WHERE id = ?', 
+                         ('Primeira Fase', 'running', copinha_id))
 
             # Criar tickets para cada partida
             await self.create_match_tickets(interaction, copinha, matches)
@@ -7080,7 +7070,8 @@ class CopinhaParticipationView(discord.ui.View):
                     break
 
             if not ticket_category:
-                ticket_category = await guild.create_category(f"🏆 Copinha {copinha[5][:20]}")
+                title = copinha.get('title', 'Copinha')[:20] if isinstance(copinha, dict) else copinha[5][:20]
+                ticket_category = await guild.create_category(f"🏆 Copinha {title}")
 
             for i, match in enumerate(matches):
                 # Criar canal privado para a partida
@@ -7110,13 +7101,9 @@ class CopinhaParticipationView(discord.ui.View):
                 )
 
                 # Salvar canal no banco
-                with db_lock:
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute('UPDATE copinha_matches SET ticket_channel_id = ? WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
-                                  (match_channel.id, copinha[0], match['match_number'], 'Primeira Fase'))
-                    conn.commit()
-                    conn.close()
+                copinha_id = copinha.get('id') if isinstance(copinha, dict) else copinha[0]
+                execute_query('UPDATE copinha_matches SET ticket_channel_id = ? WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
+                             (match_channel.id, copinha_id, match['match_number'], 'Primeira Fase'))
 
                 # Criar embed da partida
                 players_text = " vs ".join([f"<@{pid}>" for pid in match['players']])
@@ -7128,20 +7115,24 @@ class CopinhaParticipationView(discord.ui.View):
                     'see saw': '⚖️', 'tip toe': '👣', 'perfect match': '🎮', 'fall mountain': '🏔️'
                 }
 
+                map_name = copinha.get('map_name', 'Desconhecido') if isinstance(copinha, dict) else copinha[6]
                 for mapa_nome, emoji in mapas_emojis.items():
-                    if mapa_nome in copinha[6].lower():
+                    if mapa_nome in map_name.lower():
                         mapa_emoji = emoji
                         break
 
+                title = copinha.get('title', 'Copinha') if isinstance(copinha, dict) else copinha[5]
+                team_format = copinha.get('team_format', '1v1') if isinstance(copinha, dict) else copinha[7]
+                
                 embed = create_embed(
-                    f"🏆 {copinha[5]} - {match['round']}",
+                    f"🏆 {title} - {match['round']}",
                     f"""**🥊 Partida #{match['match_number']}**
 
 **👥 Jogadores:**
 {players_text}
 
-**🗺️ Mapa:** {mapa_emoji} {copinha[6]}
-**👥 Formato:** {copinha[7]}
+**🗺️ Mapa:** {mapa_emoji} {map_name}
+**👥 Formato:** {team_format}
 
 **📋 Instruções:**
 1. Os jogadores devem combinar horário
@@ -7153,7 +7144,8 @@ class CopinhaParticipationView(discord.ui.View):
                     color=0xff9900
                 )
 
-                view = MatchResultView(copinha[0], match['match_number'], 'Primeira Fase')
+                copinha_id = copinha.get('id') if isinstance(copinha, dict) else copinha[0]
+                view = MatchResultView(copinha_id, match['match_number'], 'Primeira Fase')
                 await match_channel.send(embed=embed, view=view)
 
             # Notificar no canal original
