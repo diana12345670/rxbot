@@ -231,7 +231,7 @@ def get_db_connection():
                 logger.warning(f"PostgreSQL não disponível, usando SQLite: {e}")
                 # Fallback para SQLite se PostgreSQL falhar
                 return sqlite3.connect('rxbot.db', timeout=30.0, check_same_thread=False)
-    
+
     # Usar SQLite por padrão (desenvolvimento/Replit)
     return sqlite3.connect('rxbot.db', timeout=30.0, check_same_thread=False)
 
@@ -241,29 +241,29 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False):
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
-            
+
             # Detectar se está usando PostgreSQL pela conexão real
             is_postgres_conn = hasattr(conn, 'info')  # psycopg2 connections have info attribute
-            
+
             # Converter query para PostgreSQL se necessário
             if is_postgres_conn:
                 # Substituir ? por %s para PostgreSQL
                 query = query.replace('?', '%s')
-            
+
             if params:
                 cursor.execute(query, params)
             else:
                 cursor.execute(query)
-            
+
             result = None
             if fetch_one:
                 result = cursor.fetchone()
             elif fetch_all:
                 result = cursor.fetchall()
-            
+
             conn.commit()
             return result
-            
+
         except Exception as e:
             conn.rollback()
             logger.error(f"Erro na query: {e}")
@@ -279,10 +279,10 @@ def init_database():
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             # Detectar tipo de banco pela conexão real
             is_postgres = hasattr(conn, 'info')  # psycopg2 connections have info attribute
-            
+
             # Definir tipos compatíveis
             if is_postgres:
                 # PostgreSQL types
@@ -557,8 +557,8 @@ def init_database():
 
 # Sistemas de monitoramento anti-hibernação removidos para economizar recursos
 
-# Initialize database
-init_database()
+# Database será inicializado apenas quando TOKEN existir (modo completo)
+# Para modo Flask-only (sem TOKEN), não inicializa o banco
 
 # Global variables for bot state
 global_stats = {
@@ -865,7 +865,7 @@ async def check_reminders():
     try:
         now = datetime.datetime.now()
         reminders = execute_query('SELECT * FROM reminders WHERE remind_time <= ?', (now,), fetch_all=True)
-        
+
         if not reminders:
             return
 
@@ -901,7 +901,7 @@ async def check_giveaways():
             ('active', now), 
             fetch_all=True
         )
-        
+
         if not finished_giveaways:
             return
 
@@ -1092,7 +1092,7 @@ def add_xp(user_id, amount):
         else:
             current_xp = data[2] if len(data) > 2 else 0
             current_level = data[3] if len(data) > 3 else 1
-        
+
         new_xp = current_xp + amount
 
         # Calculate new level
@@ -6924,7 +6924,7 @@ class CopinhaParticipationView(discord.ui.View):
         try:
             # Buscar dados da copinha usando execute_query
             copinha = execute_query('SELECT * FROM copinhas WHERE message_id = ? AND status = ?', (interaction.message.id, "active"), fetch_one=True)
-            
+
             if not copinha:
                 logger.error("Dados da copinha: Não encontrada")
                 await interaction.response.send_message("❌ Copinha não encontrada ou já finalizada!", ephemeral=True)
@@ -7041,7 +7041,7 @@ class CopinhaParticipationView(discord.ui.View):
 
             # Salvar matches no banco - compatível com PostgreSQL e SQLite
             copinha_id = copinha.get('id') if isinstance(copinha, dict) else copinha[0]
-            
+
             for match in matches:
                 execute_query('''
                     INSERT INTO copinha_matches (copinha_id, round_name, match_number, players)
@@ -7123,7 +7123,7 @@ class CopinhaParticipationView(discord.ui.View):
 
                 title = copinha.get('title', 'Copinha') if isinstance(copinha, dict) else copinha[5]
                 team_format = copinha.get('team_format', '1v1') if isinstance(copinha, dict) else copinha[7]
-                
+
                 embed = create_embed(
                     f"🏆 {title} - {match['round']}",
                     f"""**🥊 Partida #{match['match_number']}**
@@ -7349,7 +7349,7 @@ class MatchResultView(discord.ui.View):
                                   (next_round, self.copinha_id))
                     conn.commit()
                     conn.close()
-            
+
             # Executar em thread separada para evitar deadlock
             await asyncio.get_event_loop().run_in_executor(None, save_matches)
 
@@ -7392,7 +7392,7 @@ class MatchResultView(discord.ui.View):
                                       (match_channel.id, self.copinha_id, match['match_number'], next_round))
                         conn.commit()
                         conn.close()
-                
+
                 # Executar em thread separada para evitar deadlock
                 await asyncio.get_event_loop().run_in_executor(None, save_channel_id)
 
@@ -14061,7 +14061,7 @@ async def on_command_error(ctx, error):
 # ==================== DASHBOARD WEB FLASK ====================
 
 # Configuração Flask
-app = Flask(__name__)
+app = Flask(__name__, template_folder='dashboard/templates', static_folder='dashboard/static')
 app.secret_key = os.environ.get('SECRET_KEY', 'rxbot-dashboard-secret-key')
 
 def get_guild_stats():
@@ -14070,27 +14070,27 @@ def get_guild_stats():
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             # Total de usuários
             cursor.execute('SELECT COUNT(*) FROM users')
             result = cursor.fetchone()
             total_users = result[0] if result else 0
-            
+
             # Total de servidores
             cursor.execute('SELECT COUNT(*) FROM guilds')
             result = cursor.fetchone()
             total_guilds = result[0] if result else 0
-            
+
             # Total de tickets
             cursor.execute('SELECT COUNT(*) FROM tickets')
             result = cursor.fetchone()
             total_tickets = result[0] if result else 0
-            
+
             # Total de eventos
             cursor.execute('SELECT COUNT(*) FROM events WHERE status = "active"')
             result = cursor.fetchone()
             active_events = result[0] if result else 0
-            
+
             # Total de copinhas - verificar se tabela existe
             try:
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='copinhas'")
@@ -14102,7 +14102,7 @@ def get_guild_stats():
                     active_copinhas = 0
             except:
                 active_copinhas = 0
-            
+
             conn.close()
             return {
                 'total_users': total_users,
@@ -14121,11 +14121,88 @@ def get_guild_stats():
             'active_copinhas': 0
         }
 
+@app.route('/healthz')
+def health_check():
+    """Endpoint de health check para Railway - liveness probe"""
+    return jsonify({
+        'status': 'healthy',
+        'service': 'discord-bot-rx',
+        'timestamp': datetime.datetime.now().isoformat()
+    })
+
+@app.route('/readyz')
+def readiness_check():
+    """Endpoint de readiness check - inclui verificações mais complexas"""
+    try:
+        ready_status = {
+            'status': 'ready',
+            'service': 'discord-bot-rx',
+            'timestamp': datetime.datetime.now().isoformat(),
+            'bot_ready': bot.is_ready() if 'bot' in globals() else False
+        }
+        
+        # Verificar conexão com banco apenas se token existe (modo completo)
+        if os.getenv('TOKEN'):
+            try:
+                execute_query("SELECT 1", fetch_one=True)
+                ready_status['database'] = 'connected'
+            except Exception as e:
+                ready_status['database'] = 'error'
+                ready_status['status'] = 'degraded'
+        else:
+            ready_status['database'] = 'not_required'
+            
+        return jsonify(ready_status)
+    except Exception as e:
+        return jsonify({
+            'status': 'not_ready',
+            'error': str(e),
+            'timestamp': datetime.datetime.now().isoformat()
+        }), 503
+
 @app.route('/')
+def root_health():
+    """Root endpoint para compatibilidade"""
+    return jsonify({
+        'status': 'healthy',
+        'service': 'discord-bot-rx',
+        'timestamp': datetime.datetime.now().isoformat(),
+        'endpoints': {
+            'health': '/healthz',
+            'readiness': '/readyz', 
+            'dashboard': '/dashboard',
+            'api_stats': '/api/stats'
+        }
+    })
+
+@app.route('/dashboard')
 def dashboard():
     """Página principal do dashboard"""
-    stats = get_guild_stats()
-    return render_template('dashboard.html', stats=stats)
+    try:
+        stats = get_guild_stats()
+        stats['bot_status'] = 'ready' if bot.is_ready() else 'offline'
+        return render_template('dashboard.html', stats=stats)
+    except Exception as e:
+        return jsonify({
+            'service': 'RX Discord Bot Dashboard',
+            'status': 'error',
+            'error': str(e)
+        })
+
+@app.route('/comandos')
+def comandos_page():
+    """Página de comandos"""
+    return render_template('comandos.html')
+
+@app.route('/faq')
+def faq_page():
+    """Página de FAQ"""
+    return render_template('faq.html')
+
+@app.route('/suporte')
+def suporte_page():
+    """Página de suporte"""
+    return render_template('suporte.html')
 
 @app.route('/api/stats')
 def api_stats():
@@ -14140,7 +14217,7 @@ def users_page():
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             cursor.execute('''
                 SELECT user_id, coins, xp, level, reputation, bank, 
                        last_daily, total_messages, warnings 
@@ -14148,10 +14225,10 @@ def users_page():
                 ORDER BY xp DESC 
                 LIMIT 50
             ''')
-            
+
             users = cursor.fetchall()
             conn.close()
-            
+
             return render_template('users.html', users=users)
     except Exception as e:
         logger.error(f"Erro ao carregar usuários: {e}")
@@ -14164,7 +14241,7 @@ def tickets_page():
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             cursor.execute('''
                 SELECT ticket_id, guild_id, creator_id, channel_id, 
                        status, created_at, closed_by, reason 
@@ -14172,10 +14249,10 @@ def tickets_page():
                 ORDER BY created_at DESC 
                 LIMIT 50
             ''')
-            
+
             tickets = cursor.fetchall()
             conn.close()
-            
+
             return render_template('tickets.html', tickets=tickets)
     except Exception as e:
         logger.error(f"Erro ao carregar tickets: {e}")
@@ -14188,7 +14265,7 @@ def copinhas_page():
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             # Verificar se a tabela copinhas existe
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='copinhas'")
             if cursor.fetchone():
@@ -14203,9 +14280,9 @@ def copinhas_page():
                 copinhas = cursor.fetchall()
             else:
                 copinhas = []
-            
+
             conn.close()
-            
+
             return render_template('copinhas.html', copinhas=copinhas)
     except Exception as e:
         logger.error(f"Erro ao carregar copinhas: {e}")
@@ -14218,10 +14295,10 @@ def api_user(user_id):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
             user_data = cursor.fetchone()
-            
+
             if user_data:
                 user_dict = {
                     'user_id': user_data[0],
@@ -14241,20 +14318,21 @@ def api_user(user_id):
                     'voice_time': user_data[14],
                     'warnings': user_data[15]
                 }
-                
+
                 conn.close()
                 return jsonify(user_dict)
             else:
                 conn.close()
                 return jsonify({'error': 'Usuário não encontrado'}), 404
-                
+
     except Exception as e:
         logger.error(f"Erro ao obter dados do usuário: {e}")
         return jsonify({'error': 'Erro interno do servidor'}), 500
 
 def run_dashboard():
     """Executar o dashboard Flask"""
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    port = int(os.getenv('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
 
 def start_dashboard():
     """Iniciar dashboard Flask em thread separada"""
@@ -14289,24 +14367,39 @@ if __name__ == "__main__":
     try:
         # Verificar token
         token = os.getenv('TOKEN')
-        if not token:
-            logger.error("🚨 TOKEN não encontrado nas variáveis de ambiente!")
-            print("❌ Configure a variável de ambiente TOKEN com o token do seu bot Discord")
-            sys.exit(1)
-
+        
         logger.info("🚀 Iniciando RXBot + Dashboard...")
-        
-        # Iniciar dashboard Flask em thread separada
-        dashboard_thread = threading.Thread(target=start_dashboard, daemon=True)
-        dashboard_thread.start()
-        
-        # Aguardar um pouco para o dashboard inicializar
-        time.sleep(2)
-        logger.info("✅ Dashboard iniciado!")
-        
-        # Iniciar bot Discord no loop principal
-        logger.info("🤖 Iniciando bot Discord...")
-        asyncio.run(start_bot())
+
+        if not token:
+            logger.warning("⚠️ TOKEN não encontrado nas variáveis de ambiente!")
+            logger.info("🌐 Rodando apenas o servidor Flask para health check do Railway")
+            logger.info("📝 Configure a variável de ambiente TOKEN para habilitar o bot Discord")
+            
+            # Rodar Flask em thread não-daemon para modo Flask-only
+            dashboard_thread = threading.Thread(target=start_dashboard, daemon=False)
+            dashboard_thread.start()
+            
+            # Aguardar thread do Flask (modo Flask-only)
+            try:
+                dashboard_thread.join()
+            except KeyboardInterrupt:
+                logger.info("🛑 Servidor interrompido pelo usuário")
+        else:
+            # Modo completo: inicializar banco e rodar bot + dashboard
+            logger.info("🎯 Inicializando base de dados...")
+            init_database()
+            
+            # Iniciar dashboard Flask em thread separada (modo daemon para bot principal)
+            dashboard_thread = threading.Thread(target=start_dashboard, daemon=True)
+            dashboard_thread.start()
+
+            # Aguardar um pouco para o dashboard inicializar
+            time.sleep(2)
+            logger.info("✅ Dashboard iniciado!")
+            
+            # Iniciar bot Discord no loop principal
+            logger.info("🤖 Iniciando bot Discord...")
+            asyncio.run(start_bot())
 
     except KeyboardInterrupt:
         logger.info("🛑 Bot interrompido pelo usuário")
