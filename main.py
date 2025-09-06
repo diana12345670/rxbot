@@ -35,6 +35,15 @@ import tempfile
 import shutil
 import hmac
 import requests # Importado para substituir aiohttp
+from flask import Flask, render_template, jsonify, request
+
+# Imports para PostgreSQL
+try:
+    import psycopg2
+    import psycopg2.extras
+    HAS_POSTGRESQL = True
+except ImportError:
+    HAS_POSTGRESQL = False
 
 # Imports opcionais que podem não estar disponíveis
 try:
@@ -199,264 +208,342 @@ def make_http_request(url, method='GET', **kwargs):
 import threading
 db_lock = threading.Lock()
 
+# Detectar se está no Railway ou ambiente de produção
+def is_production():
+    """Detectar se está rodando em produção (Railway)"""
+    return bool(os.getenv('DATABASE_URL') or os.getenv('RAILWAY_ENVIRONMENT'))
+
 def get_db_connection():
-    """Get database connection with proper handling"""
+    """Get database connection with PostgreSQL/SQLite detection"""
+    if is_production() and HAS_POSTGRESQL:
+        # Usar PostgreSQL no Railway
+        database_url = os.getenv('DATABASE_URL')
+        if database_url:
+            try:
+                conn = psycopg2.connect(database_url, cursor_factory=psycopg2.extras.RealDictCursor)
+                conn.autocommit = False
+                # Testar se a conexão funciona
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1")
+                cursor.close()
+                return conn
+            except Exception as e:
+                logger.warning(f"PostgreSQL não disponível, usando SQLite: {e}")
+                # Fallback para SQLite se PostgreSQL falhar
+                return sqlite3.connect('rxbot.db', timeout=30.0, check_same_thread=False)
+    
+    # Usar SQLite por padrão (desenvolvimento/Replit)
     return sqlite3.connect('rxbot.db', timeout=30.0, check_same_thread=False)
+
+def execute_query(query, params=None, fetch_one=False, fetch_all=False):
+    """Executar query de forma compatível com SQLite e PostgreSQL"""
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            
+            # Detectar se está usando PostgreSQL pela conexão real
+            is_postgres_conn = hasattr(conn, 'info')  # psycopg2 connections have info attribute
+            
+            # Converter query para PostgreSQL se necessário
+            if is_postgres_conn:
+                # Substituir ? por %s para PostgreSQL
+                query = query.replace('?', '%s')
+            
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            
+            result = None
+            if fetch_one:
+                result = cursor.fetchone()
+            elif fetch_all:
+                result = cursor.fetchall()
+            
+            conn.commit()
+            return result
+            
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Erro na query: {e}")
+            raise e
+        finally:
+            conn.close()
 
 # Database setup with proper error handling
 def init_database():
-    """Initialize database with proper error handling"""
+    """Initialize database with PostgreSQL/SQLite compatibility"""
     with db_lock:
         conn = None
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
+            
+            # Detectar tipo de banco pela conexão real
+            is_postgres = hasattr(conn, 'info')  # psycopg2 connections have info attribute
+            
+            # Definir tipos compatíveis
+            if is_postgres:
+                # PostgreSQL types
+                auto_increment = "SERIAL PRIMARY KEY"
+                integer_type = "BIGINT"
+                text_type = "TEXT"
+                timestamp_type = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+                date_type = "DATE"
+            else:
+                # SQLite types
+                auto_increment = "INTEGER PRIMARY KEY AUTOINCREMENT"
+                integer_type = "INTEGER"
+                text_type = "TEXT"
+                timestamp_type = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+                date_type = "DATE"
 
             # Tabela de tickets
-            cursor.execute('''CREATE TABLE IF NOT EXISTS tickets (
-                ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                creator_id INTEGER,
-                channel_id INTEGER,
-                status TEXT DEFAULT 'open',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                closed_by INTEGER,
-                reason TEXT
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS tickets (
+                ticket_id {auto_increment},
+                guild_id {integer_type},
+                creator_id {integer_type},
+                channel_id {integer_type},
+                status {text_type} DEFAULT 'open',
+                created_at {timestamp_type},
+                closed_by {integer_type},
+                reason {text_type}
             )''')
 
             # User economy and stats
-            cursor.execute('''CREATE TABLE IF NOT EXISTS users (
-                user_id INTEGER PRIMARY KEY,
-                coins INTEGER DEFAULT 50,
-                xp INTEGER DEFAULT 0,
-                level INTEGER DEFAULT 1,
-                reputation INTEGER DEFAULT 0,
-                bank INTEGER DEFAULT 0,
-                last_daily DATE,
-                last_weekly DATE,
-                last_monthly DATE,
-                inventory TEXT DEFAULT '{}',
-                achievements TEXT DEFAULT '[]',
-                settings TEXT DEFAULT '{}',
-                join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                total_messages INTEGER DEFAULT 0,
-                voice_time INTEGER DEFAULT 0,
-                warnings INTEGER DEFAULT 0
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS users (
+                user_id {integer_type} PRIMARY KEY,
+                coins {integer_type} DEFAULT 50,
+                xp {integer_type} DEFAULT 0,
+                level {integer_type} DEFAULT 1,
+                reputation {integer_type} DEFAULT 0,
+                bank {integer_type} DEFAULT 0,
+                last_daily {date_type},
+                last_weekly {date_type},
+                last_monthly {date_type},
+                inventory {text_type} DEFAULT '{{}}',
+                achievements {text_type} DEFAULT '[]',
+                settings {text_type} DEFAULT '{{}}',
+                join_date {timestamp_type},
+                total_messages {integer_type} DEFAULT 0,
+                voice_time {integer_type} DEFAULT 0,
+                warnings {integer_type} DEFAULT 0
             )''')
 
             # Guild settings
-            cursor.execute('''CREATE TABLE IF NOT EXISTS guilds (
-                guild_id INTEGER PRIMARY KEY,
-                name TEXT,
-                prefix TEXT DEFAULT 'RX',
-                welcome_channel INTEGER,
-                goodbye_channel INTEGER,
-                log_channel INTEGER,
-                mute_role INTEGER,
-                auto_role INTEGER,
-                settings TEXT DEFAULT '{}',
-                economy_settings TEXT DEFAULT '{}',
-                moderation_settings TEXT DEFAULT '{}'
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS guilds (
+                guild_id {integer_type} PRIMARY KEY,
+                name {text_type},
+                prefix {text_type} DEFAULT 'RX',
+                welcome_channel {integer_type},
+                goodbye_channel {integer_type},
+                log_channel {integer_type},
+                mute_role {integer_type},
+                auto_role {integer_type},
+                settings {text_type} DEFAULT '{{}}',
+                economy_settings {text_type} DEFAULT '{{}}',
+                moderation_settings {text_type} DEFAULT '{{}}'
             )''')
 
             # Events system
-            cursor.execute('''CREATE TABLE IF NOT EXISTS events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                creator_id INTEGER,
-                title TEXT,
-                description TEXT,
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS events (
+                id {auto_increment},
+                guild_id {integer_type},
+                creator_id {integer_type},
+                title {text_type},
+                description {text_type},
                 start_time TIMESTAMP,
                 end_time TIMESTAMP,
-                max_participants INTEGER DEFAULT 0,
-                participants TEXT DEFAULT '[]',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status TEXT DEFAULT 'active'
+                max_participants {integer_type} DEFAULT 0,
+                participants {text_type} DEFAULT '[]',
+                created_at {timestamp_type},
+                status {text_type} DEFAULT 'active'
             )''')
 
             # Moderation logs
-            cursor.execute('''CREATE TABLE IF NOT EXISTS moderation_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                user_id INTEGER,
-                moderator_id INTEGER,
-                action TEXT,
-                reason TEXT,
-                duration INTEGER,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS moderation_logs (
+                id {auto_increment},
+                guild_id {integer_type},
+                user_id {integer_type},
+                moderator_id {integer_type},
+                action {text_type},
+                reason {text_type},
+                duration {integer_type},
+                timestamp {timestamp_type}
             )''')
 
             # Economy transactions
-            cursor.execute('''CREATE TABLE IF NOT EXISTS transactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                guild_id INTEGER,
-                type TEXT,
-                amount INTEGER,
-                description TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS transactions (
+                id {auto_increment},
+                user_id {integer_type},
+                guild_id {integer_type},
+                type {text_type},
+                amount {integer_type},
+                description {text_type},
+                timestamp {timestamp_type}
             )''')
 
             # Message logs (simplified)
-            cursor.execute('''CREATE TABLE IF NOT EXISTS message_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                channel_id INTEGER,
-                user_id INTEGER,
-                message_id INTEGER,
-                content TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS message_logs (
+                id {auto_increment},
+                guild_id {integer_type},
+                channel_id {integer_type},
+                user_id {integer_type},
+                message_id {integer_type},
+                content {text_type},
+                timestamp {timestamp_type}
             )''')
 
             # Custom commands
-            cursor.execute('''CREATE TABLE IF NOT EXISTS custom_commands (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                command_name TEXT,
-                response TEXT,
-                creator_id INTEGER,
-                uses INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS custom_commands (
+                id {auto_increment},
+                guild_id {integer_type},
+                command_name {text_type},
+                response {text_type},
+                creator_id {integer_type},
+                uses {integer_type} DEFAULT 0,
+                created_at {timestamp_type}
             )''')
 
             # Sistema de Clans
-            cursor.execute('''CREATE TABLE IF NOT EXISTS clans (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                name TEXT,
-                tag TEXT,
-                leader_id INTEGER,
-                description TEXT,
-                members TEXT DEFAULT '[]',
-                level INTEGER DEFAULT 1,
-                xp INTEGER DEFAULT 0,
-                wins INTEGER DEFAULT 0,
-                losses INTEGER DEFAULT 0,
-                treasury INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS clans (
+                id {auto_increment},
+                guild_id {integer_type},
+                name {text_type},
+                tag {text_type},
+                leader_id {integer_type},
+                description {text_type},
+                members {text_type} DEFAULT '[]',
+                level {integer_type} DEFAULT 1,
+                xp {integer_type} DEFAULT 0,
+                wins {integer_type} DEFAULT 0,
+                losses {integer_type} DEFAULT 0,
+                treasury {integer_type} DEFAULT 0,
+                created_at {timestamp_type}
             )''')
 
             # Desafios entre Clans
-            cursor.execute('''CREATE TABLE IF NOT EXISTS clan_challenges (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                challenger_clan_id INTEGER,
-                challenged_clan_id INTEGER,
-                challenger_user_id INTEGER,
-                challenge_type TEXT,
-                bet_amount INTEGER DEFAULT 0,
-                status TEXT DEFAULT 'pending',
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS clan_challenges (
+                id {auto_increment},
+                guild_id {integer_type},
+                challenger_clan_id {integer_type},
+                challenged_clan_id {integer_type},
+                challenger_user_id {integer_type},
+                challenge_type {text_type},
+                bet_amount {integer_type} DEFAULT 0,
+                status {text_type} DEFAULT 'pending',
                 start_time TIMESTAMP,
                 end_time TIMESTAMP,
-                winner_clan_id INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                winner_clan_id {integer_type},
+                created_at {timestamp_type}
             )''')
 
             # Reminders
-            cursor.execute('''CREATE TABLE IF NOT EXISTS reminders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                guild_id INTEGER,
-                channel_id INTEGER,
-                reminder_text TEXT,
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS reminders (
+                id {auto_increment},
+                user_id {integer_type},
+                guild_id {integer_type},
+                channel_id {integer_type},
+                reminder_text {text_type},
                 remind_time TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at {timestamp_type}
             )''')
 
             # Sistema de sorteios
-            cursor.execute('''CREATE TABLE IF NOT EXISTS giveaways (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                channel_id INTEGER,
-                creator_id INTEGER,
-                title TEXT,
-                prize TEXT,
-                winners_count INTEGER DEFAULT 1,
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS giveaways (
+                id {auto_increment},
+                guild_id {integer_type},
+                channel_id {integer_type},
+                creator_id {integer_type},
+                title {text_type},
+                prize {text_type},
+                winners_count {integer_type} DEFAULT 1,
                 end_time TIMESTAMP,
-                message_id INTEGER,
-                participants TEXT DEFAULT '[]',
-                status TEXT DEFAULT 'active',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                message_id {integer_type},
+                participants {text_type} DEFAULT '[]',
+                status {text_type} DEFAULT 'active',
+                created_at {timestamp_type}
             )''')
 
             # Auto-moderation rules
-            cursor.execute('''CREATE TABLE IF NOT EXISTS auto_mod_rules (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                rule_type TEXT,
-                rule_data TEXT,
-                punishment TEXT,
-                enabled INTEGER DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS auto_mod_rules (
+                id {auto_increment},
+                guild_id {integer_type},
+                rule_type {text_type},
+                rule_data {text_type},
+                punishment {text_type},
+                enabled {integer_type} DEFAULT 1,
+                created_at {timestamp_type}
             )''')
 
             # Tabela de eventos de clan
-            cursor.execute('''CREATE TABLE IF NOT EXISTS clan_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                creator_id INTEGER,
-                clan1 TEXT,
-                clan2 TEXT,
-                event_type TEXT,
-                bet_amount INTEGER,
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS clan_events (
+                id {auto_increment},
+                guild_id {integer_type},
+                creator_id {integer_type},
+                clan1 {text_type},
+                clan2 {text_type},
+                event_type {text_type},
+                bet_amount {integer_type},
                 end_time TIMESTAMP,
-                message_id INTEGER,
-                participants TEXT DEFAULT '[]',
-                bets TEXT DEFAULT '{}',
-                status TEXT DEFAULT 'active',
-                winner_clan TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                message_id {integer_type},
+                participants {text_type} DEFAULT '[]',
+                bets {text_type} DEFAULT '{{}}',
+                status {text_type} DEFAULT 'active',
+                winner_clan {text_type},
+                created_at {timestamp_type}
             )''')
 
             # Tabela de feedback de tickets
-            cursor.execute('''CREATE TABLE IF NOT EXISTS ticket_feedback (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticket_channel_id INTEGER,
-                user_id INTEGER,
-                feedback_text TEXT,
-                notas TEXT,
-                media_nota INTEGER,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS ticket_feedback (
+                id {auto_increment},
+                ticket_channel_id {integer_type},
+                user_id {integer_type},
+                feedback_text {text_type},
+                notas {text_type},
+                media_nota {integer_type},
+                timestamp {timestamp_type}
             )''')
 
             # Tabela de logs de comandos
-            cursor.execute('''CREATE TABLE IF NOT EXISTS command_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                command TEXT,
-                guild_id INTEGER,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS command_logs (
+                id {auto_increment},
+                user_id {integer_type},
+                command {text_type},
+                guild_id {integer_type},
+                timestamp {timestamp_type}
             )''')
 
             # Tabela de copinhas Stumble Guys
-            cursor.execute('''CREATE TABLE IF NOT EXISTS copinhas (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                creator_id INTEGER,
-                channel_id INTEGER,
-                message_id INTEGER,
-                title TEXT,
-                map_name TEXT,
-                team_format TEXT,
-                max_players INTEGER,
-                participants TEXT DEFAULT '[]',
-                current_round TEXT DEFAULT 'inscricoes',
-                matches TEXT DEFAULT '[]',
-                status TEXT DEFAULT 'active',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS copinhas (
+                id {auto_increment},
+                guild_id {integer_type},
+                creator_id {integer_type},
+                channel_id {integer_type},
+                message_id {integer_type},
+                title {text_type},
+                map_name {text_type},
+                team_format {text_type},
+                max_players {integer_type},
+                participants {text_type} DEFAULT '[]',
+                current_round {text_type} DEFAULT 'inscricoes',
+                matches {text_type} DEFAULT '[]',
+                status {text_type} DEFAULT 'active',
+                created_at {timestamp_type}
             )''')
 
             # Tabela de partidas da copinha
-            cursor.execute('''CREATE TABLE IF NOT EXISTS copinha_matches (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                copinha_id INTEGER,
-                round_name TEXT,
-                match_number INTEGER,
-                players TEXT DEFAULT '[]',
-                winner_id INTEGER,
-                ticket_channel_id INTEGER,
-                status TEXT DEFAULT 'waiting',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS copinha_matches (
+                id {auto_increment},
+                copinha_id {integer_type},
+                round_name {text_type},
+                match_number {integer_type},
+                players {text_type} DEFAULT '[]',
+                winner_id {integer_type},
+                ticket_channel_id {integer_type},
+                status {text_type} DEFAULT 'waiting',
+                created_at {timestamp_type}
             )''')
 
             conn.commit()
@@ -776,35 +863,31 @@ async def backup_database():
 async def check_reminders():
     """Verifica lembretes"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
+        now = datetime.datetime.now()
+        reminders = execute_query('SELECT * FROM reminders WHERE remind_time <= ?', (now,), fetch_all=True)
+        
+        if not reminders:
+            return
 
-            now = datetime.datetime.now()
-            cursor.execute('SELECT * FROM reminders WHERE remind_time <= ?', (now,))
-            reminders = cursor.fetchall()
+        for reminder in reminders:
+            reminder_id, user_id, guild_id, channel_id, text, remind_time, created_at = reminder
 
-            for reminder in reminders:
-                reminder_id, user_id, guild_id, channel_id, text, remind_time, created_at = reminder
+            try:
+                channel = bot.get_channel(channel_id)
+                user = bot.get_user(user_id)
 
-                try:
-                    channel = bot.get_channel(channel_id)
-                    user = bot.get_user(user_id)
+                if channel and user:
+                    embed = create_embed(
+                        "⏰ Lembrete!",
+                        f"**{user.mention}** você pediu para eu lembrar:\n\n{text}",
+                        color=0xffaa00
+                    )
+                    await channel.send(embed=embed)
 
-                    if channel and user:
-                        embed = create_embed(
-                            "⏰ Lembrete!",
-                            f"**{user.mention}** você pediu para eu lembrar:\n\n{text}",
-                            color=0xffaa00
-                        )
-                        await channel.send(embed=embed)
+                execute_query('DELETE FROM reminders WHERE id = ?', (reminder_id,))
+            except Exception as e:
+                logger.error(f"Erro ao enviar lembrete {reminder_id}: {e}")
 
-                    cursor.execute('DELETE FROM reminders WHERE id = ?', (reminder_id,))
-                except Exception as e:
-                    logger.error(f"Erro ao enviar lembrete {reminder_id}: {e}")
-
-            conn.commit()
-            conn.close()
     except Exception as e:
         logger.error(f"Erro check_reminders: {e}")
 
@@ -812,126 +895,121 @@ async def check_reminders():
 async def check_giveaways():
     """Verifica sorteios que terminaram"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
+        now = datetime.datetime.now()
+        finished_giveaways = execute_query(
+            'SELECT * FROM giveaways WHERE status = ? AND end_time <= ?', 
+            ('active', now), 
+            fetch_all=True
+        )
+        
+        if not finished_giveaways:
+            return
 
-            now = datetime.datetime.now()
-            cursor.execute('''
-                SELECT * FROM giveaways 
-                WHERE status = 'active' AND end_time <= ?
-            ''', (now,))
+        for giveaway in finished_giveaways:
+            giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, participants_json, status, created_at = giveaway
 
-            finished_giveaways = cursor.fetchall()
+            try:
+                channel = bot.get_channel(channel_id)
+                if not channel:
+                    continue
 
-            for giveaway in finished_giveaways:
-                giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, participants_json, status, created_at = giveaway
+                message = await channel.fetch_message(message_id)
+                if not message:
+                    continue
 
-                try:
-                    channel = bot.get_channel(channel_id)
-                    if not channel:
-                        continue
+                # Obter participantes das reações
+                participants = []
+                for reaction in message.reactions:
+                    if str(reaction.emoji) == "🎉":
+                        async for user in reaction.users():
+                            if not user.bot:
+                                participants.append(user.id)
 
-                    message = await channel.fetch_message(message_id)
-                    if not message:
-                        continue
+                if len(participants) < winners_count:
+                    winners = participants
+                else:
+                    winners = random.sample(participants, winners_count)
 
-                    # Obter participantes das reações
-                    participants = []
-                    for reaction in message.reactions:
-                        if str(reaction.emoji) == "🎉":
-                            async for user in reaction.users():
-                                if not user.bot:
-                                    participants.append(user.id)
+                # Verificar se é sorteio de coins e distribuir automaticamente
+                bet_result = execute_query('SELECT bet_amount FROM giveaways WHERE id = ?', (giveaway_id,), fetch_one=True)
+                coin_amount = bet_result[0] if bet_result and bet_result[0] else 0
 
-                    if len(participants) < winners_count:
-                        winners = participants
-                    else:
-                        winners = random.sample(participants, winners_count)
+                if winners:
+                    winner_mentions = []
 
-                    # Verificar se é sorteio de coins e distribuir automaticamente
-                    cursor.execute('SELECT bet_amount FROM giveaways WHERE id = ?', (giveaway_id,))
-                    bet_result = cursor.fetchone()
-                    coin_amount = bet_result[0] if bet_result and bet_result[0] else 0
+                    # Se é sorteio de coins, distribuir automaticamente
+                    if coin_amount > 0 and "coins" in prize.lower():
+                        coins_per_winner = coin_amount // len(winners)
 
-                    if winners:
-                        winner_mentions = []
+                        for winner_id in winners:
+                            # Adicionar coins usando execute_query
+                            winner_data = get_user_data(winner_id)
+                            if not winner_data:
+                                update_user_data(winner_id)
+                                current_coins = 50
+                            else:
+                                current_coins = winner_data[1]
 
-                        # Se é sorteio de coins, distribuir automaticamente
-                        if coin_amount > 0 and "coins" in prize.lower():
-                            coins_per_winner = coin_amount // len(winners)
+                            new_coins = current_coins + coins_per_winner
+                            execute_query('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, winner_id))
 
-                            for winner_id in winners:
-                                # Adicionar coins ao vencedor
-                                winner_data = get_user_data(winner_id)
-                                if not winner_data:
-                                    update_user_data(winner_id)
-                                    current_coins = 50
-                                else:
-                                    current_coins = winner_data[1]
+                            # Registrar transação
+                            execute_query('''
+                                INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                                VALUES (?, ?, ?, ?, ?)
+                            ''', (winner_id, guild_id, 'giveaway_win', coins_per_winner, f"Ganhou sorteio: {title}"))
 
-                                new_coins = current_coins + coins_per_winner
-                                cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, winner_id))
+                            winner_mentions.append(f"<@{winner_id}>")
 
-                                # Registrar transação
-                                cursor.execute('''
-                                    INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                                    VALUES (?, ?, ?, ?, ?)
-                                ''', (winner_id, guild_id, 'giveaway_win', coins_per_winner, f"Ganhou sorteio: {title}"))
+                            # Notificar vencedor por DM
+                            try:
+                                winner_user = bot.get_user(winner_id)
+                                if winner_user:
+                                    dm_embed = create_embed(
+                                        "🎉 Você Ganhou!",
+                                        f"Parabéns! Você ganhou **{coins_per_winner:,} coins** no sorteio **{title}**!\n\n"
+                                        f"Os coins foram automaticamente adicionados ao seu saldo.",
+                                        color=0xffd700
+                                    )
+                                    await winner_user.send(embed=dm_embed)
+                            except:
+                                pass
 
-                                winner_mentions.append(f"<@{winner_id}>")
-
-                                # Notificar vencedor por DM
-                                try:
-                                    winner_user = bot.get_user(winner_id)
-                                    if winner_user:
-                                        dm_embed = create_embed(
-                                            "🎉 Você Ganhou!",
-                                            f"Parabéns! Você ganhou **{coins_per_winner:,} coins** no sorteio **{title}**!\n\n"
-                                            f"Os coins foram automaticamente adicionados ao seu saldo.",
-                                            color=0xffd700
-                                        )
-                                        await winner_user.send(embed=dm_embed)
-                                except:
-                                    pass
-
-                            embed = create_embed(
-                                f"🎉 Sorteio de Coins Finalizado: {title}",
-                                f"**💰 Prêmio:** {coin_amount:,} coins\n"
-                                f"**🏆 Vencedor(es):** {', '.join(winner_mentions)}\n"
-                                f"**💰 Coins por vencedor:** {coins_per_winner:,} coins\n"
-                                f"**👥 Participantes:** {len(participants)}\n\n"
-                                f"**✅ Os coins foram automaticamente adicionados aos saldos dos vencedores!**",
-                                color=0xffd700
-                            )
-                        else:
-                            # Sorteio normal (não de coins)
-                            winner_mentions = [f"<@{winner_id}>" for winner_id in winners]
-                            embed = create_embed(
-                                f"🎉 Sorteio Finalizado: {title}",
-                                f"**🎁 Prêmio:** {prize}\n"
-                                f"**🏆 Vencedor(es):** {', '.join(winner_mentions)}\n"
-                                f"**👥 Participantes:** {len(participants)}",
-                                color=0xffd700
-                            )
-                    else:
                         embed = create_embed(
-                            f"😢 Sorteio Cancelado: {title}",
-                            f"**🎁 Prêmio:** {prize}\n"
-                            f"**❌ Motivo:** Nenhum participante válido",
-                            color=0xff6b6b
+                            f"🎉 Sorteio de Coins Finalizado: {title}",
+                            f"**💰 Prêmio:** {coin_amount:,} coins\n"
+                            f"**🏆 Vencedor(es):** {', '.join(winner_mentions)}\n"
+                            f"**💰 Coins por vencedor:** {coins_per_winner:,} coins\n"
+                            f"**👥 Participantes:** {len(participants)}\n\n"
+                            f"**✅ Os coins foram automaticamente adicionados aos saldos dos vencedores!**",
+                            color=0xffd700
                         )
+                    else:
+                        # Sorteio normal (não de coins)
+                        winner_mentions = [f"<@{winner_id}>" for winner_id in winners]
+                        embed = create_embed(
+                            f"🎉 Sorteio Finalizado: {title}",
+                            f"**🎁 Prêmio:** {prize}\n"
+                            f"**🏆 Vencedor(es):** {', '.join(winner_mentions)}\n"
+                            f"**👥 Participantes:** {len(participants)}",
+                            color=0xffd700
+                        )
+                else:
+                    embed = create_embed(
+                        f"😢 Sorteio Cancelado: {title}",
+                        f"**🎁 Prêmio:** {prize}\n"
+                        f"**❌ Motivo:** Nenhum participante válido",
+                        color=0xff6b6b
+                    )
 
-                    await channel.send(embed=embed)
+                await channel.send(embed=embed)
 
-                    # Marcar como finalizado
-                    cursor.execute('UPDATE giveaways SET status = ? WHERE id = ?', ('finished', giveaway_id))
+                # Marcar como finalizado
+                execute_query('UPDATE giveaways SET status = ? WHERE id = ?', ('finished', giveaway_id))
 
-                except Exception as e:
-                    logger.error(f"Erro ao finalizar sorteio {giveaway_id}: {e}")
+            except Exception as e:
+                logger.error(f"Erro ao finalizar sorteio {giveaway_id}: {e}")
 
-            conn.commit()
-            conn.close()
     except Exception as e:
         logger.error(f"Erro check_giveaways: {e}")
 
@@ -1326,7 +1404,7 @@ async def slash_copinha(interaction: discord.Interaction):
         # Abrir modal de configuração
         modal = CopinhaConfigModal()
         await interaction.response.send_modal(modal)
-        
+
     except Exception as e:
         logger.error(f"Erro no comando copinha: {e}")
         error_embed = create_embed("❌ Erro", "Erro ao criar copinha!", color=0xff0000)
@@ -6798,7 +6876,7 @@ class CopinhaConfigModal(discord.ui.Modal, title="🏆 Configurar Copinha Stumbl
                 'perfect match': '🎮',
                 'fall mountain': '🏔️'
             }
-            
+
             mapa_emoji = '🗺️'
             for mapa_nome, emoji in mapas_emojis.items():
                 if mapa_nome in self.mapa.value.lower():
@@ -6828,7 +6906,7 @@ class CopinhaConfigModal(discord.ui.Modal, title="🏆 Configurar Copinha Stumbl
             # Criar view com botão de participar
             view = CopinhaParticipationView()
             await interaction.response.send_message(embed=embed, view=view)
-            
+
             # Buscar a mensagem criada
             message = await interaction.original_response()
 
@@ -6840,10 +6918,10 @@ class CopinhaConfigModal(discord.ui.Modal, title="🏆 Configurar Copinha Stumbl
                     INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (interaction.guild.id, interaction.user.id, interaction.channel.id, message.id, self.titulo.value, self.mapa.value, self.formato.value, max_players))
-                
+
                 copinha_id = cursor.lastrowid
                 view.copinha_id = copinha_id  # Passar o ID para a view
-                
+
                 conn.commit()
                 conn.close()
 
@@ -6868,7 +6946,7 @@ class CopinhaParticipationView(discord.ui.View):
                 cursor = conn.cursor()
                 cursor.execute('SELECT * FROM copinhas WHERE message_id = ? AND status = "active"', (interaction.message.id,))
                 copinha = cursor.fetchone()
-                
+
                 if not copinha:
                     await interaction.response.send_message("❌ Copinha não encontrada ou já finalizada!", ephemeral=True)
                     conn.close()
@@ -6879,7 +6957,7 @@ class CopinhaParticipationView(discord.ui.View):
                     participants = json.loads(copinha[9]) if copinha[9] else []
                 except (json.JSONDecodeError, TypeError):
                     participants = []
-                
+
                 # Verificar se já está inscrito
                 if interaction.user.id in participants:
                     await interaction.response.send_message("❌ Você já está inscrito nesta copinha!", ephemeral=True)
@@ -6906,7 +6984,7 @@ class CopinhaParticipationView(discord.ui.View):
                 'gate crash': '🚪', 'hit parade': '🎯', 'the whirlygig': '🌀',
                 'see saw': '⚖️', 'tip toe': '👣', 'perfect match': '🎮', 'fall mountain': '🏔️'
             }
-            
+
             for mapa_nome, emoji in mapas_emojis.items():
                 if mapa_nome in copinha[6].lower():  # map_name (índice 6)
                     mapa_emoji = emoji
@@ -6935,7 +7013,7 @@ class CopinhaParticipationView(discord.ui.View):
                 # Desabilitar botão se lotou
                 button.disabled = True
                 await interaction.response.edit_message(embed=embed, view=self)
-                
+
                 # Iniciar criação dos brackets/tickets
                 await self.create_tournament_brackets(interaction, copinha, participants)
             else:
@@ -6952,11 +7030,11 @@ class CopinhaParticipationView(discord.ui.View):
             # Embaralhar participantes para brackets aleatórios
             import random
             random.shuffle(participants)
-            
+
             # Calcular rounds necessários
             import math
             total_rounds = int(math.log2(len(participants)))
-            
+
             # Criar primeira fase
             matches = []
             for i in range(0, len(participants), 2):
@@ -6971,13 +7049,13 @@ class CopinhaParticipationView(discord.ui.View):
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                
+
                 for match in matches:
                     cursor.execute('''
                         INSERT INTO copinha_matches (copinha_id, round_name, match_number, players)
                         VALUES (?, ?, ?, ?)
                     ''', (copinha[0], match['round'], match['match_number'], json.dumps(match['players'])))
-                
+
                 # Atualizar status da copinha
                 cursor.execute('UPDATE copinhas SET current_round = ?, status = ? WHERE id = ?', 
                               ('Primeira Fase', 'running', copinha[0]))
@@ -6993,14 +7071,14 @@ class CopinhaParticipationView(discord.ui.View):
     async def create_match_tickets(self, interaction, copinha, matches):
         try:
             guild = interaction.guild
-            
+
             # Buscar categoria de tickets ou criar
             ticket_category = None
             for category in guild.categories:
                 if 'ticket' in category.name.lower() or 'copinha' in category.name.lower():
                     ticket_category = category
                     break
-            
+
             if not ticket_category:
                 ticket_category = await guild.create_category(f"🏆 Copinha {copinha[5][:20]}")
 
@@ -7011,14 +7089,14 @@ class CopinhaParticipationView(discord.ui.View):
                     guild.default_role: discord.PermissionOverwrite(read_messages=False),
                     guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
                 }
-                
+
                 # Dar permissão aos jogadores
                 for player_id in match['players']:
                     member = guild.get_member(player_id)
                     if member:
                         overwrites[member] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
                         player_names.append(member.display_name)
-                
+
                 # Dar permissão a moderadores
                 for role in guild.roles:
                     if any(perm_name in role.name.lower() for perm_name in ['mod', 'admin', 'staff']):
@@ -7042,14 +7120,14 @@ class CopinhaParticipationView(discord.ui.View):
 
                 # Criar embed da partida
                 players_text = " vs ".join([f"<@{pid}>" for pid in match['players']])
-                
+
                 mapa_emoji = '🗺️'
                 mapas_emojis = {
                     'block dash': '🧱', 'super slide': '🛝', 'dizzy heights': '🌪️',
                     'gate crash': '🚪', 'hit parade': '🎯', 'the whirlygig': '🌀',
                     'see saw': '⚖️', 'tip toe': '👣', 'perfect match': '🎮', 'fall mountain': '🏔️'
                 }
-                
+
                 for mapa_nome, emoji in mapas_emojis.items():
                     if mapa_nome in copinha[6].lower():
                         mapa_emoji = emoji
@@ -7118,7 +7196,7 @@ class MatchResultView(discord.ui.View):
                 return
 
             players = json.loads(result[0])
-            
+
             # Criar select com os jogadores
             select = discord.ui.Select(
                 placeholder="Escolha o vencedor da partida...",
@@ -7136,7 +7214,7 @@ class MatchResultView(discord.ui.View):
             select.callback = select_winner_callback
             view = discord.ui.View()
             view.add_item(select)
-            
+
             await interaction.response.send_message("🏆 Selecione o vencedor da partida:", view=view, ephemeral=True)
 
         except Exception as e:
@@ -7151,24 +7229,24 @@ class MatchResultView(discord.ui.View):
                 cursor = conn.cursor()
                 cursor.execute('UPDATE copinha_matches SET winner_id = ?, status = ? WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
                               (winner_id, 'completed', self.copinha_id, self.match_number, self.round_name))
-                
+
                 # Buscar dados da copinha e partida
                 cursor.execute('SELECT * FROM copinhas WHERE id = ?', (self.copinha_id,))
                 copinha = cursor.fetchone()
-                
+
                 cursor.execute('SELECT players FROM copinha_matches WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
                               (self.copinha_id, self.match_number, self.round_name))
                 match_result = cursor.fetchone()
-                
+
                 conn.commit()
                 conn.close()
 
             winner = interaction.guild.get_member(winner_id)
             players = json.loads(match_result[0])
-            
+
             # Atualizar embed do canal
             players_text = " vs ".join([f"<@{pid}>" for pid in players])
-            
+
             embed = create_embed(
                 f"🏆 {copinha[5]} - {self.round_name}",
                 f"""**🥊 Partida #{self.match_number}** ✅
@@ -7190,7 +7268,7 @@ class MatchResultView(discord.ui.View):
                 item.disabled = True
 
             await interaction.response.edit_message(content=f"✅ Vencedor definido: {winner.mention}!", view=None)
-            
+
             # Atualizar o embed da partida
             original_channel = interaction.guild.get_channel(interaction.channel.id)
             if original_channel:
@@ -7211,24 +7289,24 @@ class MatchResultView(discord.ui.View):
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                
+
                 # Verificar quantas partidas desta fase estão completas
                 cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = ? AND round_name = ? AND status = "completed"',
                               (self.copinha_id, self.round_name))
                 completed = cursor.fetchone()[0]
-                
+
                 cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = ? AND round_name = ?',
                               (self.copinha_id, self.round_name))
                 total = cursor.fetchone()[0]
-                
+
                 if completed == total:
                     # Todas as partidas terminaram, criar próxima fase
                     cursor.execute('SELECT winner_id FROM copinha_matches WHERE copinha_id = ? AND round_name = ? AND status = "completed"',
                                   (self.copinha_id, self.round_name))
                     winners = [row[0] for row in cursor.fetchall()]
-                    
+
                     conn.close()
-                    
+
                     if len(winners) == 1:
                         # Final! Anunciar vencedor
                         await self.announce_tournament_winner(interaction, copinha, winners[0])
@@ -7249,9 +7327,9 @@ class MatchResultView(discord.ui.View):
                 'Quartas de Final': 'Semifinal',
                 'Semifinal': 'Final'
             }
-            
+
             next_round = round_names.get(self.round_name, 'Próxima Fase')
-            
+
             # Criar partidas da próxima fase
             matches = []
             for i in range(0, len(winners), 2):
@@ -7263,21 +7341,25 @@ class MatchResultView(discord.ui.View):
                     }
                     matches.append(match)
 
-            # Salvar no banco
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                
-                for match in matches:
-                    cursor.execute('''
-                        INSERT INTO copinha_matches (copinha_id, round_name, match_number, players)
-                        VALUES (?, ?, ?, ?)
-                    ''', (self.copinha_id, match['round'], match['match_number'], json.dumps(match['players'])))
-                
-                cursor.execute('UPDATE copinhas SET current_round = ? WHERE id = ?', 
-                              (next_round, self.copinha_id))
-                conn.commit()
-                conn.close()
+            # Salvar no banco usando threading.current_thread para verificar se é thread principal
+            def save_matches():
+                with db_lock:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+
+                    for match in matches:
+                        cursor.execute('''
+                            INSERT INTO copinha_matches (copinha_id, round_name, match_number, players)
+                            VALUES (?, ?, ?, ?)
+                        ''', (self.copinha_id, match['round'], match['match_number'], json.dumps(match['players'])))
+
+                    cursor.execute('UPDATE copinhas SET current_round = ? WHERE id = ?', 
+                                  (next_round, self.copinha_id))
+                    conn.commit()
+                    conn.close()
+            
+            # Executar em thread separada para evitar deadlock
+            await asyncio.get_event_loop().run_in_executor(None, save_matches)
 
             # Criar tickets para próxima fase
             guild = interaction.guild
@@ -7290,13 +7372,13 @@ class MatchResultView(discord.ui.View):
                     guild.default_role: discord.PermissionOverwrite(read_messages=False),
                     guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
                 }
-                
+
                 for player_id in match['players']:
                     member = guild.get_member(player_id)
                     if member:
                         overwrites[member] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
                         player_names.append(member.display_name)
-                
+
                 # Dar permissão a moderadores
                 for role in guild.roles:
                     if any(perm_name in role.name.lower() for perm_name in ['mod', 'admin', 'staff']):
@@ -7310,17 +7392,21 @@ class MatchResultView(discord.ui.View):
                 )
 
                 # Salvar canal no banco
-                with db_lock:
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute('UPDATE copinha_matches SET ticket_channel_id = ? WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
-                                  (match_channel.id, self.copinha_id, match['match_number'], next_round))
-                    conn.commit()
-                    conn.close()
+                def save_channel_id():
+                    with db_lock:
+                        conn = get_db_connection()
+                        cursor = conn.cursor()
+                        cursor.execute('UPDATE copinha_matches SET ticket_channel_id = ? WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
+                                      (match_channel.id, self.copinha_id, match['match_number'], next_round))
+                        conn.commit()
+                        conn.close()
+                
+                # Executar em thread separada para evitar deadlock
+                await asyncio.get_event_loop().run_in_executor(None, save_channel_id)
 
                 # Embed da nova partida
                 players_text = " vs ".join([f"<@{pid}>" for pid in match['players']])
-                
+
                 embed = create_embed(
                     f"🏆 {copinha[5]} - {next_round}",
                     f"""**🥊 {next_round} - Partida #{match['match_number']}**
@@ -7358,7 +7444,7 @@ class MatchResultView(discord.ui.View):
     async def announce_tournament_winner(self, interaction, copinha, winner_id):
         try:
             winner = interaction.guild.get_member(winner_id)
-            
+
             # Atualizar status da copinha
             with db_lock:
                 conn = get_db_connection()
@@ -13980,6 +14066,214 @@ async def on_command_error(ctx, error):
 
 # Sistemas de restart automático removidos para economizar recursos
 
+# ==================== DASHBOARD WEB FLASK ====================
+
+# Configuração Flask
+app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'rxbot-dashboard-secret-key')
+
+def get_guild_stats():
+    """Obter estatísticas dos servidores"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Total de usuários
+            cursor.execute('SELECT COUNT(*) FROM users')
+            result = cursor.fetchone()
+            total_users = result[0] if result else 0
+            
+            # Total de servidores
+            cursor.execute('SELECT COUNT(*) FROM guilds')
+            result = cursor.fetchone()
+            total_guilds = result[0] if result else 0
+            
+            # Total de tickets
+            cursor.execute('SELECT COUNT(*) FROM tickets')
+            result = cursor.fetchone()
+            total_tickets = result[0] if result else 0
+            
+            # Total de eventos
+            cursor.execute('SELECT COUNT(*) FROM events WHERE status = "active"')
+            result = cursor.fetchone()
+            active_events = result[0] if result else 0
+            
+            # Total de copinhas - verificar se tabela existe
+            try:
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='copinhas'")
+                if cursor.fetchone():
+                    cursor.execute('SELECT COUNT(*) FROM copinhas WHERE status = "active"')
+                    result = cursor.fetchone()
+                    active_copinhas = result[0] if result else 0
+                else:
+                    active_copinhas = 0
+            except:
+                active_copinhas = 0
+            
+            conn.close()
+            return {
+                'total_users': total_users,
+                'total_guilds': total_guilds,
+                'total_tickets': total_tickets,
+                'active_events': active_events,
+                'active_copinhas': active_copinhas
+            }
+    except Exception as e:
+        logger.error(f"Erro ao obter estatísticas: {e}")
+        return {
+            'total_users': 0,
+            'total_guilds': 0,
+            'total_tickets': 0,
+            'active_events': 0,
+            'active_copinhas': 0
+        }
+
+@app.route('/')
+def dashboard():
+    """Página principal do dashboard"""
+    stats = get_guild_stats()
+    return render_template('dashboard.html', stats=stats)
+
+@app.route('/api/stats')
+def api_stats():
+    """API para obter estatísticas em tempo real"""
+    stats = get_guild_stats()
+    return jsonify(stats)
+
+@app.route('/users')
+def users_page():
+    """Página de usuários"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT user_id, coins, xp, level, reputation, bank, 
+                       last_daily, total_messages, warnings 
+                FROM users 
+                ORDER BY xp DESC 
+                LIMIT 50
+            ''')
+            
+            users = cursor.fetchall()
+            conn.close()
+            
+            return render_template('users.html', users=users)
+    except Exception as e:
+        logger.error(f"Erro ao carregar usuários: {e}")
+        return render_template('users.html', users=[])
+
+@app.route('/tickets')
+def tickets_page():
+    """Página de tickets"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT ticket_id, guild_id, creator_id, channel_id, 
+                       status, created_at, closed_by, reason 
+                FROM tickets 
+                ORDER BY created_at DESC 
+                LIMIT 50
+            ''')
+            
+            tickets = cursor.fetchall()
+            conn.close()
+            
+            return render_template('tickets.html', tickets=tickets)
+    except Exception as e:
+        logger.error(f"Erro ao carregar tickets: {e}")
+        return render_template('tickets.html', tickets=[])
+
+@app.route('/copinhas')
+def copinhas_page():
+    """Página de copinhas/torneios"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Verificar se a tabela copinhas existe
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='copinhas'")
+            if cursor.fetchone():
+                cursor.execute('''
+                    SELECT id, guild_id, channel_id, creator_id, title, 
+                           map_name, format_type, status, participants, 
+                           current_round, created_at 
+                    FROM copinhas 
+                    ORDER BY created_at DESC 
+                    LIMIT 20
+                ''')
+                copinhas = cursor.fetchall()
+            else:
+                copinhas = []
+            
+            conn.close()
+            
+            return render_template('copinhas.html', copinhas=copinhas)
+    except Exception as e:
+        logger.error(f"Erro ao carregar copinhas: {e}")
+        return render_template('copinhas.html', copinhas=[])
+
+@app.route('/api/user/<int:user_id>')
+def api_user(user_id):
+    """API para obter dados específicos de um usuário"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+            user_data = cursor.fetchone()
+            
+            if user_data:
+                user_dict = {
+                    'user_id': user_data[0],
+                    'coins': user_data[1],
+                    'xp': user_data[2],
+                    'level': user_data[3],
+                    'reputation': user_data[4],
+                    'bank': user_data[5],
+                    'last_daily': user_data[6],
+                    'last_weekly': user_data[7],
+                    'last_monthly': user_data[8],
+                    'inventory': json.loads(user_data[9]) if user_data[9] else {},
+                    'achievements': json.loads(user_data[10]) if user_data[10] else [],
+                    'settings': json.loads(user_data[11]) if user_data[11] else {},
+                    'join_date': user_data[12],
+                    'total_messages': user_data[13],
+                    'voice_time': user_data[14],
+                    'warnings': user_data[15]
+                }
+                
+                conn.close()
+                return jsonify(user_dict)
+            else:
+                conn.close()
+                return jsonify({'error': 'Usuário não encontrado'}), 404
+                
+    except Exception as e:
+        logger.error(f"Erro ao obter dados do usuário: {e}")
+        return jsonify({'error': 'Erro interno do servidor'}), 500
+
+def run_dashboard():
+    """Executar o dashboard Flask"""
+    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+
+def start_dashboard():
+    """Iniciar dashboard Flask em thread separada"""
+    try:
+        logger.info("🌐 Iniciando dashboard web na porta 5000...")
+        run_dashboard()
+    except Exception as e:
+        logger.error(f"❌ Erro no dashboard: {e}")
+
+# ==================== FIM DASHBOARD WEB ====================
+
 async def start_bot():
     """Sistema de inicialização simplificado"""
     token = os.getenv('TOKEN')
@@ -14008,7 +14302,18 @@ if __name__ == "__main__":
             print("❌ Configure a variável de ambiente TOKEN com o token do seu bot Discord")
             sys.exit(1)
 
-        logger.info("🚀 Iniciando RXbot...")
+        logger.info("🚀 Iniciando RXBot + Dashboard...")
+        
+        # Iniciar dashboard Flask em thread separada
+        dashboard_thread = threading.Thread(target=start_dashboard, daemon=True)
+        dashboard_thread.start()
+        
+        # Aguardar um pouco para o dashboard inicializar
+        time.sleep(2)
+        logger.info("✅ Dashboard iniciado!")
+        
+        # Iniciar bot Discord no loop principal
+        logger.info("🤖 Iniciando bot Discord...")
         asyncio.run(start_bot())
 
     except KeyboardInterrupt:
