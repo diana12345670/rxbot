@@ -14124,11 +14124,12 @@ def get_guild_stats():
 @app.route('/healthz')
 def health_check():
     """Endpoint de health check para Railway - liveness probe"""
-    return jsonify({
-        'status': 'healthy',
-        'service': 'discord-bot-rx',
-        'timestamp': datetime.datetime.now().isoformat()
-    })
+    return "OK", 200
+
+@app.route('/health')
+def health_check_alt():
+    """Endpoint alternativo de health check"""
+    return "OK", 200
 
 @app.route('/readyz')
 def readiness_check():
@@ -14163,17 +14164,7 @@ def readiness_check():
 @app.route('/')
 def root_health():
     """Root endpoint para compatibilidade"""
-    return jsonify({
-        'status': 'healthy',
-        'service': 'discord-bot-rx',
-        'timestamp': datetime.datetime.now().isoformat(),
-        'endpoints': {
-            'health': '/healthz',
-            'readiness': '/readyz', 
-            'dashboard': '/dashboard',
-            'api_stats': '/api/stats'
-        }
-    })
+    return "RX Bot - OK", 200
 
 @app.route('/dashboard')
 def dashboard():
@@ -14332,7 +14323,12 @@ def api_user(user_id):
 def run_dashboard():
     """Executar o dashboard Flask"""
     port = int(os.getenv('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+    print(f"🌐 Iniciando servidor Flask na porta {port}")
+    try:
+        app.run(host='0.0.0.0', port=port, debug=False, threaded=True, use_reloader=False)
+    except Exception as e:
+        print(f"❌ Erro ao iniciar Flask: {e}")
+        raise
 
 def start_dashboard():
     """Iniciar dashboard Flask em thread separada"""
@@ -14370,36 +14366,66 @@ if __name__ == "__main__":
         
         logger.info("🚀 Iniciando RXBot + Dashboard...")
 
+        # Detectar ambiente Railway
+        is_railway = os.getenv('RAILWAY_ENVIRONMENT_NAME') or os.getenv('RAILWAY_PROJECT_NAME')
+        
+        if is_railway:
+            print("🚂 Detectado ambiente Railway")
+            print(f"📍 Porta configurada: {os.getenv('PORT', '5000')}")
+            
+        # Sempre iniciar Flask primeiro (Railway precisa de resposta rápida)
+        print("🌐 Iniciando servidor Flask...")
+        
         if not token:
             logger.warning("⚠️ TOKEN não encontrado nas variáveis de ambiente!")
-            logger.info("🌐 Rodando apenas o servidor Flask para health check do Railway")
-            logger.info("📝 Configure a variável de ambiente TOKEN para habilitar o bot Discord")
+            logger.info("🌐 Rodando apenas o servidor Flask para health check")
             
-            # Rodar Flask em thread não-daemon para modo Flask-only
-            dashboard_thread = threading.Thread(target=start_dashboard, daemon=False)
-            dashboard_thread.start()
-            
-            # Aguardar thread do Flask (modo Flask-only)
+            # Modo Flask-only para Railway (thread não-daemon)
             try:
-                dashboard_thread.join()
+                run_dashboard()
             except KeyboardInterrupt:
                 logger.info("🛑 Servidor interrompido pelo usuário")
         else:
-            # Modo completo: inicializar banco e rodar bot + dashboard
-            logger.info("🎯 Inicializando base de dados...")
-            init_database()
+            # Modo completo: Flask + Bot Discord
+            logger.info("🎯 Inicializando sistema completo...")
             
-            # Iniciar dashboard Flask em thread separada (modo daemon para bot principal)
-            dashboard_thread = threading.Thread(target=start_dashboard, daemon=True)
+            # Inicializar banco em background
+            try:
+                init_database()
+                logger.info("✅ Database inicializado")
+            except Exception as e:
+                logger.warning(f"⚠️ Erro no database: {e}")
+            
+            # Iniciar Flask em thread separada
+            dashboard_thread = threading.Thread(target=run_dashboard, daemon=True)
             dashboard_thread.start()
-
-            # Aguardar um pouco para o dashboard inicializar
-            time.sleep(2)
-            logger.info("✅ Dashboard iniciado!")
             
-            # Iniciar bot Discord no loop principal
+            # Aguardar Flask inicializar
+            time.sleep(3)
+            
+            try:
+                # Testar se Flask está respondendo
+                import requests
+                response = requests.get(f"http://127.0.0.1:{os.getenv('PORT', '5000')}/healthz", timeout=5)
+                if response.status_code == 200:
+                    logger.info("✅ Flask está respondendo")
+                else:
+                    logger.warning(f"⚠️ Flask resposta: {response.status_code}")
+            except Exception as e:
+                logger.warning(f"⚠️ Não foi possível testar Flask: {e}")
+            
+            # Iniciar bot Discord
             logger.info("🤖 Iniciando bot Discord...")
-            asyncio.run(start_bot())
+            try:
+                asyncio.run(start_bot())
+            except Exception as e:
+                logger.error(f"❌ Erro no bot Discord: {e}")
+                # Manter Flask rodando mesmo se bot falhar
+                logger.info("🌐 Mantendo Flask ativo...")
+                try:
+                    dashboard_thread.join()
+                except KeyboardInterrupt:
+                    logger.info("🛑 Servidor interrompido pelo usuário")
 
     except KeyboardInterrupt:
         logger.info("🛑 Bot interrompido pelo usuário")
