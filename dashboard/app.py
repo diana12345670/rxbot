@@ -10,7 +10,7 @@ CORS(app)
 
 def get_db_connection():
     """Conectar ao banco de dados do bot"""
-    conn = sqlite3.connect('../rxbot.db')
+    conn = sqlite3.connect('rxbot.db')
     conn.row_factory = sqlite3.Row
     return conn
 
