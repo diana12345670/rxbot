@@ -252,11 +252,9 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=
                         is_postgres_conn = hasattr(conn, 'info')  # psycopg2 connections have info attribute
 
                         # Converter query para PostgreSQL se necessário
-                        if is_postgres_conn:
+                        if is_postgres_conn and '?' in query:
                             # Substituir ? por %s para PostgreSQL
                             query = query.replace('?', '%s')
-                            # Converter LIMIT para PostgreSQL (já está correto)
-                            # Não há necessidade de conversão adicional
 
                         if params:
                             cursor.execute(query, params)
@@ -266,8 +264,21 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=
                         result = None
                         if fetch_one:
                             result = cursor.fetchone()
+                            # Converter resultado PostgreSQL para formato compatível
+                            if result and is_postgres_conn:
+                                if hasattr(result, '_asdict'):
+                                    result = result._asdict()
                         elif fetch_all:
                             result = cursor.fetchall()
+                            # Converter resultados PostgreSQL para formato compatível
+                            if result and is_postgres_conn:
+                                converted_result = []
+                                for row in result:
+                                    if hasattr(row, '_asdict'):
+                                        converted_result.append(row._asdict())
+                                    else:
+                                        converted_result.append(row)
+                                result = converted_result
 
                         conn.commit()
                         return result
@@ -275,7 +286,7 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=
                     except Exception as e:
                         conn.rollback()
                         logger.error(f"Erro na query (tentativa {attempt + 1}): {e}")
-                        logger.error(f"Query: {query}")
+                        logger.error(f"Query convertida: {query}")
                         logger.error(f"Params: {params}")
                         if attempt == max_retries - 1:
                             raise e
@@ -874,17 +885,23 @@ async def update_status():
 async def backup_database():
     """Backup automático do banco de dados"""
     try:
+        # Pular backup no Railway/PostgreSQL por limitações
+        if is_production() and HAS_POSTGRESQL:
+            logger.info("⏭️ Backup desabilitado para PostgreSQL no Railway")
+            return
+            
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_name = f"backup_rxbot_{timestamp}.db"
 
         with db_lock:
             conn = get_db_connection()
-            backup_conn = sqlite3.connect(backup_name)
-            conn.backup(backup_conn)
+            if hasattr(conn, 'backup'):  # SQLite only
+                backup_conn = sqlite3.connect(backup_name)
+                conn.backup(backup_conn)
+                backup_conn.close()
+                logger.info(f"✅ Backup SQLite criado: {backup_name}")
             conn.close()
-            backup_conn.close()
 
-        logger.info(f"✅ Backup criado: {backup_name}")
     except Exception as e:
         logger.error(f"Erro no backup: {e}")
 
@@ -1076,31 +1093,54 @@ async def check_giveaways():
 async def get_user_position(user_id, guild_id):
     """Obter posição do usuário no ranking"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
-            # Query para obter posição baseada no XP
-            cursor.execute('''
-                SELECT COUNT(*) + 1 as position
-                FROM users u1
-                WHERE u1.xp > (
-                    SELECT COALESCE(u2.xp, 0)
-                    FROM users u2
-                    WHERE u2.user_id = ?
-                )
-            ''', (user_id,))
-            
-            result = cursor.fetchone()
-            conn.close()
-            
-            if result:
-                return result[0] if isinstance(result, (list, tuple)) else result
-            return "N/A"
+        result = execute_query('''
+            SELECT COUNT(*) + 1 as position
+            FROM users u1
+            WHERE u1.xp > (
+                SELECT COALESCE(u2.xp, 0)
+                FROM users u2
+                WHERE u2.user_id = ?
+            )
+        ''', (user_id,), fetch_one=True)
+        
+        if result:
+            return result[0] if isinstance(result, (list, tuple)) else result
+        return "N/A"
             
     except Exception as e:
         logger.error(f"Erro ao obter posição do usuário: {e}")
         return "N/A"
+
+def get_bot_stats():
+    """Obter estatísticas do bot"""
+    try:
+        if not bot.is_ready():
+            return {
+                'guilds': 0,
+                'users': 0,
+                'latency': 0,
+                'commands_used': global_stats.get('commands_used', 0)
+            }
+            
+        guild_count = len(bot.guilds) if bot.guilds else 0
+        all_members = list(bot.get_all_members()) if bot.guilds else []
+        unique_users = len(set(all_members)) if all_members else 0
+        latency = round(bot.latency * 1000, 2) if bot.latency else 0
+            
+        return {
+            'guilds': guild_count,
+            'users': unique_users,
+            'latency': latency,
+            'commands_used': global_stats.get('commands_used', 0)
+        }
+    except Exception as e:
+        logger.error(f"Erro ao obter estatísticas: {e}")
+        return {
+            'guilds': 0,
+            'users': 0, 
+            'latency': 0,
+            'commands_used': 0
+        }
 
 # Utility function for interaction handling
 async def safe_interaction_response(interaction, embed, ephemeral=False):
@@ -1141,7 +1181,28 @@ async def safe_interaction_response(interaction, embed, ephemeral=False):
 def get_user_data(user_id):
     """Get user data with proper error handling"""
     try:
-        return execute_query('SELECT * FROM users WHERE user_id = ?', (user_id,), fetch_one=True)
+        result = execute_query('SELECT * FROM users WHERE user_id = ?', (user_id,), fetch_one=True)
+        if result and isinstance(result, dict):
+            # Converter dict PostgreSQL para tupla para compatibilidade
+            return (
+                result.get('user_id', user_id),
+                result.get('coins', 50),
+                result.get('xp', 0),
+                result.get('level', 1),
+                result.get('reputation', 0),
+                result.get('bank', 0),
+                result.get('last_daily'),
+                result.get('last_weekly'),
+                result.get('last_monthly'),
+                result.get('inventory', '{}'),
+                result.get('achievements', '[]'),
+                result.get('settings', '{}'),
+                result.get('join_date'),
+                result.get('total_messages', 0),
+                result.get('voice_time', 0),
+                result.get('warnings', 0)
+            )
+        return result
     except Exception as e:
         logger.error(f"Error getting user data: {e}")
         return None
@@ -2052,6 +2113,39 @@ async def slash_inventario(interaction: discord.Interaction, usuario: discord.Me
 # Comandos slash removidos - duplicatas eliminadas
 
 # Event handlers
+@bot.event
+async def on_command_error(ctx, error):
+    """Manipular erros de comandos"""
+    try:
+        if isinstance(error, commands.CommandNotFound):
+            # Ignorar comandos não encontrados silenciosamente
+            return
+        elif isinstance(error, commands.MissingRequiredArgument):
+            embed = create_embed(
+                "❌ Argumento Faltando",
+                f"Você esqueceu de fornecer um argumento necessário.\nUse `RXajuda` para ver a sintaxe correta.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+        elif isinstance(error, commands.MissingPermissions):
+            embed = create_embed(
+                "❌ Sem Permissão",
+                "Você não tem permissão para usar este comando.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+        elif isinstance(error, commands.CommandOnCooldown):
+            embed = create_embed(
+                "⏰ Cooldown",
+                f"Este comando está em cooldown. Tente novamente em {error.retry_after:.1f} segundos.",
+                color=0xff6600
+            )
+            await ctx.send(embed=embed)
+        else:
+            logger.error(f"Erro não tratado no comando {ctx.command}: {error}")
+    except Exception as e:
+        logger.error(f"Erro no manipulador de erros: {e}")
+
 @bot.event
 async def on_message(message):
     """Processar mensagens para XP, IA e moderação"""
@@ -3664,7 +3758,300 @@ async def slash_rank(interaction: discord.Interaction, usuario: discord.Member =
         logger.error(f"Erro no rank: {e}")
         await interaction.response.send_message("Erro ao carregar rank!", ephemeral=True)
 
-# COMANDO LEVEL JÁ DEFINIDO ANTERIORMENTE - REMOVIDO DUPLICATA
+# Classes de Modal e View para interações
+
+class GiveawayModal(discord.ui.Modal):
+    def __init__(self):
+        super().__init__(title="🎁 Criar Sorteio")
+        
+        self.title_input = discord.ui.TextInput(
+            label="Título do Sorteio",
+            placeholder="Ex: Sorteio de 1000 moedas!",
+            required=True,
+            max_length=100
+        )
+        
+        self.prize_input = discord.ui.TextInput(
+            label="Prêmio",
+            placeholder="Ex: 1000 moedas",
+            required=True,
+            max_length=200
+        )
+        
+        self.duration_input = discord.ui.TextInput(
+            label="Duração (em minutos)",
+            placeholder="Ex: 60 (para 1 hora)",
+            required=True,
+            max_length=10
+        )
+        
+        self.winners_input = discord.ui.TextInput(
+            label="Número de Vencedores",
+            placeholder="Ex: 1",
+            required=True,
+            max_length=2
+        )
+        
+        self.description_input = discord.ui.TextInput(
+            label="Descrição (opcional)",
+            placeholder="Regras, condições, etc...",
+            required=False,
+            style=discord.TextStyle.paragraph,
+            max_length=500
+        )
+        
+        self.add_item(self.title_input)
+        self.add_item(self.prize_input)
+        self.add_item(self.duration_input)
+        self.add_item(self.winners_input)
+        self.add_item(self.description_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            await interaction.response.defer(ephemeral=True)
+            
+            title = self.title_input.value
+            prize = self.prize_input.value
+            duration = int(self.duration_input.value)
+            winners_count = int(self.winners_input.value)
+            description = self.description_input.value or "Participe reagindo com 🎉!"
+            
+            if duration < 1 or duration > 10080:  # Máximo 7 dias
+                await interaction.followup.send("❌ Duração deve ser entre 1 minuto e 7 dias!", ephemeral=True)
+                return
+                
+            if winners_count < 1 or winners_count > 20:
+                await interaction.followup.send("❌ Número de vencedores deve ser entre 1 e 20!", ephemeral=True)
+                return
+            
+            end_time = datetime.datetime.now() + datetime.timedelta(minutes=duration)
+            
+            embed = create_embed(
+                f"🎁 {title}",
+                f"**🎁 Prêmio:** {prize}\n"
+                f"**🏆 Vencedores:** {winners_count}\n"
+                f"**📋 Descrição:** {description}\n"
+                f"**⏰ Termina:** <t:{int(end_time.timestamp())}:R>\n\n"
+                f"**Reaja com 🎉 para participar!**",
+                color=0xffd700
+            )
+            
+            message = await interaction.channel.send(embed=embed)
+            await message.add_reaction("🎉")
+            
+            # Salvar no banco com query corrigida
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                # Query corrigida para PostgreSQL/SQLite
+                cursor.execute('''
+                    INSERT INTO giveaways (guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    interaction.guild.id,
+                    interaction.channel.id, 
+                    interaction.user.id,
+                    title,
+                    prize,
+                    winners_count,
+                    end_time,
+                    message.id,
+                    'active'
+                ))
+                conn.commit()
+                conn.close()
+            
+            await interaction.followup.send("✅ Sorteio criado com sucesso!", ephemeral=True)
+            
+        except ValueError:
+            await interaction.followup.send("❌ Valores inválidos! Verifique duração e número de vencedores.", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Erro ao criar sorteio: {e}")
+            await interaction.followup.send("❌ Erro ao criar sorteio! Tente novamente.", ephemeral=True)
+
+class CopinhaConfigModal(discord.ui.Modal):
+    def __init__(self):
+        super().__init__(title="🏆 Configurar Copinha")
+        
+        self.title_input = discord.ui.TextInput(
+            label="Nome da Copinha",
+            placeholder="Ex: Copa de Stumble Guys",
+            required=True,
+            max_length=50
+        )
+        
+        self.map_input = discord.ui.TextInput(
+            label="Mapa",
+            placeholder="Ex: Hex-A-Gone",
+            required=True,
+            max_length=30
+        )
+        
+        self.format_input = discord.ui.TextInput(
+            label="Formato",
+            placeholder="1v1, 2v2, 3v3 ou 4v4",
+            required=True,
+            max_length=10
+        )
+        
+        self.max_players_input = discord.ui.TextInput(
+            label="Máximo de Participantes",
+            placeholder="8, 16, 32 ou 64",
+            required=True,
+            max_length=2
+        )
+        
+        self.add_item(self.title_input)
+        self.add_item(self.map_input)
+        self.add_item(self.format_input)
+        self.add_item(self.max_players_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            await interaction.response.defer()
+            
+            title = self.title_input.value
+            map_name = self.map_input.value
+            team_format = self.format_input.value
+            max_players = int(self.max_players_input.value)
+            
+            valid_formats = ['1v1', '2v2', '3v3', '4v4']
+            valid_players = [8, 16, 32, 64]
+            
+            if team_format not in valid_formats:
+                await interaction.followup.send("❌ Formato inválido! Use: 1v1, 2v2, 3v3 ou 4v4", ephemeral=True)
+                return
+                
+            if max_players not in valid_players:
+                await interaction.followup.send("❌ Número inválido! Use: 8, 16, 32 ou 64", ephemeral=True)
+                return
+            
+            embed = create_embed(
+                f"🏆 {title}",
+                f"**🗺️ Mapa:** {map_name}\n"
+                f"**👥 Formato:** {team_format}\n"
+                f"**📊 Participantes:** 0/{max_players}\n"
+                f"**📋 Status:** Inscrições abertas\n\n"
+                f"**Clique no botão abaixo para se inscrever!**",
+                color=0xffd700
+            )
+            
+            view = CopinhaJoinView(title, map_name, team_format, max_players, interaction.user.id)
+            message = await interaction.followup.send(embed=embed, view=view)
+            
+            # Salvar no banco
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    interaction.guild.id,
+                    interaction.user.id,
+                    interaction.channel.id,
+                    message.id,
+                    title,
+                    map_name,
+                    team_format,
+                    max_players,
+                    'active'
+                ))
+                conn.commit()
+                conn.close()
+            
+        except ValueError:
+            await interaction.followup.send("❌ Número de participantes inválido!", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Erro ao criar copinha: {e}")
+            await interaction.followup.send("❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+
+class CopinhaJoinView(discord.ui.View):
+    def __init__(self, title, map_name, team_format, max_players, creator_id):
+        super().__init__(timeout=3600)  # 1 hora
+        self.title = title
+        self.map_name = map_name
+        self.team_format = team_format
+        self.max_players = max_players
+        self.creator_id = creator_id
+        self.participants = []
+
+    @discord.ui.button(label="📝 Inscrever-se", style=discord.ButtonStyle.success, emoji="🎮")
+    async def join_tournament(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            if interaction.user.id in self.participants:
+                await interaction.response.send_message("❌ Você já está inscrito!", ephemeral=True)
+                return
+                
+            if len(self.participants) >= self.max_players:
+                await interaction.response.send_message("❌ Copinha lotada!", ephemeral=True)
+                return
+                
+            self.participants.append(interaction.user.id)
+            
+            embed = create_embed(
+                f"🏆 {self.title}",
+                f"**🗺️ Mapa:** {self.map_name}\n"
+                f"**👥 Formato:** {self.team_format}\n"
+                f"**📊 Participantes:** {len(self.participants)}/{self.max_players}\n"
+                f"**📋 Status:** {'Iniciando...' if len(self.participants) == self.max_players else 'Inscrições abertas'}\n\n"
+                f"**Clique no botão abaixo para se inscrever!**",
+                color=0xffd700 if len(self.participants) < self.max_players else 0x00ff00
+            )
+            
+            await interaction.response.edit_message(embed=embed, view=self if len(self.participants) < self.max_players else None)
+            
+            if len(self.participants) == self.max_players:
+                await self.start_tournament(interaction)
+                
+        except Exception as e:
+            logger.error(f"Erro ao inscrever na copinha: {e}")
+            await interaction.response.send_message("❌ Erro ao se inscrever!", ephemeral=True)
+
+    async def start_tournament(self, interaction):
+        """Iniciar torneio quando lotado"""
+        try:
+            embed = create_embed(
+                f"🚀 {self.title} - INICIADA!",
+                f"**Participantes confirmados: {len(self.participants)}**\n\n"
+                f"🏆 A copinha será organizada em breve!\n"
+                f"📋 Aguardem as instruções dos moderadores.",
+                color=0x00ff00
+            )
+            
+            await interaction.edit_original_response(embed=embed, view=None)
+            
+        except Exception as e:
+            logger.error(f"Erro ao iniciar copinha: {e}")
+
+class CloseTicketView(discord.ui.View):
+    def __init__(self, authorized_user_id):
+        super().__init__(timeout=None)
+        self.authorized_user_id = authorized_user_id
+
+    @discord.ui.button(label="🔒 Fechar Ticket", style=discord.ButtonStyle.danger, emoji="🔒")
+    async def confirm_close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.authorized_user_id:
+            await interaction.response.send_message("❌ Apenas quem solicitou pode fechar!", ephemeral=True)
+            return
+            
+        try:
+            await interaction.response.send_message("🔒 Fechando ticket em 5 segundos...")
+            await asyncio.sleep(5)
+            await interaction.channel.delete(reason=f"Ticket fechado por {interaction.user}")
+        except Exception as e:
+            logger.error(f"Erro ao fechar ticket: {e}")
+            await interaction.followup.send("❌ Erro ao fechar ticket!", ephemeral=True)
+
+    @discord.ui.button(label="❌ Cancelar", style=discord.ButtonStyle.secondary, emoji="❌")
+    async def cancel_close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.authorized_user_id:
+            await interaction.response.send_message("❌ Apenas quem solicitou pode cancelar!", ephemeral=True)
+            return
+            
+        embed = create_embed("✅ Cancelado", "Fechamento do ticket foi cancelado.", color=0x00ff00)
+        await interaction.response.edit_message(embed=embed, view=None)
 
 @bot.tree.command(name="leaderboard", description="Ver ranking do servidor")
 async def slash_leaderboard(interaction: discord.Interaction, tipo: str = "xp"):
