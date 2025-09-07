@@ -14252,6 +14252,63 @@ async def on_command_error(ctx, error):
 app = Flask(__name__, template_folder='dashboard/templates', static_folder='dashboard/static')
 app.secret_key = os.environ.get('SECRET_KEY', 'rxbot-dashboard-secret-key')
 
+# Importar template functions
+from flask import render_template
+
+def get_dashboard_stats():
+    """Obter estatísticas para o dashboard"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Total de usuários
+            cursor.execute('SELECT COUNT(DISTINCT user_id) as total_users FROM users')
+            result = cursor.fetchone()
+            total_users = result[0] if result else 0
+            
+            # Total de copinhas
+            try:
+                cursor.execute('SELECT COUNT(*) as total_copinhas FROM copinhas')
+                result = cursor.fetchone()
+                total_copinhas = result[0] if result else 0
+            except:
+                total_copinhas = 0
+            
+            # Total de tickets
+            try:
+                cursor.execute('SELECT COUNT(*) as total_tickets FROM tickets WHERE status = "open"')
+                result = cursor.fetchone()
+                total_tickets = result[0] if result else 0
+            except:
+                total_tickets = 0
+            
+            # Total de giveaways
+            try:
+                cursor.execute('SELECT COUNT(*) as total_giveaways FROM giveaways')
+                result = cursor.fetchone()
+                total_giveaways = result[0] if result else 0
+            except:
+                total_giveaways = 0
+            
+            conn.close()
+            return {
+                'total_users': total_users,
+                'total_copinhas': total_copinhas,
+                'total_tickets': total_tickets,
+                'total_giveaways': total_giveaways,
+                'total_commands': 98
+            }
+    except Exception as e:
+        logger.error(f"Erro ao obter estatísticas dashboard: {e}")
+        return {
+            'total_users': 0,
+            'total_copinhas': 0,
+            'total_tickets': 0,
+            'total_giveaways': 0,
+            'total_commands': 98
+        }
+
 def get_guild_stats():
     """Obter estatísticas dos servidores"""
     try:
@@ -14308,6 +14365,89 @@ def get_guild_stats():
             'active_events': 0,
             'active_copinhas': 0
         }
+
+@app.route('/api/stats')
+def api_stats():
+    """API para estatísticas em tempo real"""
+    stats = get_dashboard_stats()
+    return jsonify(stats)
+
+@app.route('/')
+def dashboard_home():
+    """Página inicial do dashboard"""
+    stats = get_dashboard_stats()
+    return render_template('index.html', stats=stats)
+
+@app.route('/commands')
+def commands():
+    """Página de comandos"""
+    commands_data = {
+        'Diversão': [
+            {'name': '/jokenpo', 'description': 'Jogar pedra, papel ou tesoura'},
+            {'name': '/dado', 'description': 'Rolar um dado'},
+            {'name': '/moeda', 'description': 'Cara ou coroa'},
+            {'name': '/piada', 'description': 'Contar uma piada'}
+        ],
+        'Economia': [
+            {'name': '/saldo', 'description': 'Ver saldo de moedas'},
+            {'name': '/daily', 'description': 'Recompensa diária'},
+            {'name': '/weekly', 'description': 'Recompensa semanal'},
+            {'name': '/trabalhar', 'description': 'Trabalhar para ganhar dinheiro'}
+        ],
+        'Copinha/Torneios': [
+            {'name': '/copinha', 'description': 'Criar torneio de Stumble Guys'},
+            {'name': '/brackets', 'description': 'Ver brackets do torneio'}
+        ],
+        'Moderação': [
+            {'name': '/ban', 'description': 'Banir usuário do servidor'},
+            {'name': '/kick', 'description': 'Expulsar usuário'},
+            {'name': '/clear', 'description': 'Limpar mensagens'}
+        ]
+    }
+    return render_template('commands.html', commands=commands_data)
+
+@app.route('/faq')
+def faq():
+    """Página de FAQ"""
+    faq_data = [
+        {
+            'question': 'Como criar uma copinha/torneio?',
+            'answer': 'Use o comando /copinha e siga os passos: escolha o mapa, formato (1v1, 2v2, 3v3) e número de jogadores (4, 8, 16, 32). O bot criará automaticamente os brackets!'
+        },
+        {
+            'question': 'Como participar de uma copinha?',
+            'answer': 'Clique no botão "🎮 Participar" na mensagem da copinha. O bot verificará automaticamente se há vagas disponíveis.'
+        },
+        {
+            'question': 'Como ganhar moedas no bot?',
+            'answer': 'Use /daily (diário), /weekly (semanal), /monthly (mensal), /trabalhar, ou tente a sorte com /roubar de outros usuários!'
+        }
+    ]
+    return render_template('faq.html', faq=faq_data)
+
+@app.route('/support')
+def support():
+    """Página de suporte"""
+    return render_template('support.html')
+
+@app.route('/tutorials')
+def tutorials():
+    """Página de tutoriais"""
+    tutorials_data = [
+        {
+            'title': 'Como Criar sua Primeira Copinha',
+            'description': 'Aprenda passo a passo como organizar um torneio épico',
+            'steps': [
+                'Use o comando /copinha no canal desejado',
+                'Escolha um nome chamativo para seu torneio',
+                'Selecione o mapa do Stumble Guys',
+                'Defina o formato: 1v1, 2v2 ou 3v3 jogadores',
+                'Escolha quantos participantes: 4, 8, 16 ou 32',
+                'Clique em "Criar Copinha" e pronto!'
+            ]
+        }
+    ]
+    return render_template('tutorials.html', tutorials=tutorials_data)
 
 @app.route('/healthz')
 def health_check():
