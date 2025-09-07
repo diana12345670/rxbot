@@ -206,7 +206,7 @@ def make_http_request(url, method='GET', **kwargs):
 
 # Database connection pool to avoid locking issues
 import threading
-db_lock = threading.Lock()
+db_lock = threading.RLock()  # Usar RLock para permitir múltiplas aquisições pela mesma thread
 
 # Detectar se está no Railway ou ambiente de produção
 def is_production():
@@ -235,45 +235,66 @@ def get_db_connection():
     # Usar SQLite por padrão (desenvolvimento/Replit)
     return sqlite3.connect('rxbot.db', timeout=30.0, check_same_thread=False)
 
-def execute_query(query, params=None, fetch_one=False, fetch_all=False):
+def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=10):
     """Executar query de forma compatível com SQLite e PostgreSQL"""
-    try:
-        with db_lock:
-            conn = get_db_connection()
-            try:
-                cursor = conn.cursor()
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            # Tentar adquirir lock com timeout
+            if db_lock.acquire(timeout=timeout):
+                try:
+                    conn = get_db_connection()
+                    try:
+                        cursor = conn.cursor()
 
-                # Detectar se está usando PostgreSQL pela conexão real
-                is_postgres_conn = hasattr(conn, 'info')  # psycopg2 connections have info attribute
+                        # Detectar se está usando PostgreSQL pela conexão real
+                        is_postgres_conn = hasattr(conn, 'info')  # psycopg2 connections have info attribute
 
-                # Converter query para PostgreSQL se necessário
-                if is_postgres_conn:
-                    # Substituir ? por %s para PostgreSQL
-                    query = query.replace('?', '%s')
+                        # Converter query para PostgreSQL se necessário
+                        if is_postgres_conn:
+                            # Substituir ? por %s para PostgreSQL
+                            query = query.replace('?', '%s')
 
-                if params:
-                    cursor.execute(query, params)
-                else:
-                    cursor.execute(query)
+                        if params:
+                            cursor.execute(query, params)
+                        else:
+                            cursor.execute(query)
 
-                result = None
-                if fetch_one:
-                    result = cursor.fetchone()
-                elif fetch_all:
-                    result = cursor.fetchall()
+                        result = None
+                        if fetch_one:
+                            result = cursor.fetchone()
+                        elif fetch_all:
+                            result = cursor.fetchall()
 
-                conn.commit()
-                return result
+                        conn.commit()
+                        return result
 
-            except Exception as e:
-                conn.rollback()
-                logger.error(f"Erro na query: {e}")
-                raise e
-            finally:
-                conn.close()
-    except Exception as e:
-        logger.error(f"Erro crítico no execute_query: {e}")
-        return None
+                    except Exception as e:
+                        conn.rollback()
+                        logger.error(f"Erro na query (tentativa {attempt + 1}): {e}")
+                        if attempt == max_retries - 1:
+                            raise e
+                    finally:
+                        conn.close()
+                finally:
+                    db_lock.release()
+            else:
+                logger.warning(f"Timeout ao adquirir db_lock (tentativa {attempt + 1})")
+                if attempt == max_retries - 1:
+                    logger.error("Falha crítica: não foi possível adquirir db_lock")
+                    return None
+                    
+        except Exception as e:
+            logger.error(f"Erro crítico no execute_query (tentativa {attempt + 1}): {e}")
+            if attempt == max_retries - 1:
+                return None
+            
+        # Pequena pausa antes de tentar novamente
+        import time
+        time.sleep(0.1 * (attempt + 1))
+    
+    return None
 
 # Database setup with proper error handling
 def init_database():
@@ -863,20 +884,46 @@ async def backup_database():
     except Exception as e:
         logger.error(f"Erro no backup: {e}")
 
-@tasks.loop(minutes=1)
+@tasks.loop(minutes=2)  # Reduzir frequência para 2 minutos
 async def check_reminders():
     """Verifica lembretes"""
     try:
         now = datetime.datetime.now()
-        reminders = execute_query('SELECT * FROM reminders WHERE remind_time <= ?', (now,), fetch_all=True)
-
-        if not reminders:
+        
+        # Usar transação única para evitar deadlock
+        reminders_to_process = []
+        try:
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('SELECT * FROM reminders WHERE remind_time <= ? LIMIT 10', (now,))
+                reminders = cursor.fetchall()
+                
+                if reminders:
+                    # Marcar como processados imediatamente
+                    reminder_ids = [r[0] for r in reminders]
+                    placeholders = ','.join(['?' for _ in reminder_ids])
+                    cursor.execute(f'DELETE FROM reminders WHERE id IN ({placeholders})', reminder_ids)
+                    conn.commit()
+                    
+                    reminders_to_process = reminders
+                    
+                conn.close()
+        except Exception as db_error:
+            logger.error(f"Erro no banco check_reminders: {db_error}")
             return
 
-        for reminder in reminders:
-            reminder_id, user_id, guild_id, channel_id, text, remind_time, created_at = reminder
-
+        # Processar lembretes fora do lock
+        for reminder in reminders_to_process:
             try:
+                if isinstance(reminder, dict):
+                    reminder_id = reminder['id']
+                    user_id = reminder['user_id']
+                    channel_id = reminder['channel_id']
+                    text = reminder['reminder_text']
+                else:
+                    reminder_id, user_id, guild_id, channel_id, text, remind_time, created_at = reminder
+
                 channel = bot.get_channel(channel_id)
                 user = bot.get_user(user_id)
 
@@ -887,21 +934,23 @@ async def check_reminders():
                         color=0xffaa00
                     )
                     await channel.send(embed=embed)
+                    logger.info(f"Lembrete {reminder_id} enviado para {user}")
 
-                execute_query('DELETE FROM reminders WHERE id = ?', (reminder_id,))
             except Exception as e:
                 logger.error(f"Erro ao enviar lembrete {reminder_id}: {e}")
 
     except Exception as e:
         logger.error(f"Erro check_reminders: {e}")
 
-@tasks.loop(minutes=1)
+@tasks.loop(minutes=2)  # Reduzir frequência para 2 minutos
 async def check_giveaways():
     """Verifica sorteios que terminaram"""
     try:
         now = datetime.datetime.now()
+        
+        # Buscar sorteios finalizados com limite para evitar sobrecarga
         finished_giveaways = execute_query(
-            'SELECT * FROM giveaways WHERE status = ? AND end_time <= ?', 
+            'SELECT * FROM giveaways WHERE status = ? AND end_time <= ? LIMIT 5', 
             ('active', now), 
             fetch_all=True
         )
@@ -7243,25 +7292,39 @@ class MatchResultView(discord.ui.View):
     async def check_round_completion(self, interaction, copinha):
         """Verifica se a rodada terminou e cria próxima fase"""
         try:
-            # Verificar quantas partidas desta fase estão completas
-            completed_result = execute_query('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = ? AND round_name = ? AND status = "completed"',
-                                           (self.copinha_id, self.round_name), fetch_one=True)
-            total_result = execute_query('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = ? AND round_name = ?',
-                                       (self.copinha_id, self.round_name), fetch_one=True)
+            # Usar uma única query para evitar deadlock
+            query_result = execute_query('''
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN status = "completed" THEN 1 END) as completed
+                FROM copinha_matches 
+                WHERE copinha_id = ? AND round_name = ?
+            ''', (self.copinha_id, self.round_name), fetch_one=True)
             
-            if not completed_result or not total_result:
+            if not query_result:
                 return
                 
-            completed = completed_result[0] if isinstance(completed_result, (list, tuple)) else completed_result
-            total = total_result[0] if isinstance(total_result, (list, tuple)) else total_result
+            if isinstance(query_result, dict):
+                total = query_result['total']
+                completed = query_result['completed']
+            else:
+                total = query_result[0]
+                completed = query_result[1]
             
-            if completed == total:
+            logger.info(f"Copinha {self.copinha_id} - {self.round_name}: {completed}/{total} partidas completas")
+            
+            if completed == total and total > 0:
                 # Todas as partidas terminaram, buscar vencedores
-                winners_result = execute_query('SELECT winner_id FROM copinha_matches WHERE copinha_id = ? AND round_name = ? AND status = "completed"',
-                                             (self.copinha_id, self.round_name), fetch_all=True)
+                winners_result = execute_query('''
+                    SELECT winner_id FROM copinha_matches 
+                    WHERE copinha_id = ? AND round_name = ? AND status = "completed" AND winner_id IS NOT NULL
+                ''', (self.copinha_id, self.round_name), fetch_all=True)
                 
                 if winners_result:
                     winners = [row[0] if isinstance(row, (list, tuple)) else row for row in winners_result]
+                    winners = [w for w in winners if w]  # Filtrar nulls
+                    
+                    logger.info(f"Copinha {self.copinha_id} - Vencedores da {self.round_name}: {winners}")
                     
                     if len(winners) == 1:
                         # Final! Anunciar vencedor
@@ -7269,9 +7332,16 @@ class MatchResultView(discord.ui.View):
                     elif len(winners) > 1:
                         # Criar próxima fase
                         await self.create_next_round(interaction, copinha, winners)
+                else:
+                    logger.error(f"Copinha {self.copinha_id} - Nenhum vencedor encontrado para {self.round_name}")
 
         except Exception as e:
-            logger.error(f"Erro ao verificar completude da fase: {e}")
+            logger.error(f"Erro ao verificar completude da fase {self.round_name}: {e}")
+            # Tentar recuperar enviando mensagem de erro
+            try:
+                await interaction.followup.send(f"⚠️ Erro na verificação da fase. Entre em contato com os administradores.", ephemeral=True)
+            except:
+                pass
 
     async def create_next_round(self, interaction, copinha, winners):
         """Cria a próxima rodada do torneio"""
@@ -7284,6 +7354,7 @@ class MatchResultView(discord.ui.View):
             }
 
             next_round = round_names.get(self.round_name, 'Próxima Fase')
+            logger.info(f"Copinha {self.copinha_id} - Criando {next_round} com {len(winners)} vencedores")
 
             # Criar partidas da próxima fase
             matches = []
@@ -7296,16 +7367,35 @@ class MatchResultView(discord.ui.View):
                     }
                     matches.append(match)
 
-            # Salvar matches no banco
-            for match in matches:
-                execute_query('''
-                    INSERT INTO copinha_matches (copinha_id, round_name, match_number, players)
-                    VALUES (?, ?, ?, ?)
-                ''', (self.copinha_id, match['round'], match['match_number'], json.dumps(match['players'])))
+            if not matches:
+                logger.error(f"Copinha {self.copinha_id} - Nenhuma partida criada para {next_round}")
+                return
 
-            # Atualizar status da copinha
-            execute_query('UPDATE copinhas SET current_round = ? WHERE id = ?', 
-                         (next_round, self.copinha_id))
+            # Usar transação única para evitar deadlock
+            try:
+                with db_lock:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    
+                    # Salvar todas as partidas em uma transação
+                    for match in matches:
+                        cursor.execute('''
+                            INSERT INTO copinha_matches (copinha_id, round_name, match_number, players, status)
+                            VALUES (?, ?, ?, ?, ?)
+                        ''', (self.copinha_id, match['round'], match['match_number'], json.dumps(match['players']), 'waiting'))
+
+                    # Atualizar status da copinha
+                    cursor.execute('UPDATE copinhas SET current_round = ? WHERE id = ?', 
+                                  (next_round, self.copinha_id))
+                    
+                    conn.commit()
+                    conn.close()
+                    
+                logger.info(f"Copinha {self.copinha_id} - {len(matches)} partidas salvas para {next_round}")
+                
+            except Exception as db_error:
+                logger.error(f"Erro no banco ao criar {next_round}: {db_error}")
+                return
 
             # Criar tickets para próxima fase
             await self.create_match_tickets_for_round(interaction, copinha, matches, next_round)
@@ -7318,13 +7408,20 @@ class MatchResultView(discord.ui.View):
             
             original_channel = interaction.guild.get_channel(copinha_data.get('channel_id', copinha[3]))
             if original_channel:
-                await original_channel.send(
-                    f"🎉 **{self.round_name} finalizada!** A **{next_round}** foi criada com {len(matches)} partida(s). "
-                    f"Boa sorte aos classificados! 🏆"
-                )
+                try:
+                    await original_channel.send(
+                        f"🎉 **{self.round_name} finalizada!** A **{next_round}** foi criada com {len(matches)} partida(s). "
+                        f"Boa sorte aos classificados! 🏆"
+                    )
+                except Exception as channel_error:
+                    logger.error(f"Erro ao notificar canal original: {channel_error}")
 
         except Exception as e:
-            logger.error(f"Erro ao criar próxima fase: {e}")
+            logger.error(f"Erro ao criar próxima fase {next_round}: {e}")
+            try:
+                await interaction.followup.send(f"⚠️ Erro ao criar {next_round}. Contate os administradores.", ephemeral=True)
+            except:
+                pass
 
     async def create_match_tickets_for_round(self, interaction, copinha, matches, round_name):
         """Cria tickets para as partidas da rodada"""
