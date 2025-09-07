@@ -998,35 +998,6 @@ async def check_giveaways():
                     # Se é sorteio de coins, distribuir automaticamente
                     if coin_amount > 0 and "coins" in prize.lower():
 
-async def get_user_position(user_id, guild_id):
-    """Obter posição do usuário no ranking"""
-    try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
-            # Query para obter posição baseada no XP
-            cursor.execute('''
-                SELECT COUNT(*) + 1 as position
-                FROM users u1
-                WHERE u1.xp > (
-                    SELECT COALESCE(u2.xp, 0)
-                    FROM users u2
-                    WHERE u2.user_id = ?
-                )
-            ''', (user_id,))
-            
-            result = cursor.fetchone()
-            conn.close()
-            
-            if result:
-                return result[0] if isinstance(result, (list, tuple)) else result
-            return "N/A"
-            
-    except Exception as e:
-        logger.error(f"Erro ao obter posição do usuário: {e}")
-        return "N/A"
-
                         coins_per_winner = coin_amount // len(winners)
 
                         for winner_id in winners:
@@ -1100,6 +1071,36 @@ async def get_user_position(user_id, guild_id):
 
     except Exception as e:
         logger.error(f"Erro check_giveaways: {e}")
+
+
+async def get_user_position(user_id, guild_id):
+    """Obter posição do usuário no ranking"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Query para obter posição baseada no XP
+            cursor.execute('''
+                SELECT COUNT(*) + 1 as position
+                FROM users u1
+                WHERE u1.xp > (
+                    SELECT COALESCE(u2.xp, 0)
+                    FROM users u2
+                    WHERE u2.user_id = ?
+                )
+            ''', (user_id,))
+            
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                return result[0] if isinstance(result, (list, tuple)) else result
+            return "N/A"
+            
+    except Exception as e:
+        logger.error(f"Erro ao obter posição do usuário: {e}")
+        return "N/A"
 
 # Utility function for interaction handling
 async def safe_interaction_response(interaction, embed, ephemeral=False):
@@ -6189,12 +6190,47 @@ async def announce_tournament_winner(copinha, winner_id):
         import traceback
         logger.error(traceback.format_exc())
 
-async def create_next_round(copinha, winners):
+async def create_next_round(copinha, winners, current_round, copinha_id, cursor):
     """Criar próxima rodada com os vencedores"""
     try:
-        # Lógica para criar próxima rodada será implementada conforme necessário
-        # Por enquanto, apenas log
-        logger.info(f"Próxima rodada da copinha {copinha[4]} com {len(winners)} vencedores")
+        if len(winners) < 2:
+            logger.error(f"Número insuficiente de vencedores para próxima rodada: {len(winners)}")
+            return
+            
+        # Determinar próxima rodada
+        next_round_map = {
+            'primeira_rodada': 'oitavas',
+            'oitavas': 'quartas',
+            'quartas': 'semifinal',
+            'semifinal': 'final'
+        }
+        
+        next_round = next_round_map.get(current_round, 'final')
+        
+        # Criar matches para próxima rodada
+        matches = []
+        for i in range(0, len(winners), 2):
+            if i + 1 < len(winners):
+                match_data = {
+                    'copinha_id': copinha_id,
+                    'round_name': next_round,
+                    'match_number': (i // 2) + 1,
+                    'players': json.dumps([winners[i], winners[i + 1]]),
+                    'status': 'waiting'
+                }
+                matches.append(match_data)
+        
+        # Salvar matches no banco
+        for match in matches:
+            cursor.execute('''
+                INSERT INTO copinha_matches (copinha_id, round_name, match_number, players, status)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (match['copinha_id'], match['round_name'], match['match_number'], match['players'], match['status']))
+        
+        # Atualizar current_round da copinha
+        cursor.execute('UPDATE copinhas SET current_round = ? WHERE id = ?', (next_round, copinha_id))
+        
+        logger.info(f"Criada {next_round} da copinha {copinha_id} com {len(matches)} partidas")
         
     except Exception as e:
         logger.error(f"Erro ao criar próxima rodada: {e}")
@@ -6572,111 +6608,11 @@ Para fechar este ticket, reaja com 🔒 em qualquer mensagem.
         logger.error(f"Erro ao criar ticket: {e}")
         raise e
 
-        elif game_data['type'] == 'ticket_tier_confirmation':
-            if str(reaction.emoji) == "✅":
-                motivo = game_data['motivo']
-
-                try:
-                    ctx_mock = type('MockCtx', (), {
-                        'guild': message.guild,
-                        'channel': message.channel,
-                        'send': message.channel.send
-                    })()
-
-                    await create_ticket_channel(ctx_mock, motivo, user)
-
-                    # Editar mensagem de confirmação
-                    embed = create_embed(
-                        "✅ Ticket Tier Criado!",
-                        f"Seu ticket tier foi criado com sucesso!\n**Motivo:** {motivo}",
-                        color=0xffd700
-                    )
-                    await message.edit(embed=embed)
-                    del active_games[message.id]
-                except Exception as e:
-                    logger.error(f"Erro ao criar ticket tier: {e}")
-
-            elif str(reaction.emoji) == "❌":
-                embed = create_embed("❌ Ticket Tier Cancelado", "Criação de ticket tier cancelada pelo usuário.", color=0xff6b6b)
-                await message.edit(embed=embed)
-                del active_games[message.id]
-
+        # Ticket tier confirmation removido - usará modais
         # Sistemas de confirmação antigos removidos - agora usam botões
-
-        elif game_data['type'] == 'stumble_guys_event':
-            if str(reaction.emoji) == "🎮":
-                # Verificar se é membro do clan correto
-                event_id = game_data.get('event_id')
-                clan_name = game_data.get('clan_name', '')
-
-                # Buscar dados do evento
-                try:
-                    with db_lock:
-                        conn = get_db_connection()
-                        cursor = conn.cursor()
-                        cursor.execute('SELECT participants FROM clan_events WHERE id = ?', (event_id,))
-                        result = cursor.fetchone()
-
-                        if result:
-                            participants = json.loads(result[0]) if result[0] else []
-
-                            if user.id not in participants:
-                                participants.append(user.id)
-                                cursor.execute('UPDATE clan_events SET participants = ? WHERE id = ?', 
-                                             (json.dumps(participants), event_id))
-                                conn.commit()
-
-                                # Confirmar participação
-                                try:
-                                    await user.send(f"✅ Você entrou no evento Stumble Guys do **{clan_name}**! Boa sorte na partida! 🎮")
-                                except:
-                                    pass
-
-                        conn.close()
-                except Exception as e:
-                    logger.error(f"Erro ao processar participação no evento: {e}")
-
-
-
-        elif game_data['type'] == 'trade_invitation':
-            # Apenas o usuário convidado pode aceitar/recusar
-            if user.id != game_data['target']:
-                try:
-                    await reaction.remove(user)
-                except:
-                    pass
-                return
-
-            if str(reaction.emoji) == "✅":
-                embed = create_embed(
-                    "✅ Troca Aceita!",
-                    f"**{user.mention}** aceitou negociar!\n\n"
-                    f"🔄 **Próximo passo:**\n"
-                    f"Ambos devem usar:\n"
-                    f"`RXoffer <item_id> <quantidade>` para oferecer itens\n"
-                    f"`RXconfirmtrade` quando estiverem prontos\n\n"
-                    f"**⏰ Tempo limite:** 10 minutos",
-                    color=0x00ff00
-                )
-                await message.edit(embed=embed)
-
-                # Atualizar dados da troca
-                game_data['step'] = 'offering'
-                game_data['offers'] = {
-                    str(game_data['initiator']): {},
-                    str(game_data['target']): {}
-                }
-                game_data['confirmations'] = []
-                game_data['start_time'] = datetime.datetime.now().timestamp()
-
-            elif str(reaction.emoji) == "❌":
-                embed = create_embed(
-                    "❌ Troca Recusada",
-                    f"**{user.mention}** recusou a troca.",
-                    color=0xff0000
-                )
-                await message.edit(embed=embed)
-                del active_games[message.id]
+        # Stumble guys event removido - usará modais
+        # Trade invitation removido - usará modais
+        pass  # Placeholder para manter estrutura
 
     # Sistema de fechar tickets com BOTÕES - NOVO SISTEMA
     if str(reaction.emoji) == "🔒" and hasattr(message.channel, 'name') and message.channel.name.startswith('ticket-'):
@@ -7343,12 +7279,12 @@ class CopinhaView(discord.ui.View):
                 return
 
             # Verificar se copinha ainda está ativa
-            if copinha[9] != 'active':  # status
+            if copinha[12] != 'active':  # status
                 await interaction.response.send_message("❌ Esta copinha já foi finalizada!", ephemeral=True)
                 return
 
             # Verificar participantes atuais
-            participants = json.loads(copinha[6]) if copinha[6] else []  # participants
+            participants = json.loads(copinha[9]) if copinha[9] else []  # participants
 
             if interaction.user.id in participants:
                 await interaction.response.send_message("❌ Você já está participando desta copinha!", ephemeral=True)
@@ -7371,9 +7307,9 @@ class CopinhaView(discord.ui.View):
 
             # Atualizar embed
             embed = create_embed(
-                f"🏆 {copinha[4]}",  # title
-                f"""**🗺️ Mapa:** {copinha[5]}
-**👥 Formato:** {copinha[6]}
+                f"🏆 {copinha[5]}",  # title
+                f"""**🗺️ Mapa:** {copinha[6]}
+**👥 Formato:** {copinha[7]}
 **🎮 Jogadores:** {len(participants)}/{self.max_players}
 **📊 Status:** {'🟢 Inscrições Abertas' if len(participants) < self.max_players else '🔴 Copinha Cheia'}
 
@@ -7406,12 +7342,12 @@ class CopinhaView(discord.ui.View):
             random.shuffle(participants)
 
             # Criar categoria para a copinha
-            category_name = f"🏆 {copinha[4][:20]}"
+            category_name = f"🏆 {copinha[5][:20]}"
             category = await interaction.guild.create_category(category_name)
 
             # Criar canal de informações
             info_channel = await interaction.guild.create_text_channel(
-                f"📋-info-{copinha[4][:15]}",
+                f"📋-info-{copinha[5][:15]}",
                 category=category
             )
 
@@ -15679,7 +15615,7 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"🚨 Erro fatal: {e}")
         sys.exit(1)
-<line_number>3500</line_number>
+
 # View para participação na copinha
 class CopinhaParticipationView(discord.ui.View):
     def __init__(self, message_id, max_players, titulo, mapa, formato):
@@ -15949,7 +15885,7 @@ class CopinhaParticipationView(discord.ui.View):
 
         except Exception as e:
             logger.error(f"Erro ao iniciar torneio: {e}")
-<line_number>4000</line_number>
+
 @bot.tree.command(name="copinhas_ativas", description="Ver copinhas ativas no servidor")
 async def slash_copinhas_ativas(interaction: discord.Interaction):
     """Ver copinhas/torneios ativos"""

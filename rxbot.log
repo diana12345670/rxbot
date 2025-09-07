@@ -1,0 +1,84 @@
+2025-09-07 19:21:33,085 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-07 19:21:33,105 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-07 19:21:33,105 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-07 19:21:36,238 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-07 19:21:36,238 - RXbot - INFO - ✅ Database inicializado
+2025-09-07 19:21:36,248 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.109.98:5000
+2025-09-07 19:21:36,248 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-07 19:21:39,243 - werkzeug - INFO - 127.0.0.1 - - [07/Sep/2025 19:21:39] "GET /healthz HTTP/1.1" 200 -
+2025-09-07 19:21:39,243 - RXbot - INFO - ✅ Flask está respondendo
+2025-09-07 19:21:39,244 - RXbot - INFO - 🤖 Iniciando bot Discord...
+2025-09-07 19:21:39,244 - discord.client - INFO - logging in using static token
+2025-09-07 19:21:39,892 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: f88ee1caabee8314438f0a2f7e8df0c3).
+2025-09-07 19:21:41,905 - RXbot - INFO - 🤖 RXbot está online! Conectado como RXbot#1546
+2025-09-07 19:21:41,905 - RXbot - INFO - 📊 Conectado em 1 servidores
+2025-09-07 19:21:41,905 - RXbot - INFO - 👥 Servindo 45 usuários únicos
+2025-09-07 19:21:41,905 - RXbot - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-07 19:21:41,922 - RXbot - ERROR - Erro no backup: 'psycopg2.extensions.connection' object has no attribute 'backup'
+2025-09-07 19:21:42,342 - RXbot - INFO - ✅ 99 slash commands sincronizados
+2025-09-07 19:21:42,342 - RXbot - INFO - 📋 Comandos slash disponíveis: ping, ajuda, jokenpo, dado, moeda, piada, copinha, saldo, daily, trabalhar...
+2025-09-07 19:21:42,342 - RXbot - INFO - 🚀 Total de comandos slash: 99
+2025-09-07 19:21:42,342 - RXbot - INFO -    /ping - Ver latência do bot
+2025-09-07 19:21:42,342 - RXbot - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-07 19:21:42,342 - RXbot - INFO -    /jokenpo - Jogar pedra, papel ou tesoura
+2025-09-07 19:21:42,343 - RXbot - INFO -    /dado - Rolar um dado
+2025-09-07 19:21:42,343 - RXbot - INFO -    /moeda - Cara ou coroa
+2025-09-07 19:21:42,343 - RXbot - INFO -    /piada - Contar uma piada
+2025-09-07 19:21:42,343 - RXbot - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-07 19:21:42,343 - RXbot - INFO -    /saldo - Ver saldo de moedas
+2025-09-07 19:21:42,343 - RXbot - INFO -    /daily - Recompensa diária
+2025-09-07 19:21:42,343 - RXbot - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-07 19:21:42,343 - RXbot - INFO -    /weekly - Recompensa semanal
+2025-09-07 19:21:42,343 - RXbot - INFO -    /monthly - Recompensa mensal
+2025-09-07 19:21:42,343 - RXbot - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-07 19:21:42,343 - RXbot - INFO -    /loja - Ver loja de itens
+2025-09-07 19:21:42,343 - RXbot - INFO -    /inventario - Ver inventário de itens
+2025-09-07 19:21:42,344 - RXbot - INFO -    ... e mais 84 comandos!
+2025-09-07 19:21:42,344 - RXbot - INFO - ✅ Status inicial configurado
+2025-09-07 19:24:27,592 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-07 19:24:56,542 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-07 19:24:56,565 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-07 19:24:56,565 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-07 19:24:56,578 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-07 19:24:56,578 - RXbot - INFO - ✅ Database inicializado
+2025-09-07 19:24:56,583 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.109.98:5000
+2025-09-07 19:24:56,584 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-07 19:24:59,582 - werkzeug - INFO - 127.0.0.1 - - [07/Sep/2025 19:24:59] "GET /healthz HTTP/1.1" 200 -
+2025-09-07 19:24:59,585 - RXbot - INFO - ✅ Flask está respondendo
+2025-09-07 19:24:59,585 - RXbot - INFO - 🤖 Iniciando bot Discord...
+2025-09-07 19:24:59,586 - discord.client - INFO - logging in using static token
+2025-09-07 19:25:00,328 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: 7d5e97a0f9a51d8680c5a8aacc135cec).
+2025-09-07 19:25:02,338 - RXbot - INFO - 🤖 RXbot está online! Conectado como RXbot#1546
+2025-09-07 19:25:02,338 - RXbot - INFO - 📊 Conectado em 1 servidores
+2025-09-07 19:25:02,338 - RXbot - INFO - 👥 Servindo 45 usuários únicos
+2025-09-07 19:25:02,338 - RXbot - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-07 19:25:02,349 - RXbot - ERROR - Erro no backup: 'psycopg2.extensions.connection' object has no attribute 'backup'
+2025-09-07 19:25:02,832 - RXbot - INFO - ✅ 99 slash commands sincronizados
+2025-09-07 19:25:02,832 - RXbot - INFO - 📋 Comandos slash disponíveis: ping, ajuda, jokenpo, dado, moeda, piada, copinha, saldo, daily, trabalhar...
+2025-09-07 19:25:02,832 - RXbot - INFO - 🚀 Total de comandos slash: 99
+2025-09-07 19:25:02,832 - RXbot - INFO -    /ping - Ver latência do bot
+2025-09-07 19:25:02,833 - RXbot - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-07 19:25:02,833 - RXbot - INFO -    /jokenpo - Jogar pedra, papel ou tesoura
+2025-09-07 19:25:02,833 - RXbot - INFO -    /dado - Rolar um dado
+2025-09-07 19:25:02,833 - RXbot - INFO -    /moeda - Cara ou coroa
+2025-09-07 19:25:02,833 - RXbot - INFO -    /piada - Contar uma piada
+2025-09-07 19:25:02,833 - RXbot - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-07 19:25:02,834 - RXbot - INFO -    /saldo - Ver saldo de moedas
+2025-09-07 19:25:02,834 - RXbot - INFO -    /daily - Recompensa diária
+2025-09-07 19:25:02,834 - RXbot - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-07 19:25:02,834 - RXbot - INFO -    /weekly - Recompensa semanal
+2025-09-07 19:25:02,834 - RXbot - INFO -    /monthly - Recompensa mensal
+2025-09-07 19:25:02,834 - RXbot - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-07 19:25:02,835 - RXbot - INFO -    /loja - Ver loja de itens
+2025-09-07 19:25:02,835 - RXbot - INFO -    /inventario - Ver inventário de itens
+2025-09-07 19:25:02,835 - RXbot - INFO -    ... e mais 84 comandos!
+2025-09-07 19:25:02,836 - RXbot - INFO - ✅ Status inicial configurado
+2025-09-07 19:35:02,369 - RXbot - WARNING - ⚠️ Bot pode estar com problemas de conectividade
+2025-09-07 19:35:02,370 - RXbot - INFO - 💓 Heartbeat restaurado
+2025-09-07 19:35:14,308 - RXbot - ERROR - Erro no error handler: 'function' object has no attribute 'CommandNotFound'
