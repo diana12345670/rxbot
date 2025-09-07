@@ -315,3 +315,99 @@ function logPerformance() {
 
 // Initialize performance monitoring
 logPerformance();
+// Dashboard JavaScript for RXbot
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('RXbot Dashboard loaded successfully!');
+    
+    // Auto-refresh stats every 30 seconds
+    setInterval(updateStats, 30000);
+    
+    // Update statistics
+    function updateStats() {
+        fetch('/api/stats')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error loading stats:', data.error);
+                    return;
+                }
+                
+                // Update stats on page if elements exist
+                const statusElement = document.getElementById('bot-status');
+                if (statusElement) {
+                    statusElement.textContent = data.status;
+                    statusElement.className = data.status === 'online' ? 'badge bg-success' : 'badge bg-danger';
+                }
+                
+                const guildsElement = document.getElementById('guilds-count');
+                if (guildsElement) {
+                    guildsElement.textContent = data.guilds;
+                }
+                
+                const usersElement = document.getElementById('users-count');
+                if (usersElement) {
+                    usersElement.textContent = data.users;
+                }
+                
+                const latencyElement = document.getElementById('bot-latency');
+                if (latencyElement) {
+                    latencyElement.textContent = data.latency + 'ms';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching stats:', error);
+            });
+    }
+    
+    // Search functionality
+    const searchInput = document.getElementById('command-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            const commandCards = document.querySelectorAll('.command-card');
+            
+            commandCards.forEach(card => {
+                const commandName = card.querySelector('h5').textContent.toLowerCase();
+                const commandDesc = card.querySelector('p').textContent.toLowerCase();
+                
+                if (commandName.includes(query) || commandDesc.includes(query)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        });
+    }
+    
+    // FAQ accordion
+    const faqButtons = document.querySelectorAll('[data-bs-toggle="collapse"]');
+    faqButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const icon = this.querySelector('i');
+            if (icon && icon.classList.contains('fa-chevron-down')) {
+                setTimeout(() => {
+                    if (this.getAttribute('aria-expanded') === 'true') {
+                        icon.classList.remove('fa-chevron-down');
+                        icon.classList.add('fa-chevron-up');
+                    } else {
+                        icon.classList.remove('fa-chevron-up');
+                        icon.classList.add('fa-chevron-down');
+                    }
+                }, 150);
+            }
+        });
+    });
+    
+    // Smooth scrolling for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({
+                    behavior: 'smooth'
+                });
+            }
+        });
+    });
+});
