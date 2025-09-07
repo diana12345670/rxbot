@@ -2,6 +2,7 @@ CHANNEL_ID_ALERTA = 1402658677923774615
 CHANNEL_ID_TESTE_TIER = 1400162532055846932
 import discord
 from discord.ext import commands, tasks
+from discord.ext.commands import CommandNotFound, MissingRequiredArgument, MissingPermissions, CommandOnCooldown
 import asyncio
 import json
 import sqlite3
@@ -2117,24 +2118,24 @@ async def slash_inventario(interaction: discord.Interaction, usuario: discord.Me
 async def on_command_error(ctx, error):
     """Manipular erros de comandos"""
     try:
-        if isinstance(error, commands.CommandNotFound):
+        if isinstance(error, CommandNotFound):
             # Ignorar comandos não encontrados silenciosamente
             return
-        elif isinstance(error, commands.MissingRequiredArgument):
+        elif isinstance(error, MissingRequiredArgument):
             embed = create_embed(
                 "❌ Argumento Faltando",
                 f"Você esqueceu de fornecer um argumento necessário.\nUse `RXajuda` para ver a sintaxe correta.",
                 color=0xff0000
             )
             await ctx.send(embed=embed)
-        elif isinstance(error, commands.MissingPermissions):
+        elif isinstance(error, MissingPermissions):
             embed = create_embed(
                 "❌ Sem Permissão",
                 "Você não tem permissão para usar este comando.",
                 color=0xff0000
             )
             await ctx.send(embed=embed)
-        elif isinstance(error, commands.CommandOnCooldown):
+        elif isinstance(error, CommandOnCooldown):
             embed = create_embed(
                 "⏰ Cooldown",
                 f"Este comando está em cooldown. Tente novamente em {error.retry_after:.1f} segundos.",
