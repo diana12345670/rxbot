@@ -82,3 +82,5 @@
 2025-09-07 19:35:02,369 - RXbot - WARNING - ⚠️ Bot pode estar com problemas de conectividade
 2025-09-07 19:35:02,370 - RXbot - INFO - 💓 Heartbeat restaurado
 2025-09-07 19:35:14,308 - RXbot - ERROR - Erro no error handler: 'function' object has no attribute 'CommandNotFound'
+2025-09-07 19:38:36,030 - RXbot - ERROR - Erro no error handler: 'function' object has no attribute 'CommandNotFound'
+2025-09-07 19:39:47,563 - RXbot - ERROR - Erro no error handler: 'function' object has no attribute 'CommandNotFound'
