@@ -14366,12 +14366,6 @@ def get_guild_stats():
             'active_copinhas': 0
         }
 
-@app.route('/api/stats')
-def api_stats():
-    """API para estatísticas em tempo real"""
-    stats = get_dashboard_stats()
-    return jsonify(stats)
-
 @app.route('/')
 def dashboard_home():
     """Página inicial do dashboard"""
