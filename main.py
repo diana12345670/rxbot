@@ -6396,7 +6396,7 @@ async def slash_timeout(interaction: discord.Interaction, usuario: discord.Membe
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute('''INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason, duration)
-                             VALUES (?, ?, ?, ?, ?, ?)''',
+                             VALUES (%s, %s, %s, %s, %s, %s)''',
                           (interaction.guild.id, usuario.id, interaction.user.id, 'timeout', motivo, duracao))
             conn.commit()
             conn.close()
@@ -7257,7 +7257,7 @@ async def on_guild_join(guild):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('INSERT OR IGNORE INTO guilds (guild_id, name) VALUES (?, ?)', (guild.id, guild.name))
+            cursor.execute('INSERT INTO guilds (guild_id, name) VALUES (%s, %s)', (guild.id, guild.name))
             conn.commit()
             conn.close()
     except Exception as e:
@@ -8185,7 +8185,7 @@ class CopinhaView(discord.ui.View):
                     cursor = conn.cursor()
                     cursor.execute('''
                         INSERT INTO copinha_matches (copinha_id, round_name, match_number, players, ticket_channel_id, status)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s, %s, %s)
                     ''', (
                         self.copinha_id,
                         'Primeira Rodada',
@@ -8529,7 +8529,7 @@ class CopinhaConfigModal(discord.ui.Modal, title="🏆 Configurar Copinha Stumbl
             # Salvar no banco de dados usando execute_query
             execute_query('''
                 INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ''', (interaction.guild.id, interaction.user.id, interaction.channel.id, message.id, self.titulo.value, self.mapa.value, self.formato.value, max_players))
 
             logger.info(f"Copinha criada: {self.titulo.value} por {interaction.user}")
@@ -8670,7 +8670,7 @@ class CopinhaParticipationView(discord.ui.View):
             for match in matches:
                 execute_query('''
                     INSERT INTO copinha_matches (copinha_id, round_name, match_number, players)
-                    VALUES (?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s)
                 ''', (copinha_id, match['round'], match['match_number'], json.dumps(match['players'])))
 
             # Atualizar status da copinha
@@ -9199,7 +9199,7 @@ class MatchResultView(discord.ui.View):
                     for match in matches:
                         cursor.execute('''
                             INSERT INTO copinha_matches (copinha_id, round_name, match_number, players)
-                            VALUES (?, ?, ?, ?)
+                            VALUES (%s, %s, %s, %s)
                         ''', (self.copinha_id, match['round'], match['match_number'], json.dumps(match['players'])))
 
                     cursor.execute('UPDATE copinhas SET current_round = ? WHERE id = ?', 
@@ -10220,7 +10220,7 @@ async def create_ticket_channel(ctx, motivo, user):
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO tickets (guild_id, creator_id, channel_id, reason)
-                VALUES (?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s)
             ''', (guild.id, user.id, ticket_channel.id, motivo))
             ticket_id = cursor.lastrowid
             conn.commit()
@@ -10691,7 +10691,7 @@ async def teste_inventario(ctx):
                 await ctx.send(embed=embed)
 
                 # Criar usuário
-                cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
+                cursor.execute('INSERT INTO users (user_id) VALUES (%s)', (user_id,))
                 conn.commit()
 
                 cursor.execute('SELECT user_id, inventory FROM users WHERE user_id = ?', (user_id,))
@@ -12590,7 +12590,7 @@ class GiveawayModal(discord.ui.Modal, title="🎁 Criar Sorteio"):
                 cursor = conn.cursor()
                 cursor.execute('''
                     INSERT INTO giveaways (guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ''', (interaction.guild.id, interaction.channel.id, self.user_id, self.titulo.value, self.premio.value, winners_count, end_time, message.id))
                 conn.commit()
                 conn.close()
@@ -12718,7 +12718,7 @@ Reaja com 🎉 para participar!""",
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO giveaways (guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ''', (ctx.guild.id, ctx.channel.id, ctx.author.id, title, prize, winners_count, end_time, giveaway_msg.id))
             conn.commit()
             conn.close()
@@ -14568,7 +14568,7 @@ class TreinoEventModal(discord.ui.Modal, title="🎯 Criar Evento de Treino"):
 
                     cursor.execute('''
                         INSERT INTO clan_events (guild_id, creator_id, clan1, event_type, end_time, message_id, participants, status)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ''', (
                         interaction.guild.id, 
                         self.user_id, 
@@ -14945,7 +14945,7 @@ async def criar_evento_personalizado(ctx, tipo=None, *, dados=None):
 
                     cursor.execute('''
                         INSERT INTO clan_events (guild_id, creator_id, clan1, event_type, end_time, message_id, participants, status)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ''', (
                         ctx.guild.id, 
                         ctx.author.id, 
@@ -15177,7 +15177,7 @@ Clique em um dos botões abaixo para selecionar o mapa da batalha!
 
                 cursor.execute('''
                     INSERT INTO clan_events (guild_id, creator_id, clan1, event_type, bet_amount, end_time, message_id, selected_map)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ''', (ctx.guild.id, ctx.author.id, clan_name, 'Stumble Guys', 0, end_time, evento_msg.id, 'Aguardando seleção'))
 
                 conn.commit()
@@ -16508,7 +16508,7 @@ class CopinhaParticipationView(discord.ui.View):
                 if copinha_data:
                     execute_query('''
                         INSERT INTO copinha_matches (copinha_id, round_name, match_number, players, ticket_channel_id, status)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s, %s, %s)
                     ''', (copinha_data[0], 'Primeira Rodada', i + 1, json.dumps([player1_id, player2_id]), match_channel.id, 'waiting'))
 
                 # Embed da partida
