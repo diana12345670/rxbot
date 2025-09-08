@@ -13,10 +13,20 @@ def get_safe_channel(channel_id):
             logger.warning(f"Canal {channel_id} não encontrado")
             return None
             
-        # Verificar se o bot tem permissões básicas no canal
-        if not channel.permissions_for(channel.guild.me).send_messages:
-            logger.warning(f"Bot não tem permissão para enviar mensagens no canal {channel_id}")
+        # Verificar se é um canal que suporta envio de mensagens
+        if isinstance(channel, (discord.ForumChannel, discord.CategoryChannel)):
+            logger.warning(f"Canal {channel_id} não suporta envio direto de mensagens (ForumChannel/CategoryChannel)")
             return None
+            
+        # Verificar permissões para canais de servidor
+        if hasattr(channel, 'guild') and hasattr(channel, 'permissions_for') and channel.guild:
+            try:
+                if not channel.permissions_for(channel.guild.me).send_messages:
+                    logger.warning(f"Bot não tem permissão para enviar mensagens no canal {channel_id}")
+                    return None
+            except AttributeError:
+                # Canal sem permissões (ex: PrivateChannel)
+                pass
             
         return channel
     except Exception as e:
@@ -24,7 +34,7 @@ def get_safe_channel(channel_id):
         return None
 import discord
 from discord.ext import commands, tasks
-from discord.ext.commands import CommandNotFound, MissingRequiredArgument, MissingPermissions, CommandOnCooldown
+# Removido import desnecessário - usando commands.* diretamente
 import asyncio
 import json
 # import sqlite3  # Removido - usando apenas PostgreSQL
@@ -108,6 +118,11 @@ async def safe_send_response(interaction: discord.Interaction, embed=None, conte
         # Verificar se a interação ainda é válida
         if not interaction or not hasattr(interaction, 'response'):
             logger.warning("Interação inválida ou expirada")
+            return None
+            
+        # Verificar se embed e content são válidos
+        if embed is None and content is None:
+            logger.warning("Embed e content são None")
             return None
             
         # Verificar timeout da interação (15 minutos)
@@ -1041,7 +1056,7 @@ async def cleanup_inactive_messages():
                     channel = bot.get_channel(channel_id)
                     if not channel:
                         # Canal não existe mais, marcar como inativa
-                        cursor.execute('UPDATE interactive_messages SET status = ? WHERE message_id = ?', 
+                        cursor.execute('UPDATE interactive_messages SET status = %s WHERE message_id = %s', 
                                      ('inactive', message_id))
                         cleaned += 1
                         continue
@@ -1049,11 +1064,11 @@ async def cleanup_inactive_messages():
                     try:
                         message = await channel.fetch_message(message_id)
                         if not message:
-                            cursor.execute('UPDATE interactive_messages SET status = ? WHERE message_id = ?', 
+                            cursor.execute('UPDATE interactive_messages SET status = %s WHERE message_id = %s', 
                                          ('inactive', message_id))
                             cleaned += 1
                     except discord.NotFound:
-                        cursor.execute('UPDATE interactive_messages SET status = ? WHERE message_id = ?', 
+                        cursor.execute('UPDATE interactive_messages SET status = %s WHERE message_id = %s', 
                                      ('inactive', message_id))
                         cleaned += 1
                         
@@ -1077,7 +1092,7 @@ async def check_giveaways():
         
         # Buscar sorteios finalizados com limite para evitar sobrecarga
         finished_giveaways = execute_query(
-            'SELECT * FROM giveaways WHERE status = ? AND end_time <= ? LIMIT 5', 
+            'SELECT * FROM giveaways WHERE status = %s AND end_time <= %s LIMIT 5', 
             ('active', now), 
             fetch_all=True
         )
@@ -1137,7 +1152,7 @@ async def check_giveaways():
                             # Registrar transação
                             execute_query('''
                                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                                VALUES (?, ?, ?, ?, ?)
+                                VALUES (%s, %s, %s, %s, %s)
                             ''', (winner_id, guild_id, 'giveaway_win', coins_per_winner, f"Ganhou sorteio: {title}"))
 
                             winner_mentions.append(f"<@{winner_id}>")
@@ -1204,7 +1219,7 @@ async def get_user_position(user_id, guild_id):
             WHERE u1.xp > (
                 SELECT COALESCE(u2.xp, 0)
                 FROM users u2
-                WHERE u2.user_id = ?
+                WHERE u2.user_id = %s
             )
         ''', (user_id,), fetch_one=True)
         
@@ -1282,29 +1297,51 @@ async def restore_interactive_messages():
             conn.close()
 
         restored_count = 0
+        failed_messages = []
+        
         for msg_data in messages:
             try:
-                if isinstance(msg_data, dict):
-                    message_id = msg_data['message_id']
-                    channel_id = msg_data['channel_id']
-                    guild_id = msg_data['guild_id']
-                    message_type = msg_data['message_type']
-                    data = json.loads(msg_data['data']) if msg_data['data'] else {}
-                else:
-                    message_id, channel_id, guild_id, message_type, data_json = msg_data
+                # PostgreSQL retorna tuplas, não dicionários
+                if isinstance(msg_data, (tuple, list)) and len(msg_data) >= 5:
+                    message_id, channel_id, guild_id, message_type, data_json = msg_data[:5]
                     data = json.loads(data_json) if data_json else {}
+                else:
+                    logger.warning(f"Formato inesperado de dados da mensagem: {msg_data}")
+                    continue
+
+                # Verificar se guild ainda existe
+                guild = bot.get_guild(guild_id)
+                if not guild:
+                    failed_messages.append(message_id)
+                    continue
 
                 # Verificar se canal ainda existe
                 channel = bot.get_channel(channel_id)
                 if not channel:
+                    failed_messages.append(message_id)
                     continue
 
-                # Verificar se mensagem ainda existe
-                try:
-                    message = await channel.fetch_message(message_id)
-                    if not message:
-                        continue
-                except discord.NotFound:
+                # Verificar se mensagem ainda existe (com retry) - apenas para canais de texto
+                message_exists = False
+                if hasattr(channel, 'fetch_message'):
+                    for attempt in range(3):  # 3 tentativas
+                        try:
+                            message = await channel.fetch_message(message_id)
+                            if message:
+                                message_exists = True
+                                break
+                        except discord.NotFound:
+                            break
+                        except (discord.HTTPException, discord.Forbidden) as e:
+                            logger.warning(f"Tentativa {attempt + 1} falhou para mensagem {message_id}: {e}")
+                            await asyncio.sleep(1)  # Aguardar 1 segundo antes de tentar novamente
+                else:
+                    # Canal não suporta fetch_message, marcar como inválido
+                    failed_messages.append(message_id)
+                    continue
+
+                if not message_exists:
+                    failed_messages.append(message_id)
                     continue
 
                 # Restaurar na memória
@@ -1316,9 +1353,29 @@ async def restore_interactive_messages():
                 }
                 
                 restored_count += 1
+                logger.debug(f"Mensagem {message_id} ({message_type}) restaurada com sucesso")
                 
             except Exception as msg_error:
                 logger.error(f"Erro ao restaurar mensagem {message_id}: {msg_error}")
+                if 'message_id' in locals():
+                    failed_messages.append(message_id)
+
+        # Limpar mensagens que falharam
+        if failed_messages:
+            try:
+                with db_lock:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.executemany('''
+                        UPDATE interactive_messages 
+                        SET status = 'inactive' 
+                        WHERE message_id = %s
+                    ''', [(msg_id,) for msg_id in failed_messages])
+                    conn.commit()
+                    conn.close()
+                logger.info(f"🧹 {len(failed_messages)} mensagens inválidas marcadas como inativas")
+            except Exception as cleanup_error:
+                logger.error(f"Erro ao limpar mensagens inválidas: {cleanup_error}")
 
         if restored_count > 0:
             logger.info(f"✅ {restored_count} mensagens interativas restauradas após redeploy")
@@ -1778,12 +1835,12 @@ async def slash_saldo(interaction: discord.Interaction, usuario: discord.Member 
         target = usuario or interaction.user
         data = get_user_data(target.id)
 
-        if not data:
+        if not data or len(data) == 0:
             update_user_data(target.id)
             coins, bank = 50, 0
         else:
-            coins = data[1] if len(data) > 1 else 50
-            bank = data[5] if len(data) > 5 else 0
+            coins = data[1] if data and len(data) > 1 else 50
+            bank = data[5] if data and len(data) > 5 else 0
 
         total = coins + bank
 
@@ -1820,7 +1877,7 @@ async def slash_daily(interaction: discord.Interaction):
             update_user_data(user_id)
             user_data = get_user_data(user_id)
 
-        last_daily = user_data[6] if len(user_data) > 6 else None
+        last_daily = user_data[6] if user_data and len(user_data) > 6 else None
         today = datetime.date.today().isoformat()
 
         if last_daily == today:
@@ -1832,7 +1889,7 @@ async def slash_daily(interaction: discord.Interaction):
             await safe_interaction_response(interaction, embed, ephemeral=True)
             return
 
-        current_coins = user_data[1] if len(user_data) > 1 else 50
+        current_coins = user_data[1] if user_data and len(user_data) > 1 else 50
         new_coins = current_coins + DAILY_REWARD
 
         # Use execute_query para compatibilidade SQLite/PostgreSQL
@@ -1902,7 +1959,7 @@ async def slash_trabalhar(interaction: discord.Interaction):
         trabalho = random.choice(trabalhos)
         ganho = random.randint(trabalho["min"], trabalho["max"])
 
-        level = user_data[3] if len(user_data) > 3 else 1
+        level = user_data[3] if user_data and len(user_data) > 3 else 1
         bonus = int(ganho * (level * 0.05))
         ganho_total = ganho + bonus
 
@@ -1923,7 +1980,7 @@ async def slash_trabalhar(interaction: discord.Interaction):
                 # Usar execute_query para compatibilidade
                 execute_query('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                 ''', (interaction.user.id, interaction.guild.id, 'work', ganho_total, f"Trabalhou como {trabalho['nome']}"))
 
                 conn.close()
@@ -2241,7 +2298,7 @@ async def slash_inventario(interaction: discord.Interaction, usuario: discord.Me
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (target.id,))
+                cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (target.id,))
                 result = cursor.fetchone()
                 conn.close()
 
@@ -2319,36 +2376,38 @@ async def slash_inventario(interaction: discord.Interaction, usuario: discord.Me
 async def on_command_error(ctx, error):
     """Manipular erros de comandos"""
     try:
-        from discord.ext.commands import CommandNotFound, MissingRequiredArgument, MissingPermissions, CommandOnCooldown
-        
-        if isinstance(error, CommandNotFound):
+        if isinstance(error, commands.CommandNotFound):
             # Ignorar comandos não encontrados silenciosamente
             return
-        elif isinstance(error, MissingRequiredArgument):
+        elif isinstance(error, commands.MissingRequiredArgument):
             embed = create_embed(
                 "❌ Argumento Faltando",
                 f"Você esqueceu de fornecer um argumento necessário.\nUse `RXajuda` para ver a sintaxe correta.",
                 color=0xff0000
             )
             await ctx.send(embed=embed)
-        elif isinstance(error, MissingPermissions):
+        elif isinstance(error, commands.MissingPermissions):
             embed = create_embed(
                 "❌ Sem Permissão",
                 "Você não tem permissão para usar este comando.",
                 color=0xff0000
             )
             await ctx.send(embed=embed)
-        elif isinstance(error, CommandOnCooldown):
+        elif isinstance(error, commands.CommandOnCooldown):
             embed = create_embed(
                 "⏰ Cooldown",
                 f"Este comando está em cooldown. Tente novamente em {error.retry_after:.1f} segundos.",
                 color=0xff6600
             )
             await ctx.send(embed=embed)
+        elif isinstance(error, TypeError):
+            logger.error(f"TypeError no comando {ctx.command}: {error}")
+            return
         else:
             logger.error(f"Erro não tratado no comando {ctx.command}: {error}")
     except Exception as e:
-        logger.error(f"Erro no manipulador de erros: {e}")
+        # Silenciosamente ignorar erros do error handler para evitar loops
+        pass
 
 @bot.event
 async def on_message(message):
@@ -2680,7 +2739,7 @@ async def slash_presentear(interaction: discord.Interaction, usuario: discord.Me
             conn = get_db_connection()
             cursor = conn.cursor()
 
-            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (interaction.user.id,))
+            cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (interaction.user.id,))
             sender_result = cursor.fetchone()
 
             if not sender_result:
@@ -2704,11 +2763,11 @@ async def slash_presentear(interaction: discord.Interaction, usuario: discord.Me
                 await safe_send_response(interaction, embed=embed, ephemeral=True)
                 return
 
-            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (usuario.id,))
+            cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (usuario.id,))
             receiver_result = cursor.fetchone()
 
             if not receiver_result:
-                cursor.execute('INSERT INTO users (user_id) VALUES (?)', (usuario.id,))
+                cursor.execute('INSERT INTO users (user_id) VALUES (%s)', (usuario.id,))
                 receiver_inventory = {}
             else:
                 receiver_inventory_data = receiver_result[0]
@@ -2725,9 +2784,9 @@ async def slash_presentear(interaction: discord.Interaction, usuario: discord.Me
             else:
                 receiver_inventory[str(item_id)] = quantidade
 
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s',
                           (json.dumps(sender_inventory), interaction.user.id))
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s',
                           (json.dumps(receiver_inventory), usuario.id))
 
             conn.commit()
@@ -2793,7 +2852,7 @@ async def slash_daritem(interaction: discord.Interaction, usuario: discord.Membe
             conn = get_db_connection()
             cursor = conn.cursor()
 
-            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (interaction.user.id,))
+            cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (interaction.user.id,))
             sender_result = cursor.fetchone()
 
             if not sender_result:
@@ -2817,11 +2876,11 @@ async def slash_daritem(interaction: discord.Interaction, usuario: discord.Membe
                 await safe_send_response(interaction, embed=embed)
                 return
 
-            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (usuario.id,))
+            cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (usuario.id,))
             receiver_result = cursor.fetchone()
 
             if not receiver_result:
-                cursor.execute('INSERT INTO users (user_id) VALUES (?)', (usuario.id,))
+                cursor.execute('INSERT INTO users (user_id) VALUES (%s)', (usuario.id,))
                 receiver_inventory = {}
             else:
                 receiver_inventory_data = receiver_result[0]
@@ -2838,9 +2897,9 @@ async def slash_daritem(interaction: discord.Interaction, usuario: discord.Membe
             else:
                 receiver_inventory[str(item_id)] = quantidade
 
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s',
                           (json.dumps(sender_inventory), interaction.user.id))
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s',
                           (json.dumps(receiver_inventory), usuario.id))
 
             conn.commit()
@@ -2957,7 +3016,7 @@ async def slash_depositar(interaction: discord.Interaction, valor: int):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, bank = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET coins = %s, bank = %s WHERE user_id = %s',
                           (coins - valor, bank + valor, interaction.user.id))
             conn.commit()
             conn.close()
@@ -3007,7 +3066,7 @@ async def slash_sacar(interaction: discord.Interaction, valor: int):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, bank = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET coins = %s, bank = %s WHERE user_id = %s',
                           (coins + valor, bank - valor, interaction.user.id))
             conn.commit()
             conn.close()
@@ -3057,7 +3116,7 @@ async def slash_lembrete(interaction: discord.Interaction, tempo: str, texto: st
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO reminders (user_id, guild_id, channel_id, reminder_text, remind_time)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (interaction.user.id, interaction.guild.id, interaction.channel.id, texto, remind_time))
             conn.commit()
             conn.close()
@@ -3181,7 +3240,7 @@ async def slash_settitle(interaction: discord.Interaction, titulo: str):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), interaction.user.id))
+            cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), interaction.user.id))
             conn.commit()
             conn.close()
 
@@ -3427,7 +3486,7 @@ async def slash_warn(interaction: discord.Interaction, usuario: discord.Member, 
             update_user_data(usuario.id)
             current_warns = 0
         else:
-            current_warns = user_data[15] if len(user_data) > 15 else 0
+            current_warns = user_data[15] if user_data and len(user_data) > 15 else 0
 
         new_warns = current_warns + 1
 
@@ -3435,11 +3494,11 @@ async def slash_warn(interaction: discord.Interaction, usuario: discord.Member, 
             conn = get_db_connection()
             cursor = conn.cursor()
 
-            cursor.execute('UPDATE users SET warnings = ? WHERE user_id = ?', (new_warns, usuario.id))
+            cursor.execute('UPDATE users SET warnings = %s WHERE user_id = %s', (new_warns, usuario.id))
 
             cursor.execute('''
                 INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (interaction.guild.id, usuario.id, interaction.user.id, 'warn', motivo))
 
             conn.commit()
@@ -3500,7 +3559,7 @@ async def slash_addcoins(interaction: discord.Interaction, usuario: discord.Memb
             update_user_data(usuario.id)
             user_data = get_user_data(usuario.id)
 
-        current_coins = user_data[1] if len(user_data) > 1 else 50
+        current_coins = user_data[1] if user_data and len(user_data) > 1 else 50
         new_coins = current_coins + quantidade
 
         # Atualizar banco de dados com tratamento de erro
@@ -3510,12 +3569,12 @@ async def slash_addcoins(interaction: discord.Interaction, usuario: discord.Memb
                 conn = get_db_connection()
                 cursor = conn.cursor()
 
-                cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, usuario.id))
+                cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, usuario.id))
 
                 # Registrar transação
                 cursor.execute('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                 ''', (usuario.id, interaction.guild.id, 'admin_add', quantidade, f"Admin {interaction.user.name}: {motivo}"))
 
                 conn.commit()
@@ -3569,7 +3628,7 @@ async def slash_warns(interaction: discord.Interaction, usuario: discord.Member 
         if not user_data:
             warns = 0
         else:
-            warns = user_data[15] if len(user_data) > 15 else 0
+            warns = user_data[15] if user_data and len(user_data) > 15 else 0
 
         embed = create_embed(
             f"⚠️ Advertências de {target.display_name}",
@@ -3624,7 +3683,7 @@ async def slash_ban(interaction: discord.Interaction, usuario: discord.Member, m
                 cursor = conn.cursor()
                 cursor.execute('''
                     INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                 ''', (interaction.guild.id, usuario.id, interaction.user.id, 'ban', motivo))
                 conn.commit()
                 conn.close()
@@ -3674,7 +3733,7 @@ async def slash_kick(interaction: discord.Interaction, usuario: discord.Member, 
                 cursor = conn.cursor()
                 cursor.execute('''
                     INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                 ''', (interaction.guild.id, usuario.id, interaction.user.id, 'kick', motivo))
                 conn.commit()
                 conn.close()
@@ -3901,7 +3960,7 @@ async def slash_sorteios(interaction: discord.Interaction):
             cursor.execute('''
                 SELECT title, prize, end_time, winners_count, participants
                 FROM giveaways
-                WHERE guild_id = ? AND status = 'active'
+                WHERE guild_id = %s AND status = 'active'
                 ORDER BY end_time
             ''', (interaction.guild.id,))
 
@@ -4193,7 +4252,7 @@ class GiveawayModal(discord.ui.Modal):
                 # Query corrigida para PostgreSQL/SQLite
                 cursor.execute('''
                     INSERT INTO giveaways (guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ''', (
                     interaction.guild.id,
                     interaction.channel.id, 
@@ -4292,7 +4351,7 @@ class CopinhaConfigModal(discord.ui.Modal):
                 cursor = conn.cursor()
                 cursor.execute('''
                     INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ''', (
                     interaction.guild.id,
                     interaction.user.id,
@@ -4537,23 +4596,23 @@ async def slash_transferir(interaction: discord.Interaction, usuario: discord.Me
 
             # Remover do remetente
             new_sender_coins = sender_coins - quantidade
-            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', 
+            cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', 
                          (new_sender_coins, interaction.user.id))
 
             # Adicionar ao destinatário
             new_receiver_coins = receiver_coins + quantidade
-            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', 
+            cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', 
                          (new_receiver_coins, usuario.id))
 
             # Log da transação
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (interaction.user.id, interaction.guild.id, 'transferencia_enviada', -quantidade, f"Transferiu para {usuario.display_name}"))
 
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (usuario.id, interaction.guild.id, 'transferencia_recebida', quantidade, f"Recebeu de {interaction.user.display_name}"))
 
             conn.commit()
@@ -4941,7 +5000,7 @@ async def slash_vender(interaction: discord.Interaction, item_id: int, quantidad
                 # Registrar transação
                 cursor.execute('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                 ''', (interaction.user.id, interaction.guild.id, 'item_sale', total_venda, f"Vendeu {quantidade}x {item['nome']}"))
 
                 conn.commit()
@@ -5230,7 +5289,7 @@ async def slash_investir(interaction: discord.Interaction, quantia: int):
             update_user_data(interaction.user.id)
             user_data = get_user_data(interaction.user.id)
 
-        coins = user_data[1] if len(user_data) > 1 else 50
+        coins = user_data[1] if user_data and len(user_data) > 1 else 50
 
         if quantia < 50:
             embed = create_embed("❌ Investimento mínimo", "Mínimo: 50 moedas", color=0xff0000)
@@ -5262,9 +5321,9 @@ async def slash_investir(interaction: discord.Interaction, quantia: int):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, interaction.user.id))
+            cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, interaction.user.id))
             cursor.execute('''INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                             VALUES (?, ?, ?, ?, ?)''', 
+                             VALUES (%s, %s, %s, %s, %s)''', 
                           (interaction.user.id, interaction.guild.id, 'investment', lucro, f"Investimento de {quantia:,} moedas"))
             conn.commit()
             conn.close()
@@ -5297,7 +5356,7 @@ async def slash_cassino(interaction: discord.Interaction, jogo: str, aposta: int
             update_user_data(interaction.user.id)
             user_data = get_user_data(interaction.user.id)
 
-        coins = user_data[1] if len(user_data) > 1 else 50
+        coins = user_data[1] if user_data and len(user_data) > 1 else 50
 
         if aposta < 10:
             embed = create_embed("❌ Aposta mínima", "Mínimo: 10 moedas", color=0xff0000)
@@ -5382,9 +5441,9 @@ async def slash_cassino(interaction: discord.Interaction, jogo: str, aposta: int
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, interaction.user.id))
+            cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, interaction.user.id))
             cursor.execute('''INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                             VALUES (?, ?, ?, ?, ?)''', 
+                             VALUES (%s, %s, %s, %s, %s)''', 
                           (interaction.user.id, interaction.guild.id, 'casino', ganho - aposta, f"Cassino - {jogo}"))
             conn.commit()
             conn.close()
@@ -5413,7 +5472,7 @@ async def slash_emprestimo(interaction: discord.Interaction, quantia: int):
             user_data = get_user_data(interaction.user.id)
 
         # Verificar se já tem empréstimo ativo
-        settings_data = user_data[11] if len(user_data) > 11 else '{}'
+        settings_data = user_data[11] if user_data and len(user_data) > 11 else '{}'
         settings = json.loads(settings_data) if settings_data else {}
 
         if settings.get('loan_amount', 0) > 0:
@@ -5430,7 +5489,7 @@ async def slash_emprestimo(interaction: discord.Interaction, quantia: int):
         juros = int(quantia * 0.15)
         total_pagamento = quantia + juros
 
-        coins = user_data[1] if len(user_data) > 1 else 50
+        coins = user_data[1] if user_data and len(user_data) > 1 else 50
         new_coins = coins + quantia
 
         # Salvar empréstimo
@@ -5443,7 +5502,7 @@ async def slash_emprestimo(interaction: discord.Interaction, quantia: int):
             cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
                           (new_coins, json.dumps(settings), interaction.user.id))
             cursor.execute('''INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                             VALUES (?, ?, ?, ?, ?)''', 
+                             VALUES (%s, %s, %s, %s, %s)''', 
                           (interaction.user.id, interaction.guild.id, 'loan', quantia, f"Empréstimo de {quantia:,} moedas"))
             conn.commit()
             conn.close()
@@ -5472,7 +5531,7 @@ async def slash_quitar(interaction: discord.Interaction):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        settings_data = user_data[11] if len(user_data) > 11 else '{}'
+        settings_data = user_data[11] if user_data and len(user_data) > 11 else '{}'
         settings = json.loads(settings_data) if settings_data else {}
 
         loan_amount = settings.get('loan_amount', 0)
@@ -5481,7 +5540,7 @@ async def slash_quitar(interaction: discord.Interaction):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        coins = user_data[1] if len(user_data) > 1 else 50
+        coins = user_data[1] if user_data and len(user_data) > 1 else 50
 
         if coins < loan_amount:
             embed = create_embed(
@@ -5502,7 +5561,7 @@ async def slash_quitar(interaction: discord.Interaction):
             cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
                           (new_coins, json.dumps(settings), interaction.user.id))
             cursor.execute('''INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                             VALUES (?, ?, ?, ?, ?)''', 
+                             VALUES (%s, %s, %s, %s, %s)''', 
                           (interaction.user.id, interaction.guild.id, 'loan_payment', -loan_amount, f"Quitação de empréstimo"))
             conn.commit()
             conn.close()
@@ -5539,7 +5598,7 @@ async def slash_seguro(interaction: discord.Interaction, tipo: str):
             update_user_data(interaction.user.id)
             user_data = get_user_data(interaction.user.id)
 
-        coins = user_data[1] if len(user_data) > 1 else 50
+        coins = user_data[1] if user_data and len(user_data) > 1 else 50
         seguro_info = seguros[tipo.lower()]
 
         if coins < seguro_info['preco']:
@@ -5547,7 +5606,7 @@ async def slash_seguro(interaction: discord.Interaction, tipo: str):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        settings_data = user_data[11] if len(user_data) > 11 else '{}'
+        settings_data = user_data[11] if user_data and len(user_data) > 11 else '{}'
         settings = json.loads(settings_data) if settings_data else {}
 
         # Verificar se já tem seguro ativo
@@ -5598,7 +5657,7 @@ async def slash_mineracao(interaction: discord.Interaction):
             user_data = get_user_data(interaction.user.id)
 
         # Verificar cooldown (4 horas)
-        settings_data = user_data[11] if len(user_data) > 11 else '{}'
+        settings_data = user_data[11] if user_data and len(user_data) > 11 else '{}'
         settings = json.loads(settings_data) if settings_data else {}
         last_mining = settings.get('last_mining', 0)
 
@@ -5629,11 +5688,11 @@ async def slash_mineracao(interaction: discord.Interaction):
 
         if success:
             ganho = random.randint(crypto['min'], crypto['max'])
-            level = user_data[3] if len(user_data) > 3 else 1
+            level = user_data[3] if user_data and len(user_data) > 3 else 1
             bonus = int(ganho * (level * 0.02))  # 2% por level
             ganho_total = ganho + bonus
 
-            coins = user_data[1] if len(user_data) > 1 else 50
+            coins = user_data[1] if user_data and len(user_data) > 1 else 50
             new_coins = coins + ganho_total
 
             settings['last_mining'] = current_time
@@ -5644,7 +5703,7 @@ async def slash_mineracao(interaction: discord.Interaction):
                 cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
                               (new_coins, json.dumps(settings), interaction.user.id))
                 cursor.execute('''INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                                 VALUES (?, ?, ?, ?, ?)''', 
+                                 VALUES (%s, %s, %s, %s, %s)''', 
                               (interaction.user.id, interaction.guild.id, 'mining', ganho_total, f"Mineração de {crypto['name']}"))
                 conn.commit()
                 conn.close()
@@ -5664,7 +5723,7 @@ async def slash_mineracao(interaction: discord.Interaction):
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', 
+                cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', 
                               (json.dumps(settings), interaction.user.id))
                 conn.commit()
                 conn.close()
@@ -5715,13 +5774,13 @@ async def slash_acao(interaction: discord.Interaction, operacao: str, empresa: s
         empresa_info = empresas[empresa.lower()]
         preco_flutuante = int(empresa_info['price'] * random.uniform(0.85, 1.15))  # Flutuação de ±15%
 
-        settings_data = user_data[11] if len(user_data) > 11 else '{}'
+        settings_data = user_data[11] if user_data and len(user_data) > 11 else '{}'
         settings = json.loads(settings_data) if settings_data else {}
         stocks = settings.get('stocks', {})
 
         if operacao.lower() == 'comprar':
             custo_total = preco_flutuante * quantidade
-            coins = user_data[1] if len(user_data) > 1 else 50
+            coins = user_data[1] if user_data and len(user_data) > 1 else 50
 
             if custo_total > coins:
                 embed = create_embed("❌ Saldo insuficiente", f"Custo: {custo_total:,} moedas", color=0xff0000)
@@ -5758,7 +5817,7 @@ async def slash_acao(interaction: discord.Interaction, operacao: str, empresa: s
                 return
 
             valor_total = preco_flutuante * quantidade
-            coins = user_data[1] if len(user_data) > 1 else 50
+            coins = user_data[1] if user_data and len(user_data) > 1 else 50
             new_coins = coins + valor_total
             stocks[empresa.lower()] -= quantidade
 
@@ -5805,7 +5864,7 @@ async def slash_carteira(interaction: discord.Interaction, usuario: discord.Memb
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        settings_data = user_data[11] if len(user_data) > 11 else '{}'
+        settings_data = user_data[11] if user_data and len(user_data) > 11 else '{}'
         settings = json.loads(settings_data) if settings_data else {}
 
         stocks = settings.get('stocks', {})
@@ -5844,8 +5903,8 @@ async def slash_carteira(interaction: discord.Interaction, usuario: discord.Memb
 
         emprestimo_text = "Nenhum empréstimo" if loan <= 0 else f"💸 {loan:,} moedas pendentes"
 
-        coins = user_data[1] if len(user_data) > 1 else 50
-        bank = user_data[5] if len(user_data) > 5 else 0
+        coins = user_data[1] if user_data and len(user_data) > 1 else 50
+        bank = user_data[5] if user_data and len(user_data) > 5 else 0
         valor_total = coins + bank + portfolio_value
 
         embed = create_embed(
@@ -5922,7 +5981,7 @@ async def slash_poupanca(interaction: discord.Interaction, operacao: str, quanti
             update_user_data(interaction.user.id)
             user_data = get_user_data(interaction.user.id)
 
-        settings_data = user_data[11] if len(user_data) > 11 else '{}'
+        settings_data = user_data[11] if user_data and len(user_data) > 11 else '{}'
         settings = json.loads(settings_data) if settings_data else {}
         poupanca = settings.get('savings', {'amount': 0, 'last_interest': time.time()})
 
@@ -5942,7 +6001,7 @@ async def slash_poupanca(interaction: discord.Interaction, operacao: str, quanti
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', 
+                cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', 
                               (json.dumps(settings), interaction.user.id))
                 conn.commit()
                 conn.close()
@@ -5965,7 +6024,7 @@ async def slash_poupanca(interaction: discord.Interaction, operacao: str, quanti
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
 
-            coins = user_data[1] if len(user_data) > 1 else 50
+            coins = user_data[1] if user_data and len(user_data) > 1 else 50
             if quantia > coins:
                 embed = create_embed("❌ Saldo insuficiente", f"Você tem {coins:,} moedas", color=0xff0000)
                 await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -6007,7 +6066,7 @@ async def slash_poupanca(interaction: discord.Interaction, operacao: str, quanti
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
 
-            coins = user_data[1] if len(user_data) > 1 else 50
+            coins = user_data[1] if user_data and len(user_data) > 1 else 50
             new_coins = coins + quantia
             poupanca['amount'] -= quantia
 
@@ -6061,7 +6120,7 @@ async def slash_cripto(interaction: discord.Interaction, operacao: str, tipo: st
             update_user_data(interaction.user.id)
             user_data = get_user_data(interaction.user.id)
 
-        settings_data = user_data[11] if len(user_data) > 11 else '{}'
+        settings_data = user_data[11] if user_data and len(user_data) > 11 else '{}'
         settings = json.loads(settings_data) if settings_data else {}
         crypto_wallet = settings.get('crypto', {})
 
@@ -6091,7 +6150,7 @@ async def slash_cripto(interaction: discord.Interaction, operacao: str, tipo: st
 
         elif operacao.lower() == 'minar':
             custo_mineracao = cripto_info['mining_cost']
-            coins = user_data[1] if len(user_data) > 1 else 50
+            coins = user_data[1] if user_data and len(user_data) > 1 else 50
 
             if coins < custo_mineracao:
                 embed = create_embed("❌ Saldo insuficiente", f"Custo mineração: {custo_mineracao:,} moedas", color=0xff0000)
@@ -6131,7 +6190,7 @@ async def slash_cripto(interaction: discord.Interaction, operacao: str, tipo: st
                 with db_lock:
                     conn = get_db_connection()
                     cursor = conn.cursor()
-                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, interaction.user.id))
+                    cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, interaction.user.id))
                     conn.commit()
                     conn.close()
 
@@ -6146,7 +6205,7 @@ async def slash_cripto(interaction: discord.Interaction, operacao: str, tipo: st
 
         elif operacao.lower() == 'comprar':
             custo_total = int(preco_flutuante * quantia)
-            coins = user_data[1] if len(user_data) > 1 else 50
+            coins = user_data[1] if user_data and len(user_data) > 1 else 50
 
             if custo_total > coins:
                 embed = create_embed("❌ Saldo insuficiente", f"Custo: {custo_total:,} moedas", color=0xff0000)
@@ -6184,7 +6243,7 @@ async def slash_cripto(interaction: discord.Interaction, operacao: str, tipo: st
                 return
 
             valor_total = int(preco_flutuante * quantia)
-            coins = user_data[1] if len(user_data) > 1 else 50
+            coins = user_data[1] if user_data and len(user_data) > 1 else 50
             new_coins = coins + valor_total
             crypto_wallet[tipo.lower()] -= quantia
 
@@ -6273,7 +6332,7 @@ async def slash_automod(interaction: discord.Interaction, acao: str, configuraca
 
                 cursor.execute('''INSERT OR REPLACE INTO auto_mod_rules 
                                  (guild_id, rule_type, rule_data, punishment, enabled) 
-                                 VALUES (?, ?, ?, ?, ?)''',
+                                 VALUES (%s, %s, %s, %s, %s)''',
                               (interaction.guild.id, acao.lower(), '{}', punishments[acao.lower()], 1))
                 conn.commit()
 
@@ -6443,7 +6502,7 @@ async def slash_massban(interaction: discord.Interaction, usuarios: str, motivo:
                     conn = get_db_connection()
                     cursor = conn.cursor()
                     cursor.execute('''INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                                     VALUES (?, ?, ?, ?, ?)''',
+                                     VALUES (%s, %s, %s, %s, %s)''',
                                   (interaction.guild.id, user_id, interaction.user.id, 'massban', motivo))
                     conn.commit()
                     conn.close()
@@ -6894,15 +6953,15 @@ async def announce_tournament_winner(copinha, winner_id):
             prize_coins = 1000  # Prêmio base
             user_data = get_user_data(winner_id)
             if user_data:
-                current_coins = user_data[1] if len(user_data) > 1 else 50
+                current_coins = user_data[1] if user_data and len(user_data) > 1 else 50
                 new_coins = current_coins + prize_coins
                 
                 with db_lock:
                     conn = get_db_connection()
                     cursor = conn.cursor()
-                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, winner_id))
+                    cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, winner_id))
                     cursor.execute('''INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                                     VALUES (?, ?, ?, ?, ?)''',
+                                     VALUES (%s, %s, %s, %s, %s)''',
                                   (winner_id, guild_id, 'tournament_win', prize_coins, f"Venceu a copinha: {copinha_title}"))
                     conn.commit()
                     conn.close()
@@ -6957,7 +7016,7 @@ async def create_next_round(copinha, winners, current_round, copinha_id, cursor)
         for match in matches:
             cursor.execute('''
                 INSERT INTO copinha_matches (copinha_id, round_name, match_number, players, status)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (match['copinha_id'], match['round_name'], match['match_number'], match['players'], match['status']))
         
         # Atualizar current_round da copinha
@@ -7069,7 +7128,7 @@ async def slash_unban(interaction: discord.Interaction, usuario_id: str, motivo:
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute('''INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                             VALUES (?, ?, ?, ?, ?)''',
+                             VALUES (%s, %s, %s, %s, %s)''',
                           (interaction.guild.id, user_id, interaction.user.id, 'unban', motivo))
             conn.commit()
             conn.close()
@@ -7327,7 +7386,7 @@ async def create_ticket_channel(ctx, motivo, user):
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO tickets (guild_id, creator_id, channel_id, status, reason)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (guild.id, user.id, ticket_channel.id, 'open', motivo))
             conn.commit()
             conn.close()
@@ -7468,7 +7527,7 @@ Para fechar este ticket, reaja com 🔒 em qualquer mensagem.
                                 user_data = get_user_data(participant_id)
                                 if user_data:
                                     new_coins = user_data[1] + coins_per_user
-                                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, participant_id))
+                                    cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, participant_id))
                                     participant = bot.get_user(participant_id)
                                     if participant:
                                         winners.append(participant.mention)
@@ -7705,7 +7764,7 @@ class StaffFeedbackModal(discord.ui.Modal, title="📊 Avaliação do Staff"):
 
                     cursor.execute('''
                         INSERT INTO staff_feedback (guild_id, staff_name, avaliador_id, nota_atendimento, nota_qualidade, nota_rapidez, nota_profissionalismo, media_final, comentarios)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ''', (
                         interaction.guild.id,
                         self.staff_name,
@@ -7894,7 +7953,7 @@ class CopinhaConfigModal(discord.ui.Modal, title="🏆 Criar Copinha Stumble Guy
                 cursor = conn.cursor()
                 cursor.execute('''
                     INSERT INTO copinhas (guild_id, creator_id, channel_id, title, map_name, team_format, max_players, current_round, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ''', (
                     interaction.guild.id,
                     interaction.user.id,
@@ -8338,7 +8397,7 @@ class CoinGiveawayModal(discord.ui.Modal, title="💰 Criar Sorteio de Coins"):
                 cursor = conn.cursor()
                 cursor.execute('''
                     INSERT INTO giveaways (guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ''', (interaction.guild.id, interaction.channel.id, self.user_id, self.titulo.value, f"{coin_amount:,} coins", winners_count, end_time, message.id, 'active'))
 
                 # Salvar quantidade de coins no campo prize para distribuição automática
@@ -8894,7 +8953,7 @@ class MatchResultView(discord.ui.View):
                     for match in matches:
                         cursor.execute('''
                             INSERT INTO copinha_matches (copinha_id, round_name, match_number, players, status)
-                            VALUES (?, ?, ?, ?, ?)
+                            VALUES (%s, %s, %s, %s, %s)
                         ''', (self.copinha_id, match['round'], match['match_number'], json.dumps(match['players']), 'waiting'))
 
                     # Atualizar status da copinha
@@ -11487,7 +11546,7 @@ async def ban_member(ctx, member: discord.Member, *, reason="Sem motivo especifi
                         cursor = conn.cursor()
                         cursor.execute('''
                             INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                            VALUES (?, ?, ?, ?, ?)
+                            VALUES (%s, %s, %s, %s, %s)
                         ''', (interaction.guild.id, self.member.id, self.moderator.id, 'ban', self.reason))
                         conn.commit()
                         conn.close()
@@ -11747,18 +11806,18 @@ class TransferModal(discord.ui.Modal, title="💰 Transferir Dinheiro"):
                 cursor = conn.cursor()
 
                 # Atualizar saldos
-                cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (sender_coins - amount, self.user_id))
-                cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (receiver_coins + amount, user.id))
+                cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (sender_coins - amount, self.user_id))
+                cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (receiver_coins + amount, user.id))
 
                 # Registrar transações
                 cursor.execute('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                 ''', (self.user_id, interaction.guild.id, 'transfer_out', -amount, f"Transferiu para {user.name}: {self.motivo.value or 'Sem motivo'}"))
 
                 cursor.execute('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                 ''', (user.id, interaction.guild.id, 'transfer_in', amount, f"Recebeu de {interaction.user.name}: {self.motivo.value or 'Sem motivo'}"))
 
                 conn.commit()
@@ -11878,18 +11937,18 @@ Clique no botão abaixo para transferir dinheiro com formulário interativo!
             cursor = conn.cursor()
 
             # Atualizar saldos
-            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (sender_coins - amount, ctx.author.id))
-            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (receiver_coins + amount, user.id))
+            cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (sender_coins - amount, ctx.author.id))
+            cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (receiver_coins + amount, user.id))
 
             # Registrar transações
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (ctx.author.id, ctx.guild.id, 'transfer_out', -amount, f"Transferiu para {user.name}"))
 
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (user.id, ctx.guild.id, 'transfer_in', amount, f"Recebeu de {ctx.author.name}"))
 
             conn.commit()
@@ -11950,7 +12009,7 @@ async def depositar(ctx, amount: int):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, bank = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET coins = %s, bank = %s WHERE user_id = %s',
                           (coins - amount, bank + amount, ctx.author.id))
             conn.commit()
             conn.close()
@@ -11998,7 +12057,7 @@ async def sacar(ctx, amount: int):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, bank = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET coins = %s, bank = %s WHERE user_id = %s',
                           (coins + amount, bank - amount, ctx.author.id))
             conn.commit()
             conn.close()
@@ -12072,16 +12131,16 @@ async def trabalhar(ctx):
 
             # Atualizar dinheiro
             new_coins = user_data[1] + ganho_total
-            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
+            cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, ctx.author.id))
 
             # Atualizar cooldown
             settings['last_work'] = current_time
-            cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+            cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), ctx.author.id))
 
             # Registrar transação
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (ctx.author.id, ctx.guild.id, 'work', ganho_total, f"Trabalhou como {trabalho['nome']}"))
 
             conn.commit()
@@ -12162,11 +12221,11 @@ async def crime(ctx):
                 ganho = random.randint(crime["ganho"][0], crime["ganho"][1])
                 new_coins = user_data[1] + ganho
 
-                cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
+                cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, ctx.author.id))
 
                 cursor.execute('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                 ''', (ctx.author.id, ctx.guild.id, 'crime_success', ganho, f"Crime bem-sucedido: {crime['nome']}"))
 
                 embed = create_embed(
@@ -12184,11 +12243,11 @@ async def crime(ctx):
                 perda = min(perda, user_data[1])  # Não pode perder mais do que tem
                 new_coins = max(0, user_data[1] - perda)
 
-                cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
+                cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, ctx.author.id))
 
                 cursor.execute('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                 ''', (ctx.author.id, ctx.guild.id, 'crime_fail', -perda, f"Crime falhou: {crime['nome']}"))
 
                 embed = create_embed(
@@ -12202,7 +12261,7 @@ async def crime(ctx):
 
             # Atualizar cooldown
             settings['last_crime'] = current_time
-            cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+            cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), ctx.author.id))
 
             conn.commit()
             conn.close()
@@ -12678,7 +12737,7 @@ async def list_giveaways(ctx):
             cursor.execute('''
                 SELECT title, prize, end_time, winners_count, participants
                 FROM giveaways
-                WHERE guild_id = ? AND status = 'active'
+                WHERE guild_id = %s AND status = 'active'
                 ORDER BY end_time
             ''', (ctx.guild.id,))
 
@@ -12846,7 +12905,7 @@ async def feedback_ticket(ctx, *, avaliacao):
 
                 cursor.execute('''
                     INSERT INTO ticket_feedback (ticket_channel_id, user_id, feedback_text, notas, media_nota)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                 ''', (ctx.channel.id, ctx.author.id, avaliacao, ','.join(notas), media))
 
                 conn.commit()
@@ -13153,10 +13212,10 @@ async def comprar_item(ctx, item_id: int = None):
 
             # Remover dinheiro
             new_coins = coins - item['preco']
-            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, ctx.author.id))
+            cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, ctx.author.id))
 
             # Adicionar ao inventário
-            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (ctx.author.id,))
+            cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (ctx.author.id,))
             inventory_data = cursor.fetchone()[0]
             inventory = json.loads(inventory_data) if inventory_data else {}
 
@@ -13165,12 +13224,12 @@ async def comprar_item(ctx, item_id: int = None):
             else:
                 inventory[str(item_id)] = 1
 
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), ctx.author.id))
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', (json.dumps(inventory), ctx.author.id))
 
             # Registrar transação
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (ctx.author.id, ctx.guild.id, 'compra', -item['preco'], f"Comprou {item['nome']}"))
 
             conn.commit()
@@ -13203,7 +13262,7 @@ async def inventario(ctx, user: discord.Member = None):
             cursor = conn.cursor()
 
             # Buscar dados do usuário diretamente
-            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (target.id,))
+            cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (target.id,))
             result = cursor.fetchone()
             conn.close()
 
@@ -13301,7 +13360,7 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
             cursor = conn.cursor()
 
             # Verificar se remetente existe
-            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (ctx.author.id,))
+            cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (ctx.author.id,))
             sender_result = cursor.fetchone()
 
             if not sender_result:
@@ -13327,12 +13386,12 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
                 return
 
             # Verificar/criar receptor
-            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user.id,))
+            cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user.id,))
             receiver_result = cursor.fetchone()
 
             if not receiver_result:
                 # Criar dados do receptor
-                cursor.execute('INSERT INTO users (user_id) VALUES (?)', (user.id,))
+                cursor.execute('INSERT INTO users (user_id) VALUES (%s)', (user.id,))
                 receiver_inventory = {}
             else:
                 receiver_inventory_data = receiver_result[0]
@@ -13351,20 +13410,20 @@ async def dar_item(ctx, user: discord.Member, item_id: int, quantidade: int = 1)
                 receiver_inventory[str(item_id)] = quantidade
 
             # Atualizar banco de dados
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s',
                           (json.dumps(sender_inventory), ctx.author.id))
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s',
                           (json.dumps(receiver_inventory), user.id))
 
             # Registrar transações
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (ctx.author.id, ctx.guild.id, 'item_given', 0, f"Deu {quantidade}x {item['nome']} para {user.name}"))
 
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (user.id, ctx.guild.id, 'item_received', 0, f"Recebeu {quantidade}x {item['nome']} de {ctx.author.name}"))
 
             conn.commit()
@@ -13570,7 +13629,7 @@ async def usar_item(ctx, item_id: int = None):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (ctx.author.id,))
+            cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (ctx.author.id,))
             result = cursor.fetchone()
             conn.close()
     except Exception as e:
@@ -13621,14 +13680,14 @@ async def usar_item(ctx, item_id: int = None):
                 if resultado_jogo == 'vitoria':
                     premio = random.randint(200, 500)
                     coins_gained = premio
-                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins + premio, ctx.author.id))
+                    cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (current_coins + premio, ctx.author.id))
                     resultado = f"🎉 **VITÓRIA!** Você ganhou {premio:,} moedas! ✅ **Automaticamente adicionadas ao seu saldo!**"
                 elif resultado_jogo == 'empate':
                     resultado = "😐 **EMPATE!** Nada aconteceu."
                 else:
                     perda = random.randint(50, 150)
                     perda = min(perda, current_coins)
-                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins - perda, ctx.author.id))
+                    cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (current_coins - perda, ctx.author.id))
                     resultado = f"😢 **DERROTA!** Você perdeu {perda:,} moedas."
 
             # ITEM 2: Caixa Misteriosa
@@ -13643,7 +13702,7 @@ async def usar_item(ctx, item_id: int = None):
                 elif sorte <= 25:  # 20% - Bom
                     premio_coins = random.randint(500, 1500)
                     coins_gained = premio_coins
-                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins + premio_coins, ctx.author.id))
+                    cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (current_coins + premio_coins, ctx.author.id))
                     resultado = f"💰 **SORTE!** Você ganhou {premio_coins:,} moedas! ✅ **Automaticamente adicionadas!**"
                 elif sorte <= 50:  # 25% - Regular
                     premio_xp = random.randint(50, 100)
@@ -13652,7 +13711,7 @@ async def usar_item(ctx, item_id: int = None):
                 elif sorte <= 80:  # 30% - Pequeno
                     premio_coins = random.randint(100, 300)
                     coins_gained = premio_coins
-                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (current_coins + premio_coins, ctx.author.id))
+                    cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (current_coins + premio_coins, ctx.author.id))
                     resultado = f"🪙 **Algo!** {premio_coins:,} moedas encontradas! ✅ **Automaticamente adicionadas!**"
                 else:  # 20% - Nada
                     resultado = "📦 **VAZIA!** A caixa estava vazia... que azar!"
@@ -13660,7 +13719,7 @@ async def usar_item(ctx, item_id: int = None):
             # ITEM 3: Ticket Prioritário
             elif item_id == 3:
                 settings['priority_tickets'] = settings.get('priority_tickets', 0) + 1
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), ctx.author.id))
                 resultado = "🎫 **PRIORIDADE ATIVADA!** Seu próximo ticket terá atendimento prioritário! ✅ **Efeito aplicado automaticamente!**"
 
             # ITEM 4: Explosão de Moedas
@@ -13693,7 +13752,7 @@ async def usar_item(ctx, item_id: int = None):
                                         user_data = get_user_data(participant_id)
                                         if user_data:
                                             new_coins = user_data[1] + coins_per_user
-                                            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, participant_id))
+                                            cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, participant_id))
                                             participant = bot.get_user(participant_id)
                                             if participant:
                                                 winners.append(participant.mention)
@@ -13732,27 +13791,27 @@ async def usar_item(ctx, item_id: int = None):
             elif item_id == 5:
                 boost_end = datetime.datetime.now() + datetime.timedelta(hours=1)
                 settings['xp_boost'] = boost_end.timestamp()
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), ctx.author.id))
                 resultado = f"📈 **BOOST ATIVO!** XP dobrado por 1 hora! (até <t:{int(boost_end.timestamp())}:t>) ✅ **Efeito aplicado automaticamente!**"
 
             # ITEM 6: Título Personalizado
             elif item_id == 6:
                 settings['custom_title_available'] = True
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), ctx.author.id))
                 resultado = f"👑 **TÍTULO DESBLOQUEADO!** Use `RXsettitle <título>` para definir seu título personalizado! ✅ **Permissão adicionada automaticamente!**"
 
             # ITEM 7: Salário VIP (7 dias)
             elif item_id == 7:
                 vip_end = datetime.datetime.now() + datetime.timedelta(days=7)
                 settings['vip_salary'] = vip_end.timestamp()
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), ctx.author.id))
                 resultado = f"💼 **SALÁRIO VIP ATIVO!** +50% em trabalhos por 7 dias! (até <t:{int(vip_end.timestamp())}:d>) ✅ **Efeito aplicado automaticamente!**"
 
             # ITEM 8: Cargo Exclusivo (3 dias)
             elif item_id == 8:
                 exclusive_end = datetime.datetime.now() + datetime.timedelta(days=3)
                 settings['exclusive_role'] = exclusive_end.timestamp()
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), ctx.author.id))
 
                 # Tentar criar/dar cargo especial se possível
                 try:
@@ -13778,7 +13837,7 @@ async def usar_item(ctx, item_id: int = None):
             elif item_id == 9:
                 settings['epic_medals'] = settings.get('epic_medals', 0) + 1
                 settings['collection_power'] = settings.get('collection_power', 0) + 10
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), ctx.author.id))
                 resultado = f"🌌 **MEDALHA ÉPICA COLETADA!** Adicionada à sua coleção! Poder de Coleção: +10 (Total: {settings['collection_power']}) ✅ **Automaticamente adicionada ao inventário de coleções!**"
 
             # ITEM 10: DNA RX
@@ -13794,20 +13853,20 @@ async def usar_item(ctx, item_id: int = None):
                         settings['special_abilities'] = []
                     if new_ability not in settings['special_abilities']:
                         settings['special_abilities'].append(new_ability)
-                        cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                        cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), ctx.author.id))
                         resultado = f"🧬 **DNA RX ABSORVIDO!** +25 Pontos de Evolução + Habilidade Especial: **{new_ability.replace('_', ' ').title()}**! ✅ **Automaticamente aplicado!**"
                     else:
-                        cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                        cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), ctx.author.id))
                         resultado = f"🧬 **DNA RX ABSORVIDO!** +25 Pontos de Evolução! (Total: {settings['evolution_points']}) ✅ **Automaticamente aplicado!**"
                 else:
-                    cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+                    cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), ctx.author.id))
                     resultado = f"🧬 **DNA RX ABSORVIDO!** +25 Pontos de Evolução! (Total: {settings['evolution_points']}) ✅ **Automaticamente aplicado!**"
 
             # Registrar transação se ganhou coins
             if coins_gained > 0:
                 cursor.execute('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                 ''', (ctx.author.id, ctx.guild.id, 'item_reward', coins_gained, f"Recompensa do item {item['nome']}"))
 
             # Remover item do inventário APÓS aplicar efeito
@@ -13815,7 +13874,7 @@ async def usar_item(ctx, item_id: int = None):
             if inventory[str(item_id)] <= 0:
                 del inventory[str(item_id)]
 
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), ctx.author.id))
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', (json.dumps(inventory), ctx.author.id))
 
             conn.commit()
             conn.close()
@@ -13877,7 +13936,7 @@ async def set_custom_title(ctx, *, titulo=None):
             settings['custom_title'] = titulo
             settings['custom_title_available'] = False  # Consumir o uso
 
-            cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), ctx.author.id))
+            cursor.execute('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), ctx.author.id))
             conn.commit()
             conn.close()
 
@@ -14137,7 +14196,7 @@ async def warn_user(ctx, user: discord.Member, *, motivo="Sem motivo especificad
             update_user_data(user.id)
             current_warns = 0
         else:
-            current_warns = user_data[15] if len(user_data) > 15 else 0
+            current_warns = user_data[15] if user_data and len(user_data) > 15 else 0
 
         new_warns = current_warns + 1
 
@@ -14146,12 +14205,12 @@ async def warn_user(ctx, user: discord.Member, *, motivo="Sem motivo especificad
             cursor = conn.cursor()
 
             # Atualizar warns
-            cursor.execute('UPDATE users SET warnings = ? WHERE user_id = ?', (new_warns, user.id))
+            cursor.execute('UPDATE users SET warnings = %s WHERE user_id = %s', (new_warns, user.id))
 
             # Registrar no log de moderação
             cursor.execute('''
                 INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (ctx.guild.id, user.id, ctx.author.id, 'warn', motivo))
 
             conn.commit()
@@ -14196,7 +14255,7 @@ async def check_warns(ctx, user: discord.Member = None):
         if not user_data:
             warns = 0
         else:
-            warns = user_data[15] if len(user_data) > 15 else 0
+            warns = user_data[15] if user_data and len(user_data) > 15 else 0
 
         embed = create_embed(
             f"⚠️ Advertências de {target.display_name}",
@@ -14259,7 +14318,7 @@ async def kick_member(ctx, member: discord.Member, *, reason="Sem motivo especif
                 cursor = conn.cursor()
                 cursor.execute('''
                     INSERT INTO moderation_logs (guild_id, user_id, moderator_id, action, reason)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                 ''', (ctx.guild.id, member.id, ctx.author.id, 'kick', reason))
                 conn.commit()
                 conn.close()
@@ -14631,7 +14690,7 @@ class XClanModal(discord.ui.Modal, title="🚨 CRIAR EVENTO XCLAN VS! 🚨"):
 
                     cursor.execute('''
                         INSERT INTO clan_events (guild_id, creator_id, clan1, clan2, event_type, end_time, message_id, participants, status)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ''', (
                         interaction.guild.id, 
                         self.user_id, 
@@ -15144,7 +15203,7 @@ async def listar_eventos_clan(ctx):
             cursor.execute('''
                 SELECT clan1, event_type, selected_map, end_time, participants, status, id
                 FROM clan_events
-                WHERE guild_id = ? AND status = 'active'
+                WHERE guild_id = %s AND status = 'active'
                 ORDER BY end_time
             ''', (ctx.guild.id,))
 
@@ -15512,7 +15571,7 @@ async def create_reminder(ctx, tempo=None, *, texto=None):
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO reminders (user_id, guild_id, channel_id, reminder_text, remind_time)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (ctx.author.id, ctx.guild.id, ctx.channel.id, texto, remind_time))
             conn.commit()
             conn.close()
@@ -15732,125 +15791,6 @@ async def avatar(ctx, user: discord.Member = None):
     embed.set_image(url=f"{avatar_url}?size=512")
     await ctx.send(embed=embed)
 
-# Error handling SUPER melhorado com auto-recuperação
-@bot.event
-async def on_command_error(ctx, error):
-    try:
-        if isinstance(error, commands.CommandNotFound):
-            # Sugerir comando similar
-            command_name = ctx.message.content.split()[0][2:].lower()  # Remove prefix
-            similar_commands = ['ping', 'ajuda', 'saldo', 'rank', 'daily']
-            suggestion = None
-
-            for cmd in similar_commands:
-                if command_name in cmd or cmd in command_name:
-                    suggestion = cmd
-                    break
-
-            if suggestion:
-                embed = create_embed(
-                    "❓ Comando não encontrado",
-                    f"Você quis dizer `RX{suggestion}`?\nUse `RXajuda` para ver todos os comandos.",
-                    color=0xffaa00
-                )
-                await ctx.send(embed=embed, delete_after=8)
-            return
-
-        elif isinstance(error, commands.MissingRequiredArgument):
-            embed = create_embed(
-                "❌ Argumento obrigatório",
-                f"Você esqueceu de fornecer: `{error.param.name}`\n"
-                f"Use `RXajuda` para ver os comandos.",
-                color=0xff0000
-            )
-            await ctx.send(embed=embed, delete_after=10)
-
-        elif isinstance(error, commands.MissingPermissions):
-            embed = create_embed(
-                "❌ Sem permissão",
-                "Você não tem permissão para executar este comando!",
-                color=0xff0000
-            )
-            await ctx.send(embed=embed, delete_after=8)
-
-        elif isinstance(error, commands.BotMissingPermissions):
-            embed = create_embed(
-                "❌ Bot sem permissão",
-                f"Eu preciso das seguintes permissões: {', '.join(error.missing_permissions)}",
-                color=0xff0000
-            )
-            await ctx.send(embed=embed, delete_after=10)
-
-        elif isinstance(error, commands.CommandOnCooldown):
-            embed = create_embed(
-                "⏰ Comando em cooldown",
-                f"Aguarde {error.retry_after:.1f} segundos para usar novamente.",
-                color=0xff6b6b
-            )
-            await ctx.send(embed=embed, delete_after=5)
-
-        elif isinstance(error, discord.HTTPException):
-            logger.info(f"Discord HTTP Info: {error}")  # Mudado para info
-            embed = create_embed(
-                "ℹ️ Problema de conexão temporário",
-                "Houve um problema temporário de conexão com o Discord. Tente novamente em alguns segundos.",
-                color=0x7289da  # Cor azul para info
-            )
-            try:
-                await ctx.send(embed=embed, delete_after=8)
-            except:
-                pass
-
-        elif isinstance(error, asyncio.TimeoutError):
-            logger.info(f"Timeout Info: {error}")  # Mudado para info
-            embed = create_embed(
-                "⏱️ Operação demorou muito",
-                "A operação está demorando mais que o esperado. Tente novamente em alguns segundos.",
-                color=0x7289da  # Cor azul para info
-            )
-            try:
-                await ctx.send(embed=embed, delete_after=8)
-            except:
-                pass
-
-        else:
-            logger.error(f"Unexpected error in {ctx.command}: {error}")
-            logger.error(f"Error type: {type(error)}")
-
-            # Tentar enviar erro genérico se possível
-            try:
-                embed = create_embed(
-                    "❌ Erro interno",
-                    "Ocorreu um erro interno. A equipe foi notificada.",
-                    color=0xff0000
-                )
-                await ctx.send(embed=embed, delete_after=8)
-            except:
-                pass
-
-            # Notificar canal de alerta
-            try:
-                channel = bot.get_channel(CHANNEL_ID_ALERTA)
-                if channel:
-                    error_embed = create_embed(
-                        "🚨 Erro de Comando",
-                        f"**Comando:** {ctx.command}\n"
-                        f"**Usuário:** {ctx.author}\n"
-                        f"**Canal:** {ctx.channel}\n"
-                        f"**Erro:** {str(error)[:500]}",
-                        color=0xff0000
-                    )
-                    await channel.send(embed=error_embed)
-            except:
-                pass
-
-    except Exception as handler_error:
-        logger.error(f"Erro no error handler: {handler_error}")
-        # Último recurso - resposta simples
-        try:
-            await ctx.send("❌ Erro interno do bot.", delete_after=5)
-        except:
-            pass
 
 # Sistemas de manutenção de conexão removidos para economizar recursos
 
