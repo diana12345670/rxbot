@@ -1792,7 +1792,7 @@ async def slash_trabalhar(interaction: discord.Interaction):
             )
             await safe_interaction_response(interaction, embed)
 
-        except sqlite3.OperationalError as db_error:
+        except Exception as db_error:
             logger.error(f"Database error in trabalhar: {db_error}")
             if conn:
                 conn.close()
@@ -2170,26 +2170,26 @@ async def slash_inventario(interaction: discord.Interaction, usuario: discord.Me
 async def on_command_error(ctx, error):
     """Manipular erros de comandos"""
     try:
-        from discord.ext.commands import CommandNotFound, MissingRequiredArgument, MissingPermissions, CommandOnCooldown
+        from discord.ext import commands
         
-        if isinstance(error, CommandNotFound):
+        if isinstance(error, commands.CommandNotFound):
             # Ignorar comandos não encontrados silenciosamente
             return
-        elif isinstance(error, MissingRequiredArgument):
+        elif isinstance(error, commands.MissingRequiredArgument):
             embed = create_embed(
                 "❌ Argumento Faltando",
                 f"Você esqueceu de fornecer um argumento necessário.\nUse `RXajuda` para ver a sintaxe correta.",
                 color=0xff0000
             )
             await ctx.send(embed=embed)
-        elif isinstance(error, MissingPermissions):
+        elif isinstance(error, commands.MissingPermissions):
             embed = create_embed(
                 "❌ Sem Permissão",
                 "Você não tem permissão para usar este comando.",
                 color=0xff0000
             )
             await ctx.send(embed=embed)
-        elif isinstance(error, CommandOnCooldown):
+        elif isinstance(error, commands.CommandOnCooldown):
             embed = create_embed(
                 "⏰ Cooldown",
                 f"Este comando está em cooldown. Tente novamente em {error.retry_after:.1f} segundos.",
@@ -3313,7 +3313,7 @@ async def slash_addcoins(interaction: discord.Interaction, usuario: discord.Memb
             # Log da ação
             logger.info(f"Admin {interaction.user.name} adicionou {quantidade} moedas para {usuario.name}. Motivo: {motivo}")
 
-        except sqlite3.OperationalError as db_error:
+        except Exception as db_error:
             logger.error(f"Database error in addcoins: {db_error}")
             if conn:
                 conn.close()
@@ -6873,6 +6873,43 @@ async def slash_unban(interaction: discord.Interaction, usuario_id: str, motivo:
 
 # Eventos de conexão removidos para evitar conflitos
 
+# Handler de erros para slash commands
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
+    """Handle slash command errors"""
+    try:
+        if isinstance(error, discord.app_commands.CommandOnCooldown):
+            embed = create_embed(
+                "⏰ Comando em Cooldown",
+                f"Aguarde {error.retry_after:.1f} segundos antes de usar novamente.",
+                color=0xff6600
+            )
+            await safe_interaction_response(interaction, embed, ephemeral=True)
+        elif isinstance(error, discord.app_commands.MissingPermissions):
+            embed = create_embed(
+                "❌ Sem Permissão",
+                "Você não tem permissão para usar este comando.",
+                color=0xff0000
+            )
+            await safe_interaction_response(interaction, embed, ephemeral=True)
+        elif isinstance(error, discord.app_commands.BotMissingPermissions):
+            embed = create_embed(
+                "❌ Bot Sem Permissão",
+                "O bot não tem as permissões necessárias para executar este comando.",
+                color=0xff0000
+            )
+            await safe_interaction_response(interaction, embed, ephemeral=True)
+        else:
+            logger.error(f"Erro em slash command {interaction.command.name if interaction.command else 'desconhecido'}: {error}")
+            embed = create_embed(
+                "❌ Erro Interno",
+                "Ocorreu um erro inesperado. Tente novamente.",
+                color=0xff0000
+            )
+            await safe_interaction_response(interaction, embed, ephemeral=True)
+    except Exception as e:
+        logger.error(f"Erro no handler de slash commands: {e}")
+
 # Evento para capturar erros críticos do bot
 @bot.event
 async def on_error(event, *args, **kwargs):
@@ -6892,28 +6929,7 @@ async def on_error(event, *args, **kwargs):
     except Exception as e:
         logger.error(f"Erro ao enviar alerta de erro: {e}")
 
-# Evento para capturar erros de comandos
-@bot.event
-async def on_command_error(ctx, error):
-    """Capturar erros de comandos"""
-    try:
-        if isinstance(error, commands.CommandNotFound):
-            return  # Ignorar comandos não encontrados
-        
-        logger.error(f"Erro no comando {ctx.command}: {error}")
-        
-        try:
-            embed = create_embed(
-                "❌ Erro no Comando",
-                f"Ocorreu um erro ao executar o comando. Tente novamente.",
-                color=0xff0000
-            )
-            await ctx.send(embed=embed, delete_after=10)
-        except:
-            pass
-            
-    except Exception as e:
-        logger.error(f"Erro no manipulador de erros: {e}")
+
 
 # Sistema de reconexão automática removido para economizar recursos
 
