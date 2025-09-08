@@ -5,7 +5,7 @@ from discord.ext import commands, tasks
 from discord.ext.commands import CommandNotFound, MissingRequiredArgument, MissingPermissions, CommandOnCooldown
 import asyncio
 import json
-import sqlite3
+# import sqlite3  # Removido - usando apenas PostgreSQL
 import random
 import datetime
 import time
@@ -38,13 +38,10 @@ import hmac
 import requests # Importado para substituir aiohttp
 from flask import Flask, render_template, jsonify, request
 
-# Imports para PostgreSQL
-try:
-    import psycopg2
-    import psycopg2.extras
-    HAS_POSTGRESQL = True
-except ImportError:
-    HAS_POSTGRESQL = False
+# Import PostgreSQL (obrigatório)
+import psycopg2
+import psycopg2.extras
+HAS_POSTGRESQL = True
 
 # Imports opcionais que podem não estar disponíveis
 try:
@@ -215,47 +212,34 @@ def is_production():
     return bool(os.getenv('DATABASE_URL') or os.getenv('RAILWAY_ENVIRONMENT'))
 
 def get_db_connection():
-    """Get database connection with PostgreSQL/SQLite detection"""
-    if is_production() and HAS_POSTGRESQL:
-        # Usar PostgreSQL no Railway
-        database_url = os.getenv('DATABASE_URL')
-        if database_url:
-            try:
-                conn = psycopg2.connect(database_url, cursor_factory=psycopg2.extras.RealDictCursor)
-                conn.autocommit = False
-                # Testar se a conexão funciona
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1")
-                cursor.close()
-                return conn
-            except Exception as e:
-                logger.warning(f"PostgreSQL não disponível, usando SQLite: {e}")
-                # Fallback para SQLite se PostgreSQL falhar
-                return sqlite3.connect('rxbot.db', timeout=30.0, check_same_thread=False)
-
-    # Usar SQLite por padrão (desenvolvimento/Replit)
-    return sqlite3.connect('rxbot.db', timeout=30.0, check_same_thread=False)
+    """Get PostgreSQL database connection"""
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        raise Exception("DATABASE_URL não encontrada. PostgreSQL é obrigatório.")
+    
+    try:
+        conn = psycopg2.connect(database_url, cursor_factory=psycopg2.extras.RealDictCursor)
+        conn.autocommit = False
+        return conn
+    except Exception as e:
+        logger.error(f"Erro ao conectar PostgreSQL: {e}")
+        raise e
 
 def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=10):
-    """Executar query de forma compatível com SQLite e PostgreSQL"""
+    """Executar query PostgreSQL"""
     max_retries = 3
+    
+    # Converter ? para %s (sintaxe PostgreSQL)
+    if '?' in query:
+        query = query.replace('?', '%s')
     
     for attempt in range(max_retries):
         try:
-            # Tentar adquirir lock com timeout
             if db_lock.acquire(timeout=timeout):
                 try:
                     conn = get_db_connection()
                     try:
                         cursor = conn.cursor()
-
-                        # Detectar se está usando PostgreSQL pela conexão real
-                        is_postgres_conn = hasattr(conn, 'info')  # psycopg2 connections have info attribute
-
-                        # Converter query para PostgreSQL se necessário
-                        if is_postgres_conn and '?' in query:
-                            # Substituir ? por %s para PostgreSQL
-                            query = query.replace('?', '%s')
 
                         if params:
                             cursor.execute(query, params)
@@ -265,21 +249,8 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=
                         result = None
                         if fetch_one:
                             result = cursor.fetchone()
-                            # Converter resultado PostgreSQL para formato compatível
-                            if result and is_postgres_conn:
-                                if hasattr(result, '_asdict'):
-                                    result = result._asdict()
                         elif fetch_all:
                             result = cursor.fetchall()
-                            # Converter resultados PostgreSQL para formato compatível
-                            if result and is_postgres_conn:
-                                converted_result = []
-                                for row in result:
-                                    if hasattr(row, '_asdict'):
-                                        converted_result.append(row._asdict())
-                                    else:
-                                        converted_result.append(row)
-                                result = converted_result
 
                         conn.commit()
                         return result
@@ -287,7 +258,7 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=
                     except Exception as e:
                         conn.rollback()
                         logger.error(f"Erro na query (tentativa {attempt + 1}): {e}")
-                        logger.error(f"Query convertida: {query}")
+                        logger.error(f"Query: {query}")
                         logger.error(f"Params: {params}")
                         if attempt == max_retries - 1:
                             raise e
@@ -314,31 +285,19 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=
 
 # Database setup with proper error handling
 def init_database():
-    """Initialize database with PostgreSQL/SQLite compatibility"""
+    """Initialize PostgreSQL database"""
     with db_lock:
         conn = None
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
 
-            # Detectar tipo de banco pela conexão real
-            is_postgres = hasattr(conn, 'info')  # psycopg2 connections have info attribute
-
-            # Definir tipos compatíveis
-            if is_postgres:
-                # PostgreSQL types
-                auto_increment = "SERIAL PRIMARY KEY"
-                integer_type = "BIGINT"
-                text_type = "TEXT"
-                timestamp_type = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-                date_type = "DATE"
-            else:
-                # SQLite types
-                auto_increment = "INTEGER PRIMARY KEY AUTOINCREMENT"
-                integer_type = "INTEGER"
-                text_type = "TEXT"
-                timestamp_type = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-                date_type = "DATE"
+            # PostgreSQL types
+            auto_increment = "SERIAL PRIMARY KEY"
+            integer_type = "BIGINT"
+            text_type = "TEXT"
+            timestamp_type = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            date_type = "DATE"
 
             # Tabela de tickets
             cursor.execute(f'''CREATE TABLE IF NOT EXISTS tickets (
@@ -915,7 +874,7 @@ async def check_reminders():
         # Usar transação única para evitar deadlock
         reminders_to_process = []
         try:
-            reminders = execute_query('SELECT * FROM reminders WHERE remind_time <= ? LIMIT 10', (now,), fetch_all=True)
+            reminders = execute_query('SELECT * FROM reminders WHERE remind_time <= %s LIMIT 10', (now,), fetch_all=True)
             
             if reminders:
                 # Marcar como processados imediatamente
@@ -928,7 +887,7 @@ async def check_reminders():
                 
                 # Deletar lembretes processados
                 for reminder_id in reminder_ids:
-                    execute_query('DELETE FROM reminders WHERE id = ?', (reminder_id,))
+                    execute_query('DELETE FROM reminders WHERE id = %s', (reminder_id,))
                 
                 reminders_to_process = reminders
                 
@@ -1007,7 +966,7 @@ async def check_giveaways():
                     winners = random.sample(participants, winners_count)
 
                 # Verificar se é sorteio de coins e distribuir automaticamente
-                bet_result = execute_query('SELECT bet_amount FROM giveaways WHERE id = ?', (giveaway_id,), fetch_one=True)
+                bet_result = execute_query('SELECT bet_amount FROM giveaways WHERE id = %s', (giveaway_id,), fetch_one=True)
                 coin_amount = bet_result[0] if bet_result and bet_result[0] else 0
 
                 if winners:
@@ -1028,7 +987,7 @@ async def check_giveaways():
                                 current_coins = winner_data[1]
 
                             new_coins = current_coins + coins_per_winner
-                            execute_query('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, winner_id))
+                            execute_query('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, winner_id))
 
                             # Registrar transação
                             execute_query('''
@@ -1082,7 +1041,7 @@ async def check_giveaways():
                 await channel.send(embed=embed)
 
                 # Marcar como finalizado
-                execute_query('UPDATE giveaways SET status = ? WHERE id = ?', ('finished', giveaway_id))
+                execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('finished', giveaway_id))
 
             except Exception as e:
                 logger.error(f"Erro ao finalizar sorteio {giveaway_id}: {e}")
@@ -1180,50 +1139,75 @@ async def safe_interaction_response(interaction, embed, ephemeral=False):
 
 # Utility functions with proper database handling
 def get_user_data(user_id):
-    """Get user data with proper error handling"""
+    """Get user data with proper error handling - sempre retorna tupla"""
     try:
-        result = execute_query('SELECT * FROM users WHERE user_id = ?', (user_id,), fetch_one=True)
-        if result and isinstance(result, dict):
-            # Converter dict PostgreSQL para tupla para compatibilidade
-            return (
-                result.get('user_id', user_id),
-                result.get('coins', 50),
-                result.get('xp', 0),
-                result.get('level', 1),
-                result.get('reputation', 0),
-                result.get('bank', 0),
-                result.get('last_daily'),
-                result.get('last_weekly'),
-                result.get('last_monthly'),
-                result.get('inventory', '{}'),
-                result.get('achievements', '[]'),
-                result.get('settings', '{}'),
-                result.get('join_date'),
-                result.get('total_messages', 0),
-                result.get('voice_time', 0),
-                result.get('warnings', 0)
-            )
-        return result
+        result = execute_query('SELECT * FROM users WHERE user_id = %s', (user_id,), fetch_one=True)
+        if result:
+            # Se for dict (PostgreSQL), converter para tupla
+            if isinstance(result, dict):
+                return (
+                    result.get('user_id', user_id),
+                    result.get('coins', 50),
+                    result.get('xp', 0),
+                    result.get('level', 1),
+                    result.get('reputation', 0),
+                    result.get('bank', 0),
+                    result.get('last_daily'),
+                    result.get('last_weekly'),
+                    result.get('last_monthly'),
+                    result.get('inventory', '{}'),
+                    result.get('achievements', '[]'),
+                    result.get('settings', '{}'),
+                    result.get('join_date'),
+                    result.get('total_messages', 0),
+                    result.get('voice_time', 0),
+                    result.get('warnings', 0)
+                )
+            # Se já for tupla, retornar
+            elif isinstance(result, tuple):
+                return result
+        # Se não encontrou dados, retornar valores padrão
+        return (
+            user_id,    # user_id
+            50,         # coins
+            0,          # xp
+            1,          # level
+            0,          # reputation
+            0,          # bank
+            None,       # last_daily
+            None,       # last_weekly
+            None,       # last_monthly
+            '{}',       # inventory
+            '[]',       # achievements
+            '{}',       # settings
+            None,       # join_date
+            0,          # total_messages
+            0,          # voice_time
+            0           # warnings
+        )
     except Exception as e:
         logger.error(f"Error getting user data: {e}")
-        return None
+        # Sempre retornar dados padrão em caso de erro
+        return (
+            user_id, 50, 0, 1, 0, 0, None, None, None, '{}', '[]', '{}', None, 0, 0, 0
+        )
 
 def update_user_data(user_id, **kwargs):
     """Update user data with proper error handling"""
     try:
         # Check if user exists
-        user_exists = execute_query('SELECT user_id FROM users WHERE user_id = ?', (user_id,), fetch_one=True)
+        user_exists = execute_query('SELECT user_id FROM users WHERE user_id = %s', (user_id,), fetch_one=True)
         if not user_exists:
-            execute_query('INSERT INTO users (user_id) VALUES (?)', (user_id,))
+            execute_query('INSERT INTO users (user_id) VALUES (%s)', (user_id,))
 
         # Update fields
         for field, value in kwargs.items():
             if field in ['coins', 'xp', 'level', 'reputation', 'bank', 'total_messages', 'voice_time', 'warnings']:
-                execute_query(f'UPDATE users SET {field} = ? WHERE user_id = ?', (value, user_id))
+                execute_query(f'UPDATE users SET {field} = %s WHERE user_id = %s', (value, user_id))
             elif field in ['inventory', 'achievements', 'settings']:
-                execute_query(f'UPDATE users SET {field} = ? WHERE user_id = ?', (json.dumps(value), user_id))
+                execute_query(f'UPDATE users SET {field} = %s WHERE user_id = %s', (json.dumps(value), user_id))
             elif field in ['last_daily', 'last_weekly', 'last_monthly']:
-                execute_query(f'UPDATE users SET {field} = ? WHERE user_id = ?', (value, user_id))
+                execute_query(f'UPDATE users SET {field} = %s WHERE user_id = %s', (value, user_id))
 
     except Exception as e:
         logger.error(f"Error updating user data: {e}")
@@ -1236,13 +1220,9 @@ def add_xp(user_id, amount):
             update_user_data(user_id, xp=amount, level=1)
             return False, 1, False, 1
 
-        # Handle both PostgreSQL (dict) and SQLite (tuple) formats
-        if isinstance(data, dict):
-            current_xp = data.get('xp', 0)
-            current_level = data.get('level', 1)
-        else:
-            current_xp = data[2] if len(data) > 2 else 0
-            current_level = data[3] if len(data) > 3 else 1
+        # data sempre retorna tupla agora
+        current_xp = data[2] if len(data) > 2 else 0
+        current_level = data[3] if len(data) > 3 else 1
 
         new_xp = current_xp + amount
 
@@ -1623,13 +1603,9 @@ async def slash_daily(interaction: discord.Interaction):
         current_coins = user_data[1] if len(user_data) > 1 else 50
         new_coins = current_coins + DAILY_REWARD
 
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, last_daily = ? WHERE user_id = ?',
-                          (new_coins, today, user_id))
-            conn.commit()
-            conn.close()
+        # Use execute_query para compatibilidade SQLite/PostgreSQL
+        execute_query('UPDATE users SET coins = %s, last_daily = %s WHERE user_id = %s',
+                     (new_coins, today, user_id))
 
         embed = create_embed(
             "🎁 Recompensa Diária!",
@@ -1706,17 +1682,18 @@ async def slash_trabalhar(interaction: discord.Interaction):
                 cursor = conn.cursor()
 
                 new_coins = user_data[1] + ganho_total
-                cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, interaction.user.id))
+                # Usar execute_query para compatibilidade
+                execute_query('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, interaction.user.id))
 
                 settings['last_work'] = current_time
-                cursor.execute('UPDATE users SET settings = ? WHERE user_id = ?', (json.dumps(settings), interaction.user.id))
+                execute_query('UPDATE users SET settings = %s WHERE user_id = %s', (json.dumps(settings), interaction.user.id))
 
-                cursor.execute('''
+                # Usar execute_query para compatibilidade
+                execute_query('''
                     INSERT INTO transactions (user_id, guild_id, type, amount, description)
                     VALUES (?, ?, ?, ?, ?)
                 ''', (interaction.user.id, interaction.guild.id, 'work', ganho_total, f"Trabalhou como {trabalho['nome']}"))
 
-                conn.commit()
                 conn.close()
                 conn = None
 
@@ -1783,13 +1760,9 @@ async def slash_weekly(interaction: discord.Interaction):
 
         new_coins = data[1] + WEEKLY_REWARD
 
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, last_weekly = ? WHERE user_id = ?',
-                          (new_coins, week_start_str, user_id))
-            conn.commit()
-            conn.close()
+        # Use execute_query para compatibilidade SQLite/PostgreSQL
+        execute_query('UPDATE users SET coins = %s, last_weekly = %s WHERE user_id = %s',
+                     (new_coins, week_start_str, user_id))
 
         embed = create_embed(
             "🎁 Recompensa Semanal!",
@@ -1831,13 +1804,9 @@ async def slash_monthly(interaction: discord.Interaction):
 
         new_coins = data[1] + MONTHLY_REWARD
 
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, last_monthly = ? WHERE user_id = ?',
-                          (new_coins, month_start, user_id))
-            conn.commit()
-            conn.close()
+        # Use execute_query para compatibilidade SQLite/PostgreSQL
+        execute_query('UPDATE users SET coins = %s, last_monthly = %s WHERE user_id = %s',
+                     (new_coins, month_start, user_id))
 
         embed = create_embed(
             "🎁 Recompensa Mensal!",
@@ -1928,11 +1897,11 @@ async def slash_roubar(interaction: discord.Interaction, usuario: discord.Member
                 cursor = conn.cursor()
 
                 # Atualizar ladrão
-                cursor.execute('UPDATE users SET coins = ?, inventory = ? WHERE user_id = ?',
+                cursor.execute('UPDATE users SET coins = %s, inventory = %s WHERE user_id = %s',
                               (coins_ladrão_novo, json.dumps(inventário_ladrão), interaction.user.id))
 
                 # Atualizar vítima
-                cursor.execute('UPDATE users SET coins = ?, inventory = ? WHERE user_id = ?',
+                cursor.execute('UPDATE users SET coins = %s, inventory = %s WHERE user_id = %s',
                               (coins_vítima_novo, json.dumps(inventário_vítima), usuario.id))
 
                 conn.commit()
@@ -1960,7 +1929,7 @@ async def slash_roubar(interaction: discord.Interaction, usuario: discord.Member
                 with db_lock:
                     conn = get_db_connection()
                     cursor = conn.cursor()
-                    cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?',
+                    cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s',
                                   (coins_ladrão_novo, interaction.user.id))
                     conn.commit()
                     conn.close()
@@ -2334,9 +2303,9 @@ async def slash_comprar(interaction: discord.Interaction, item_id: int):
             cursor = conn.cursor()
 
             new_coins = coins - item['preco']
-            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, interaction.user.id))
+            cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, interaction.user.id))
 
-            cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (interaction.user.id,))
+            cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (interaction.user.id,))
             inventory_data = cursor.fetchone()[0]
             inventory = json.loads(inventory_data) if inventory_data else {}
 
@@ -2345,11 +2314,11 @@ async def slash_comprar(interaction: discord.Interaction, item_id: int):
             else:
                 inventory[str(item_id)] = 1
 
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), interaction.user.id))
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', (json.dumps(inventory), interaction.user.id))
 
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (interaction.user.id, interaction.guild.id, 'compra', -item['preco'], f"Comprou {item['nome']}"))
 
             conn.commit()
@@ -13943,12 +13912,12 @@ async def add_saldo(ctx, user: discord.Member, amount: int):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user.id))
+            cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, user.id))
 
             # Registrar transação
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (user.id, ctx.guild.id, 'admin_add', amount, f"Saldo adicionado por {ctx.author.name}"))
 
             conn.commit()
@@ -14024,12 +13993,12 @@ async def remove_saldo(ctx, user: discord.Member, amount: int):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ? WHERE user_id = ?', (new_coins, user.id))
+            cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, user.id))
 
             # Registrar transação
             cursor.execute('''
                 INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             ''', (user.id, ctx.guild.id, 'admin_remove', -amount, f"Saldo removido por {ctx.author.name}"))
 
             conn.commit()
