@@ -160,7 +160,7 @@ except ImportError:
 
 # Sistema de monitoramento de saúde do bot
 last_heartbeat = datetime.datetime.now()
-heartbeat_interval = 300  # 5 minutos
+heartbeat_interval = 600  # 10 minutos (menos frequente)
 
 async def health_monitor():
     """Monitor de saúde do bot"""
@@ -173,15 +173,23 @@ async def health_monitor():
             current_time = datetime.datetime.now()
             time_since_heartbeat = (current_time - last_heartbeat).total_seconds()
 
-            if time_since_heartbeat > heartbeat_interval * 2:  # 10 minutos sem heartbeat
-                logger.warning("⚠️ Bot pode estar com problemas de conectividade")
-
-                # Tentar ping simples
-                if bot.is_ready():
-                    last_heartbeat = current_time
-                    logger.info("💓 Heartbeat restaurado")
-                else:
-                    logger.error("💔 Bot não está ready - possível problema crítico")
+            # Só alertar se realmente houver problema (20 minutos sem heartbeat)
+            if time_since_heartbeat > heartbeat_interval * 2:
+                # Verificar se o bot está realmente com problemas
+                if not bot.is_ready() or bot.latency > 5.0:  # Latência muito alta
+                    logger.warning("⚠️ Bot com problemas detectados")
+                
+                # Tentar ping mais robusto
+                try:
+                    # Testar comando simples
+                    await asyncio.wait_for(asyncio.sleep(0.1), timeout=5.0)
+                    if bot.is_ready() and bot.latency < 5.0:
+                        last_heartbeat = current_time
+                        logger.info("💓 Heartbeat restaurado")
+                    else:
+                        logger.error("💔 Bot com problemas de conectividade confirmados")
+                except asyncio.TimeoutError:
+                    logger.error("💔 Timeout no teste de conectividade")
 
         except Exception as e:
             logger.error(f"Erro no monitor de saúde: {e}")
@@ -2162,6 +2170,8 @@ async def slash_inventario(interaction: discord.Interaction, usuario: discord.Me
 async def on_command_error(ctx, error):
     """Manipular erros de comandos"""
     try:
+        from discord.ext.commands import CommandNotFound, MissingRequiredArgument, MissingPermissions, CommandOnCooldown
+        
         if isinstance(error, CommandNotFound):
             # Ignorar comandos não encontrados silenciosamente
             return
@@ -3103,33 +3113,69 @@ async def slash_estatisticas_bot(interaction: discord.Interaction):
 @bot.tree.command(name="clear", description="Limpar mensagens do canal")
 async def slash_clear(interaction: discord.Interaction, quantidade: int = 10):
     """Slash command para clear"""
-
-    # Verificar permissões
-    if not interaction.user.guild_permissions.manage_messages:
-        embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Mensagens'!", color=0xff0000)
-        await safe_send_response(interaction, embed=embed)
-        return
-
-    if quantidade < 1 or quantidade > 100:
-        embed = create_embed("❌ Quantidade inválida", "Use entre 1 e 100 mensagens", color=0xff0000)
-        await safe_send_response(interaction, embed=embed)
-        return
-
     try:
-        deleted = await interaction.channel.purge(limit=quantidade)
+        # Verificar permissões
+        if not interaction.user.guild_permissions.manage_messages:
+            embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Mensagens'!", color=0xff0000)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
 
+        if quantidade < 1 or quantidade > 100:
+            embed = create_embed("❌ Quantidade inválida", "Use entre 1 e 100 mensagens", color=0xff0000)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # Verificar se o bot tem permissões no canal
+        bot_member = interaction.guild.me
+        if not interaction.channel.permissions_for(bot_member).manage_messages:
+            embed = create_embed("❌ Bot sem permissão", "O bot não tem permissão para gerenciar mensagens neste canal!", color=0xff0000)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # Responder primeiro para evitar timeout
+        await interaction.response.send_message(f"🧹 Limpando {quantidade} mensagens...", ephemeral=True)
+
+        # Fazer a limpeza
+        deleted = await interaction.channel.purge(limit=quantidade, check=lambda m: m != interaction.response._parent)
+
+        # Enviar confirmação no canal
         embed = create_embed(
             "🧹 Limpeza Concluída",
-            f"**{len(deleted)} mensagens foram deletadas com sucesso!**\n"
-            f"**Moderador:** {interaction.user.mention}",
+            f"**{len(deleted)} mensagens foram deletadas!**\n"
+            f"**Moderador:** {interaction.user.mention}\n"
+            f"**Canal:** {interaction.channel.mention}",
             color=0x00ff00
         )
-        await safe_send_response(interaction, embed=embed)
+        
+        confirmation_msg = await interaction.channel.send(embed=embed)
+        
+        # Deletar a mensagem de confirmação após 5 segundos
+        await asyncio.sleep(5)
+        try:
+            await confirmation_msg.delete()
+        except:
+            pass
 
+    except discord.Forbidden:
+        embed = create_embed("❌ Sem permissão", "O bot não tem permissão para deletar mensagens!", color=0xff0000)
+        try:
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        except:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+    except discord.HTTPException as e:
+        logger.error(f"Erro HTTP na limpeza: {e}")
+        embed = create_embed("❌ Erro HTTP", "Erro ao deletar mensagens. Tente uma quantidade menor.", color=0xff0000)
+        try:
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        except:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
     except Exception as e:
-        logger.error(f"Erro na limpeza: {e}")
-        embed = create_embed("❌ Erro na Limpeza", f"Erro: {str(e)[:100]}", color=0xff0000)
-        await safe_send_response(interaction, embed=embed)
+        logger.error(f"Erro geral na limpeza: {e}")
+        embed = create_embed("❌ Erro", f"Erro inesperado: {str(e)[:100]}", color=0xff0000)
+        try:
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        except:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="warn", description="Dar advertência a um usuário")
 async def slash_warn(interaction: discord.Interaction, usuario: discord.Member, motivo: str = "Sem motivo especificado"):

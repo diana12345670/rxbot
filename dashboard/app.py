@@ -20,21 +20,41 @@ def get_bot_stats():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Contar usuários únicos
-        cursor.execute('SELECT COUNT(DISTINCT user_id) as total_users FROM users')
-        total_users = cursor.fetchone()['total_users']
+        # Contar usuários únicos com tratamento de erro
+        try:
+            cursor.execute('SELECT COUNT(DISTINCT user_id) as total_users FROM users')
+            result = cursor.fetchone()
+            total_users = result['total_users'] if result else 0
+        except Exception as e:
+            print(f"Erro ao contar usuários: {e}")
+            total_users = 0
         
-        # Contar copinhas criadas
-        cursor.execute('SELECT COUNT(*) as total_copinhas FROM copinhas')
-        total_copinhas = cursor.fetchone()['total_copinhas']
+        # Contar copinhas criadas com tratamento de erro
+        try:
+            cursor.execute('SELECT COUNT(*) as total_copinhas FROM copinhas')
+            result = cursor.fetchone()
+            total_copinhas = result['total_copinhas'] if result else 0
+        except Exception as e:
+            print(f"Erro ao contar copinhas: {e}")
+            total_copinhas = 0
         
-        # Contar tickets abertos
-        cursor.execute('SELECT COUNT(*) as total_tickets FROM tickets WHERE status = "open"')
-        total_tickets = cursor.fetchone()['total_tickets']
+        # Contar tickets abertos com tratamento de erro
+        try:
+            cursor.execute("SELECT COUNT(*) as total_tickets FROM tickets WHERE status = 'open'")
+            result = cursor.fetchone()
+            total_tickets = result['total_tickets'] if result else 0
+        except Exception as e:
+            print(f"Erro ao contar tickets: {e}")
+            total_tickets = 0
         
-        # Contar giveaways
-        cursor.execute('SELECT COUNT(*) as total_giveaways FROM giveaways')
-        total_giveaways = cursor.fetchone()['total_giveaways']
+        # Contar giveaways com tratamento de erro
+        try:
+            cursor.execute('SELECT COUNT(*) as total_giveaways FROM giveaways')
+            result = cursor.fetchone()
+            total_giveaways = result['total_giveaways'] if result else 0
+        except Exception as e:
+            print(f"Erro ao contar giveaways: {e}")
+            total_giveaways = 0
         
         conn.close()
         
@@ -43,15 +63,16 @@ def get_bot_stats():
             'total_copinhas': total_copinhas,
             'total_tickets': total_tickets,
             'total_giveaways': total_giveaways,
-            'total_commands': 98
+            'total_commands': 99
         }
-    except:
+    except Exception as e:
+        print(f"Erro geral nas estatísticas: {e}")
         return {
             'total_users': 0,
             'total_copinhas': 0,
             'total_tickets': 0,
             'total_giveaways': 0,
-            'total_commands': 98
+            'total_commands': 99
         }
 
 @app.route('/')
