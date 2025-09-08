@@ -592,6 +592,18 @@ def init_database():
                 created_at {timestamp_type}
             )''')
 
+            # Tabela para mensagens interativas persistentes
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS interactive_messages (
+                id {auto_increment},
+                message_id {integer_type},
+                channel_id {integer_type},
+                guild_id {integer_type},
+                message_type {text_type},
+                data {text_type} DEFAULT '{{}}',
+                status {text_type} DEFAULT 'active',
+                created_at {timestamp_type}
+            )''')
+
             # Tabela de partidas da copinha
             cursor.execute(f'''CREATE TABLE IF NOT EXISTS copinha_matches (
                 id {auto_increment},
@@ -1001,6 +1013,62 @@ async def check_reminders():
     except Exception as e:
         logger.error(f"Erro check_reminders: {e}")
 
+@tasks.loop(hours=6)  # A cada 6 horas
+async def cleanup_inactive_messages():
+    """Limpar mensagens interativas inativas do banco"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Buscar mensagens antigas (mais de 7 dias)
+            cursor.execute('''
+                SELECT message_id, channel_id FROM interactive_messages 
+                WHERE created_at < NOW() - INTERVAL '7 days' AND status = 'active'
+            ''')
+            old_messages = cursor.fetchall()
+            
+            cleaned = 0
+            for msg_data in old_messages:
+                try:
+                    if isinstance(msg_data, dict):
+                        message_id = msg_data['message_id']
+                        channel_id = msg_data['channel_id']
+                    else:
+                        message_id, channel_id = msg_data
+                    
+                    # Verificar se mensagem ainda existe
+                    channel = bot.get_channel(channel_id)
+                    if not channel:
+                        # Canal não existe mais, marcar como inativa
+                        cursor.execute('UPDATE interactive_messages SET status = ? WHERE message_id = ?', 
+                                     ('inactive', message_id))
+                        cleaned += 1
+                        continue
+                    
+                    try:
+                        message = await channel.fetch_message(message_id)
+                        if not message:
+                            cursor.execute('UPDATE interactive_messages SET status = ? WHERE message_id = ?', 
+                                         ('inactive', message_id))
+                            cleaned += 1
+                    except discord.NotFound:
+                        cursor.execute('UPDATE interactive_messages SET status = ? WHERE message_id = ?', 
+                                     ('inactive', message_id))
+                        cleaned += 1
+                        
+                except Exception as msg_error:
+                    logger.error(f"Erro ao verificar mensagem {message_id}: {msg_error}")
+                    
+            conn.commit()
+            conn.close()
+            
+            if cleaned > 0:
+                logger.info(f"🧹 {cleaned} mensagens interativas inativas limpas")
+                
+    except Exception as e:
+        logger.error(f"Erro na limpeza de mensagens: {e}")
+
 @tasks.loop(minutes=2)  # Reduzir frequência para 2 minutos
 async def check_giveaways():
     """Verifica sorteios que terminaram"""
@@ -1178,6 +1246,87 @@ def get_bot_stats():
             'latency': 0,
             'commands_used': 0
         }
+
+def save_interactive_message(message_id, channel_id, guild_id, message_type, data=None):
+    """Salvar mensagem interativa no banco para persistir após redeploy"""
+    try:
+        if data is None:
+            data = {}
+            
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO interactive_messages (message_id, channel_id, guild_id, message_type, data)
+                VALUES (%s, %s, %s, %s, %s)
+            ''', (message_id, channel_id, guild_id, message_type, json.dumps(data)))
+            conn.commit()
+            conn.close()
+            
+        logger.info(f"Mensagem interativa salva: {message_type} - {message_id}")
+    except Exception as e:
+        logger.error(f"Erro ao salvar mensagem interativa: {e}")
+
+async def restore_interactive_messages():
+    """Restaurar mensagens interativas após reinício do bot"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT message_id, channel_id, guild_id, message_type, data 
+                FROM interactive_messages 
+                WHERE status = 'active'
+            ''')
+            messages = cursor.fetchall()
+            conn.close()
+
+        restored_count = 0
+        for msg_data in messages:
+            try:
+                if isinstance(msg_data, dict):
+                    message_id = msg_data['message_id']
+                    channel_id = msg_data['channel_id']
+                    guild_id = msg_data['guild_id']
+                    message_type = msg_data['message_type']
+                    data = json.loads(msg_data['data']) if msg_data['data'] else {}
+                else:
+                    message_id, channel_id, guild_id, message_type, data_json = msg_data
+                    data = json.loads(data_json) if data_json else {}
+
+                # Verificar se canal ainda existe
+                channel = bot.get_channel(channel_id)
+                if not channel:
+                    continue
+
+                # Verificar se mensagem ainda existe
+                try:
+                    message = await channel.fetch_message(message_id)
+                    if not message:
+                        continue
+                except discord.NotFound:
+                    continue
+
+                # Restaurar na memória
+                active_games[message_id] = {
+                    'type': message_type,
+                    'channel_id': channel_id,
+                    'guild_id': guild_id,
+                    **data
+                }
+                
+                restored_count += 1
+                
+            except Exception as msg_error:
+                logger.error(f"Erro ao restaurar mensagem {message_id}: {msg_error}")
+
+        if restored_count > 0:
+            logger.info(f"✅ {restored_count} mensagens interativas restauradas após redeploy")
+        else:
+            logger.info("ℹ️ Nenhuma mensagem interativa para restaurar")
+
+    except Exception as e:
+        logger.error(f"Erro ao restaurar mensagens interativas: {e}")
 
 # Utility function for interaction handling
 async def safe_interaction_response(interaction, embed, ephemeral=False):
@@ -2286,6 +2435,7 @@ async def on_ready():
             backup_database.start()
             check_reminders.start()
             check_giveaways.start()
+            cleanup_inactive_messages.start()
 
             # Iniciar monitor de saúde
             asyncio.create_task(health_monitor())
@@ -2295,6 +2445,9 @@ async def on_ready():
             logger.info("✅ Background tasks e monitor de saúde iniciados")
         except Exception as e:
             logger.error(f"Erro ao iniciar background tasks: {e}")
+
+    # Restaurar mensagens interativas após reinício
+    await restore_interactive_messages()
 
     # Sistemas de proteção 24/7 removidos para economizar recursos
 
@@ -2344,7 +2497,78 @@ async def on_ready():
     print("📋 Use / no Discord para ver TODOS os comandos disponíveis!")
     print("🎯 Sistema dual: Use / ou RX - Ambos funcionam!")
 
-    # ============ TODOS OS SLASH COMMANDS - MAIS DE 300 COMANDOS ============
+    # ============ COMANDO ESPECIAL PARA TICKETS PERSISTENTE ============
+
+async def create_persistent_ticket_message(ctx_or_interaction):
+    """Criar mensagem de ticket persistente que sobrevive a redeploys"""
+    try:
+        # Determinar se é ctx tradicional ou interaction
+        if hasattr(ctx_or_interaction, 'guild'):
+            guild = ctx_or_interaction.guild
+            channel = ctx_or_interaction.channel
+            user = getattr(ctx_or_interaction, 'author', getattr(ctx_or_interaction, 'user', None))
+        else:
+            guild = ctx_or_interaction.guild
+            channel = ctx_or_interaction.channel
+            user = ctx_or_interaction.user
+
+        embed = create_embed(
+            "🎫 Sistema de Tickets - RXbot",
+            """**Precisa de ajuda? Crie um ticket!**
+
+**📋 Reaja com o emoji correspondente:**
+🐛 - Bug/Erro no bot
+💰 - Problema com economia  
+⚖️ - Denúncia/Moderação
+💡 - Sugestão/Ideia
+❓ - Dúvida geral
+🛠️ - Suporte técnico
+👑 - Ticket especial (apenas Tier)
+
+**⚡ Resposta rápida garantida!**
+*Equipe de suporte estará com você em breve*""",
+            color=0x00ff00
+        )
+
+        if hasattr(ctx_or_interaction, 'respond'):  # Slash command
+            message = await ctx_or_interaction.respond(embed=embed)
+            if hasattr(message, 'message'):
+                message = message.message
+        elif hasattr(ctx_or_interaction, 'send'):  # Traditional command
+            message = await ctx_or_interaction.send(embed=embed)
+        else:
+            message = await channel.send(embed=embed)
+
+        # Adicionar reações
+        reactions = ["🐛", "💰", "⚖️", "💡", "❓", "🛠️", "👑"]
+        for emoji in reactions:
+            await message.add_reaction(emoji)
+
+        # Salvar no banco para persistir
+        save_interactive_message(
+            message.id, 
+            channel.id, 
+            guild.id, 
+            'ticket_creation',
+            {'user': user.id if user else None}
+        )
+
+        # Salvar em memória também
+        active_games[message.id] = {
+            'type': 'ticket_creation',
+            'channel_id': channel.id,
+            'guild_id': guild.id,
+            'user': user.id if user else None
+        }
+
+        logger.info(f"Mensagem de ticket persistente criada: {message.id}")
+        return message
+
+    except Exception as e:
+        logger.error(f"Erro ao criar mensagem de ticket persistente: {e}")
+        raise
+
+# ============ TODOS OS SLASH COMMANDS - MAIS DE 300 COMANDOS ============
 
 # SLASH COMMANDS - ECONOMIA
 # (Duplicatas removidas - comandos já definidos acima)
@@ -3772,6 +3996,37 @@ async def slash_ticket(interaction: discord.Interaction, motivo: str = None):
         logger.error(f"Erro ao criar ticket: {e}")
         embed = create_embed("❌ Erro", "Erro ao criar ticket! Tente novamente.", color=0xff0000)
         await safe_send_response(interaction, embed=embed)
+
+@bot.tree.command(name="ticket_publico", description="Criar painel público de tickets (Admin)")
+async def slash_ticket_publico(interaction: discord.Interaction):
+    """Slash command para criar painel público de tickets persistente"""
+    try:
+        if not interaction.user.guild_permissions.manage_channels:
+            embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        await interaction.response.defer()
+        
+        message = await create_persistent_ticket_message(interaction)
+        
+        embed = create_embed(
+            "✅ Painel Criado!",
+            f"Painel de tickets público criado com sucesso!\n\n"
+            f"**🔄 Persistente:** Sobrevive a redeploys\n"
+            f"**📍 Localização:** {interaction.channel.mention}\n"
+            f"**💡 Como usar:** Usuários reagem para criar tickets\n\n"
+            f"*Este painel é salvo no PostgreSQL e será restaurado automaticamente após redeploys do Railway.*",
+            color=0x00ff00
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    except Exception as e:
+        logger.error(f"Erro ao criar ticket público: {e}")
+        try:
+            await interaction.followup.send("❌ Erro ao criar painel de tickets!", ephemeral=True)
+        except:
+            await interaction.response.send_message("❌ Erro ao criar painel de tickets!", ephemeral=True)
 
 @bot.tree.command(name="ranklist", description="Lista de todos os ranks")
 async def slash_ranklist(interaction: discord.Interaction):
