@@ -1,5 +1,27 @@
+# IDs de canais - validar existência antes de usar
 CHANNEL_ID_ALERTA = 1402658677923774615
 CHANNEL_ID_TESTE_TIER = 1400162532055846932
+
+def get_safe_channel(channel_id):
+    """Obter canal de forma segura, com fallback"""
+    try:
+        if not channel_id:
+            return None
+            
+        channel = bot.get_channel(channel_id)
+        if not channel:
+            logger.warning(f"Canal {channel_id} não encontrado")
+            return None
+            
+        # Verificar se o bot tem permissões básicas no canal
+        if not channel.permissions_for(channel.guild.me).send_messages:
+            logger.warning(f"Bot não tem permissão para enviar mensagens no canal {channel_id}")
+            return None
+            
+        return channel
+    except Exception as e:
+        logger.error(f"Erro ao obter canal {channel_id}: {e}")
+        return None
 import discord
 from discord.ext import commands, tasks
 from discord.ext.commands import CommandNotFound, MissingRequiredArgument, MissingPermissions, CommandOnCooldown
@@ -83,26 +105,52 @@ except ImportError:
 async def safe_send_response(interaction: discord.Interaction, embed=None, content=None, ephemeral=False):
     """Envia resposta de forma segura, verificando se já foi respondida"""
     try:
+        # Verificar se a interação ainda é válida
+        if not interaction or not hasattr(interaction, 'response'):
+            logger.warning("Interação inválida ou expirada")
+            return None
+            
+        # Verificar timeout da interação (15 minutos)
+        import time
+        if hasattr(interaction, 'created_at'):
+            age = time.time() - interaction.created_at.timestamp()
+            if age > 900:  # 15 minutos
+                logger.warning("Interação expirou (mais de 15 minutos)")
+                return None
+        
         if not interaction.response.is_done():
             # Se ainda não respondeu, usa response.send_message
-            await interaction.response.send_message(embed=embed, content=content, ephemeral=ephemeral)
+            return await interaction.response.send_message(embed=embed, content=content, ephemeral=ephemeral)
         else:
             # Se já respondeu, usa followup.send
-            await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral)
-    except discord.errors.NotFound:
-        # Se a interação expirou, tenta enviar no canal
-        if interaction.channel:
-            try:
-                await interaction.channel.send(embed=embed, content=content)
-            except:
-                pass
-    except Exception as e:
-        logger.error(f"Erro ao enviar resposta: {e}")
+            return await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral)
+            
+    except discord.errors.InteractionResponded:
+        # Interação já foi respondida, tentar followup
         try:
-            if interaction.channel:
-                await interaction.channel.send("❌ Erro interno do bot.")
+            return await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral)
+        except Exception as followup_error:
+            logger.error(f"Erro no followup: {followup_error}")
+            return None
+            
+    except discord.errors.NotFound:
+        # Se a interação expirou, tenta enviar no canal como último recurso
+        if hasattr(interaction, 'channel') and interaction.channel:
+            try:
+                return await interaction.channel.send(embed=embed, content=content)
+            except Exception as channel_error:
+                logger.error(f"Erro ao enviar no canal: {channel_error}")
+        return None
+        
+    except Exception as e:
+        logger.error(f"Erro geral ao enviar resposta: {e}")
+        # Última tentativa: enviar erro simples no canal
+        try:
+            if hasattr(interaction, 'channel') and interaction.channel:
+                await interaction.channel.send("❌ Erro interno do bot. Tente novamente.")
         except:
             pass
+        return None
 
 try:
     import zipfile
@@ -226,58 +274,61 @@ def get_db_connection():
         raise e
 
 def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=10):
-    """Executar query PostgreSQL"""
+    """Executar query PostgreSQL com melhor tratamento de erros"""
     max_retries = 3
     
-    # Converter ? para %s (sintaxe PostgreSQL)
+    # Converter ? para %s (sintaxe PostgreSQL) de forma mais robusta
     if '?' in query:
         query = query.replace('?', '%s')
     
+    # Validar parâmetros
+    if params is None:
+        params = []
+    elif not isinstance(params, (list, tuple)):
+        params = [params]
+    
     for attempt in range(max_retries):
+        conn = None
         try:
-            if db_lock.acquire(timeout=timeout):
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
                 try:
-                    conn = get_db_connection()
-                    try:
-                        cursor = conn.cursor()
+                    if params:
+                        cursor.execute(query, params)
+                    else:
+                        cursor.execute(query)
 
-                        if params:
-                            cursor.execute(query, params)
-                        else:
-                            cursor.execute(query)
+                    result = None
+                    if fetch_one:
+                        result = cursor.fetchone()
+                    elif fetch_all:
+                        result = cursor.fetchall()
 
-                        result = None
-                        if fetch_one:
-                            result = cursor.fetchone()
-                        elif fetch_all:
-                            result = cursor.fetchall()
+                    conn.commit()
+                    return result
 
-                        conn.commit()
-                        return result
-
-                    except Exception as e:
-                        conn.rollback()
-                        logger.error(f"Erro na query (tentativa {attempt + 1}): {e}")
-                        logger.error(f"Query: {query}")
-                        logger.error(f"Params: {params}")
-                        if attempt == max_retries - 1:
-                            raise e
-                    finally:
-                        conn.close()
+                except psycopg2.Error as e:
+                    conn.rollback()
+                    logger.error(f"Erro PostgreSQL (tentativa {attempt + 1}): {e}")
+                    if attempt == max_retries - 1:
+                        raise e
+                except Exception as e:
+                    conn.rollback()
+                    logger.error(f"Erro na query (tentativa {attempt + 1}): {e}")
+                    if attempt == max_retries - 1:
+                        raise e
                 finally:
-                    db_lock.release()
-            else:
-                logger.warning(f"Timeout ao adquirir db_lock (tentativa {attempt + 1})")
-                if attempt == max_retries - 1:
-                    logger.error("Falha crítica: não foi possível adquirir db_lock")
-                    return None
-                    
+                    if conn:
+                        conn.close()
+                        
         except Exception as e:
             logger.error(f"Erro crítico no execute_query (tentativa {attempt + 1}): {e}")
             if attempt == max_retries - 1:
                 return None
             
-        # Pequena pausa antes de tentar novamente
+        # Pausa progressiva antes de tentar novamente
         import time
         time.sleep(0.1 * (attempt + 1))
     
@@ -841,29 +892,47 @@ async def update_status():
     except Exception as e:
         logger.error(f"Erro no update_status: {e}")
 
-@tasks.loop(hours=6)
+@tasks.loop(hours=12)  # Reduzir frequência para 12 horas
 async def backup_database():
-    """Backup automático do banco de dados"""
+    """Backup automático do banco de dados - otimizado"""
     try:
-        # Pular backup no Railway/PostgreSQL por limitações
-        if is_production() and HAS_POSTGRESQL:
-            logger.info("⏭️ Backup desabilitado para PostgreSQL no Railway")
+        # Desabilitar backup no Railway para economizar recursos
+        if is_production():
+            logger.info("⏭️ Backup desabilitado no Railway para economia de recursos")
+            return
+            
+        # Só fazer backup se não for PostgreSQL (que já tem backup automático)
+        if HAS_POSTGRESQL:
+            logger.info("⏭️ Backup desnecessário - PostgreSQL tem backup automático")
             return
             
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_name = f"backup_rxbot_{timestamp}.db"
 
-        with db_lock:
-            conn = get_db_connection()
-            if hasattr(conn, 'backup'):  # SQLite only
-                backup_conn = sqlite3.connect(backup_name)
-                conn.backup(backup_conn)
-                backup_conn.close()
-                logger.info(f"✅ Backup SQLite criado: {backup_name}")
-            conn.close()
+        # Fazer backup sem usar o lock principal para não travar o bot
+        try:
+            import shutil
+            if os.path.exists('rxbot.db'):
+                shutil.copy2('rxbot.db', backup_name)
+                logger.info(f"✅ Backup criado: {backup_name}")
+                
+                # Limpar backups antigos (manter só os 3 mais recentes)
+                backup_files = [f for f in os.listdir('.') if f.startswith('backup_rxbot_') and f.endswith('.db')]
+                if len(backup_files) > 3:
+                    backup_files.sort()
+                    for old_backup in backup_files[:-3]:
+                        try:
+                            os.remove(old_backup)
+                            logger.info(f"🗑️ Backup antigo removido: {old_backup}")
+                        except Exception as remove_error:
+                            logger.error(f"Erro ao remover backup antigo: {remove_error}")
+            else:
+                logger.warning("Arquivo rxbot.db não encontrado para backup")
+        except Exception as backup_error:
+            logger.error(f"Erro específico no backup: {backup_error}")
 
     except Exception as e:
-        logger.error(f"Erro no backup: {e}")
+        logger.error(f"Erro geral no backup: {e}")
 
 @tasks.loop(minutes=2)  # Reduzir frequência para 2 minutos
 async def check_reminders():
@@ -1140,10 +1209,15 @@ async def safe_interaction_response(interaction, embed, ephemeral=False):
 # Utility functions with proper database handling
 def get_user_data(user_id):
     """Get user data with proper error handling - sempre retorna tupla"""
+    if not user_id:
+        logger.error("user_id não fornecido para get_user_data")
+        return None
+        
     try:
         result = execute_query('SELECT * FROM users WHERE user_id = %s', (user_id,), fetch_one=True)
+        
         if result:
-            # Se for dict (PostgreSQL), converter para tupla
+            # Se for dict (PostgreSQL com RealDictCursor), converter para tupla
             if isinstance(result, dict):
                 return (
                     result.get('user_id', user_id),
@@ -1163,34 +1237,35 @@ def get_user_data(user_id):
                     result.get('voice_time', 0),
                     result.get('warnings', 0)
                 )
-            # Se já for tupla, retornar
-            elif isinstance(result, tuple):
-                return result
-        # Se não encontrou dados, retornar valores padrão
-        return (
-            user_id,    # user_id
-            50,         # coins
-            0,          # xp
-            1,          # level
-            0,          # reputation
-            0,          # bank
-            None,       # last_daily
-            None,       # last_weekly
-            None,       # last_monthly
-            '{}',       # inventory
-            '[]',       # achievements
-            '{}',       # settings
-            None,       # join_date
-            0,          # total_messages
-            0,          # voice_time
-            0           # warnings
-        )
+            # Se for tupla ou lista, garantir que tem todos os campos
+            elif isinstance(result, (tuple, list)):
+                # Completar tupla se estiver incompleta
+                default_values = [user_id, 50, 0, 1, 0, 0, None, None, None, '{}', '[]', '{}', None, 0, 0, 0]
+                result_list = list(result)
+                
+                # Preencher campos faltantes
+                while len(result_list) < len(default_values):
+                    result_list.append(default_values[len(result_list)])
+                    
+                return tuple(result_list)
+                
+        # Se não encontrou dados, criar usuário com dados padrão
+        default_data = (user_id, 50, 0, 1, 0, 0, None, None, None, '{}', '[]', '{}', None, 0, 0, 0)
+        
+        # Tentar criar o usuário no banco
+        try:
+            execute_query('INSERT INTO users (user_id, coins, xp, level) VALUES (%s, %s, %s, %s)', 
+                         (user_id, 50, 0, 1))
+            logger.info(f"Usuário {user_id} criado com dados padrão")
+        except Exception as create_error:
+            logger.error(f"Erro ao criar usuário {user_id}: {create_error}")
+            
+        return default_data
+        
     except Exception as e:
-        logger.error(f"Error getting user data: {e}")
+        logger.error(f"Erro ao buscar dados do usuário {user_id}: {e}")
         # Sempre retornar dados padrão em caso de erro
-        return (
-            user_id, 50, 0, 1, 0, 0, None, None, None, '{}', '[]', '{}', None, 0, 0, 0
-        )
+        return (user_id, 50, 0, 1, 0, 0, None, None, None, '{}', '[]', '{}', None, 0, 0, 0)
 
 def update_user_data(user_id, **kwargs):
     """Update user data with proper error handling"""
