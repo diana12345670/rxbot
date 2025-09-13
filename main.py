@@ -5910,6 +5910,77 @@ class CopinhaJoinView(discord.ui.View):
         except Exception as e:
             logger.error(f"Erro no timeout da copinha: {e}")
 
+async def start_tournament_standalone(channel, title, map_name, team_format, max_players, participants, creator_id):
+    """Função standalone para iniciar torneio - usada no rxrandownplayers"""
+    try:
+        # Criar categoria para a copinha
+        category_name = f"🏆 {title[:30]}"  # Limitar a 30 caracteres
+        category = await channel.guild.create_category(
+            category_name,
+            reason=f"Categoria da copinha {title}"
+        )
+        
+        # Salvar copinha no banco de dados
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players, participants, current_round, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            ''', (
+                channel.guild.id,
+                creator_id,
+                channel.id,
+                None,  # Message ID não disponível neste contexto
+                title,
+                map_name,
+                team_format,
+                max_players,
+                json.dumps(participants),
+                'inscricoes',
+                'active'
+            ))
+            
+            copinha_id = cursor.fetchone()[0]
+            conn.commit()
+            conn.close()
+        
+        # Anunciar início do torneio
+        embed_start = create_embed(
+            f"🚀 {title} - INICIADA!",
+            f"**🎯 Participantes:** {len(participants)}\n"
+            f"**🗺️ Mapa:** {map_name}\n"
+            f"**👥 Formato:** {team_format}\n\n"
+            f"🏆 **A copinha está oficialmente iniciada!**\n"
+            f"📋 Os tickets das partidas estão sendo criados...\n\n"
+            f"🎮 **Boa sorte a todos os participantes!**",
+            color=0x00ff00
+        )
+        
+        # Enviar mensagem de início
+        await channel.send(embed=embed_start)
+        
+        # Buscar dados da copinha do banco para criar primeira rodada
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM copinhas WHERE id = %s', (copinha_id,))
+            copinha_data = cursor.fetchone()
+            conn.close()
+        
+        # Criar primeira rodada com todos os participantes, passando categoria
+        await create_next_round(copinha_data, participants, 'inscricoes', copinha_id, category)
+            
+        logger.info(f"Copinha '{title}' iniciada automaticamente com {len(participants)} participantes")
+        
+    except Exception as e:
+        logger.error(f"Erro ao iniciar torneio standalone: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise  # Re-raise para que o comando possa capturar e tratar
+
 class MatchWinnerView(discord.ui.View):
     def __init__(self, copinha_id, match_id, team1, team2, creator_id, team_format):
         super().__init__(timeout=None)  # Sem timeout para permitir escolha a qualquer momento
@@ -17776,9 +17847,9 @@ async def randownplayers(ctx, quantidade: int = 5):
         if len(view.participants) >= view.max_players:
             # Iniciar torneio automaticamente
             try:
-                await start_tournament(view.title, view.map_name, view.team_format, 
-                                     view.max_players, view.participants, ctx.channel, 
-                                     view.creator_id)
+                await start_tournament_standalone(ctx.channel, view.title, view.map_name, 
+                                                view.team_format, view.max_players, 
+                                                view.participants, view.creator_id)
                 action_text = f"Copinha **{view.title}** está lotada e foi **iniciada automaticamente**! 🚀"
             except Exception as e:
                 logger.error(f"Erro ao iniciar torneio automaticamente: {e}")
