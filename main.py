@@ -289,7 +289,7 @@ def get_db_connection():
         raise Exception("DATABASE_URL não encontrada. PostgreSQL é obrigatório.")
     
     try:
-        conn = psycopg2.connect(database_url, cursor_factory=psycopg2.extras.RealDictCursor)
+        conn = psycopg2.connect(database_url)
         conn.autocommit = False
         return conn
     except Exception as e:
@@ -300,9 +300,10 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=
     """Executar query PostgreSQL com melhor tratamento de erros"""
     max_retries = 3
     
-    # Converter ? para %s (sintaxe PostgreSQL) de forma mais robusta
+    # All queries now use native PostgreSQL %s placeholders
+    # Validate no SQLite placeholders remain
     if '?' in query:
-        query = query.replace('?', '%s')
+        raise ValueError(f"SQLite placeholder '?' detected in query. Use '%s' instead: {query}")
     
     # Validar parâmetros
     if params is None:
@@ -4952,7 +4953,7 @@ async def slash_vender(interaction: discord.Interaction, item_id: int, quantidad
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('SELECT inventory, coins FROM users WHERE user_id = ?', (interaction.user.id,))
+                cursor.execute('SELECT inventory, coins FROM users WHERE user_id = %s', (interaction.user.id,))
                 result = cursor.fetchone()
                 conn.close()
         except Exception as e:
@@ -4994,7 +4995,7 @@ async def slash_vender(interaction: discord.Interaction, item_id: int, quantidad
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE users SET inventory = ?, coins = ? WHERE user_id = ?',
+                cursor.execute('UPDATE users SET inventory = %s, coins = %s WHERE user_id = %s',
                               (json.dumps(inventory), new_coins, interaction.user.id))
 
                 # Registrar transação
@@ -5499,7 +5500,7 @@ async def slash_emprestimo(interaction: discord.Interaction, quantia: int):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
+            cursor.execute('UPDATE users SET coins = %s, settings = %s WHERE user_id = %s', 
                           (new_coins, json.dumps(settings), interaction.user.id))
             cursor.execute('''INSERT INTO transactions (user_id, guild_id, type, amount, description)
                              VALUES (%s, %s, %s, %s, %s)''', 
@@ -5558,7 +5559,7 @@ async def slash_quitar(interaction: discord.Interaction):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
+            cursor.execute('UPDATE users SET coins = %s, settings = %s WHERE user_id = %s', 
                           (new_coins, json.dumps(settings), interaction.user.id))
             cursor.execute('''INSERT INTO transactions (user_id, guild_id, type, amount, description)
                              VALUES (%s, %s, %s, %s, %s)''', 
@@ -5628,7 +5629,7 @@ async def slash_seguro(interaction: discord.Interaction, tipo: str):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
+            cursor.execute('UPDATE users SET coins = %s, settings = %s WHERE user_id = %s', 
                           (new_coins, json.dumps(settings), interaction.user.id))
             conn.commit()
             conn.close()
@@ -5700,7 +5701,7 @@ async def slash_mineracao(interaction: discord.Interaction):
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
+                cursor.execute('UPDATE users SET coins = %s, settings = %s WHERE user_id = %s', 
                               (new_coins, json.dumps(settings), interaction.user.id))
                 cursor.execute('''INSERT INTO transactions (user_id, guild_id, type, amount, description)
                                  VALUES (%s, %s, %s, %s, %s)''', 
@@ -5795,7 +5796,7 @@ async def slash_acao(interaction: discord.Interaction, operacao: str, empresa: s
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
+                cursor.execute('UPDATE users SET coins = %s, settings = %s WHERE user_id = %s', 
                               (new_coins, json.dumps(settings), interaction.user.id))
                 conn.commit()
                 conn.close()
@@ -5829,7 +5830,7 @@ async def slash_acao(interaction: discord.Interaction, operacao: str, empresa: s
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
+                cursor.execute('UPDATE users SET coins = %s, settings = %s WHERE user_id = %s', 
                               (new_coins, json.dumps(settings), interaction.user.id))
                 conn.commit()
                 conn.close()
@@ -6040,7 +6041,7 @@ async def slash_poupanca(interaction: discord.Interaction, operacao: str, quanti
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
+                cursor.execute('UPDATE users SET coins = %s, settings = %s WHERE user_id = %s', 
                               (new_coins, json.dumps(settings), interaction.user.id))
                 conn.commit()
                 conn.close()
@@ -6075,7 +6076,7 @@ async def slash_poupanca(interaction: discord.Interaction, operacao: str, quanti
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
+                cursor.execute('UPDATE users SET coins = %s, settings = %s WHERE user_id = %s', 
                               (new_coins, json.dumps(settings), interaction.user.id))
                 conn.commit()
                 conn.close()
@@ -6170,7 +6171,7 @@ async def slash_cripto(interaction: discord.Interaction, operacao: str, tipo: st
                 with db_lock:
                     conn = get_db_connection()
                     cursor = conn.cursor()
-                    cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
+                    cursor.execute('UPDATE users SET coins = %s, settings = %s WHERE user_id = %s', 
                                   (new_coins, json.dumps(settings), interaction.user.id))
                     conn.commit()
                     conn.close()
@@ -6220,7 +6221,7 @@ async def slash_cripto(interaction: discord.Interaction, operacao: str, tipo: st
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
+                cursor.execute('UPDATE users SET coins = %s, settings = %s WHERE user_id = %s', 
                               (new_coins, json.dumps(settings), interaction.user.id))
                 conn.commit()
                 conn.close()
@@ -6255,7 +6256,7 @@ async def slash_cripto(interaction: discord.Interaction, operacao: str, tipo: st
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE users SET coins = ?, settings = ? WHERE user_id = ?', 
+                cursor.execute('UPDATE users SET coins = %s, settings = %s WHERE user_id = %s', 
                               (new_coins, json.dumps(settings), interaction.user.id))
                 conn.commit()
                 conn.close()
@@ -6298,7 +6299,7 @@ async def slash_automod(interaction: discord.Interaction, acao: str, configuraca
             cursor = conn.cursor()
 
             if configuracao.lower() == "ver":
-                cursor.execute('SELECT * FROM auto_mod_rules WHERE guild_id = ? AND rule_type = ?', 
+                cursor.execute('SELECT * FROM auto_mod_rules WHERE guild_id = %s AND rule_type = %s', 
                               (interaction.guild.id, acao.lower()))
                 rule = cursor.fetchone()
 
@@ -6346,7 +6347,7 @@ async def slash_automod(interaction: discord.Interaction, acao: str, configuraca
                 )
 
             elif configuracao.lower() == "desativar":
-                cursor.execute('UPDATE auto_mod_rules SET enabled = 0 WHERE guild_id = ? AND rule_type = ?',
+                cursor.execute('UPDATE auto_mod_rules SET enabled = 0 WHERE guild_id = %s AND rule_type = %s',
                               (interaction.guild.id, acao.lower()))
                 conn.commit()
 
@@ -6685,7 +6686,7 @@ async def slash_definir_vencedor(interaction: discord.Interaction, vencedor: dis
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('SELECT * FROM copinha_matches WHERE ticket_channel_id = ?', (interaction.channel.id,))
+                cursor.execute('SELECT * FROM copinha_matches WHERE ticket_channel_id = %s', (interaction.channel.id,))
                 match = cursor.fetchone()
 
                 if not match:
@@ -6729,11 +6730,11 @@ async def slash_definir_vencedor(interaction: discord.Interaction, vencedor: dis
                     return
 
                 # Atualizar match como finalizado
-                cursor.execute('UPDATE copinha_matches SET winner_id = ?, status = ? WHERE id = ?', 
+                cursor.execute('UPDATE copinha_matches SET winner_id = %s, status = %s WHERE id = %s', 
                              (vencedor.id, 'finished', match_id))
 
                 # Buscar dados da copinha
-                cursor.execute('SELECT * FROM copinhas WHERE id = ?', (copinha_id,))
+                cursor.execute('SELECT * FROM copinhas WHERE id = %s', (copinha_id,))
                 copinha = cursor.fetchone()
 
                 if not copinha:
@@ -6804,7 +6805,7 @@ async def check_next_round(copinha_id):
             cursor = conn.cursor()
             
             # Buscar copinha
-            cursor.execute('SELECT * FROM copinhas WHERE id = ?', (copinha_id,))
+            cursor.execute('SELECT * FROM copinhas WHERE id = %s', (copinha_id,))
             copinha = cursor.fetchone()
             
             if not copinha:
@@ -6818,7 +6819,7 @@ async def check_next_round(copinha_id):
                 current_round = copinha[7] if len(copinha) > 7 else 'primeira_rodada'
             
             # Verificar partidas pendentes da rodada atual
-            cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = ? AND round_name = ? AND status = ?', 
+            cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = %s AND round_name = %s AND status = %s', 
                          (copinha_id, current_round, 'waiting'))
             pending_result = cursor.fetchone()
             pending_matches = pending_result[0] if pending_result else 0
@@ -6827,7 +6828,7 @@ async def check_next_round(copinha_id):
             
             if pending_matches == 0:
                 # Todas as partidas terminaram, buscar vencedores
-                cursor.execute('SELECT * FROM copinha_matches WHERE copinha_id = ? AND round_name = ? AND status = ?', 
+                cursor.execute('SELECT * FROM copinha_matches WHERE copinha_id = %s AND round_name = %s AND status = %s', 
                              (copinha_id, current_round, 'finished'))
                 finished_matches = cursor.fetchall()
                 
@@ -6855,7 +6856,7 @@ async def check_next_round(copinha_id):
                     await announce_tournament_winner(copinha, winners[0])
                     
                     # Marcar copinha como finalizada
-                    cursor.execute('UPDATE copinhas SET status = ?, current_round = ? WHERE id = ?', 
+                    cursor.execute('UPDATE copinhas SET status = %s, current_round = %s WHERE id = %s', 
                                  ('finished', 'finalizada', copinha_id))
                     conn.commit()
                     
@@ -6919,8 +6920,9 @@ async def announce_tournament_winner(copinha, winner_id):
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = ?', (copinha_id,))
-                total_matches = cursor.fetchone()[0] if cursor.fetchone() else 0
+                cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = %s', (copinha_id,))
+                result = cursor.fetchone()
+                total_matches = result[0] if result else 0
                 total_participants = total_matches * 2  # Estimativa
                 conn.close()
         except:
@@ -7020,7 +7022,7 @@ async def create_next_round(copinha, winners, current_round, copinha_id, cursor)
             ''', (match['copinha_id'], match['round_name'], match['match_number'], match['players'], match['status']))
         
         # Atualizar current_round da copinha
-        cursor.execute('UPDATE copinhas SET current_round = ? WHERE id = ?', (next_round, copinha_id))
+        cursor.execute('UPDATE copinhas SET current_round = %s WHERE id = %s', (next_round, copinha_id))
         
         logger.info(f"Criada {next_round} da copinha {copinha_id} com {len(matches)} partidas")
         
@@ -7443,7 +7445,7 @@ Para fechar este ticket, reaja com 🔒 em qualquer mensagem.
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('SELECT creator_id FROM tickets WHERE channel_id = ?', (message.channel.id,))
+                cursor.execute('SELECT creator_id FROM tickets WHERE channel_id = %s', (message.channel.id,))
                 result = cursor.fetchone()
                 if result and result[0] == user.id:
                     is_creator = True
@@ -7997,7 +7999,7 @@ Clique no botão "🎮 Participar" abaixo!
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE copinhas SET message_id = ? WHERE id = ?', (message.id, copinha_id))
+                cursor.execute('UPDATE copinhas SET message_id = %s WHERE id = %s', (message.id, copinha_id))
                 conn.commit()
                 conn.close()
 
@@ -8025,7 +8027,7 @@ class CloseTicketView(discord.ui.View):
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE tickets SET status = ?, closed_by = ? WHERE channel_id = ?', 
+                cursor.execute('UPDATE tickets SET status = %s, closed_by = %s WHERE channel_id = %s', 
                              ('closed', interaction.user.id, interaction.channel.id))
                 conn.commit()
                 conn.close()
@@ -8078,7 +8080,7 @@ class CopinhaView(discord.ui.View):
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('SELECT * FROM copinhas WHERE id = ?', (self.copinha_id,))
+                cursor.execute('SELECT * FROM copinhas WHERE id = %s', (self.copinha_id,))
                 copinha = cursor.fetchone()
                 conn.close()
 
@@ -8108,7 +8110,7 @@ class CopinhaView(discord.ui.View):
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE copinhas SET participants = ? WHERE id = ?', 
+                cursor.execute('UPDATE copinhas SET participants = %s WHERE id = %s', 
                              (json.dumps(participants), self.copinha_id))
                 conn.commit()
                 conn.close()
@@ -8224,7 +8226,7 @@ class CopinhaView(discord.ui.View):
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE copinhas SET current_round = ?, status = ? WHERE id = ?', 
+                cursor.execute('UPDATE copinhas SET current_round = %s, status = %s WHERE id = %s', 
                              ('primeira_rodada', 'em_andamento', self.copinha_id))
                 conn.commit()
                 conn.close()
@@ -8402,7 +8404,7 @@ class CoinGiveawayModal(discord.ui.Modal, title="💰 Criar Sorteio de Coins"):
 
                 # Salvar quantidade de coins no campo prize para distribuição automática
                 giveaway_id = cursor.lastrowid
-                cursor.execute('UPDATE giveaways SET bet_amount = ? WHERE id = ?', (coin_amount, giveaway_id))
+                cursor.execute('UPDATE giveaways SET bet_amount = %s WHERE id = %s', (coin_amount, giveaway_id))
 
                 conn.commit()
                 conn.close()
@@ -8868,7 +8870,7 @@ class MatchResultView(discord.ui.View):
             query_result = execute_query('''
                 SELECT 
                     COUNT(*) as total,
-                    COUNT(CASE WHEN status = "completed" THEN 1 END) as completed
+                    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
                 FROM copinha_matches 
                 WHERE copinha_id = ? AND round_name = ?
             ''', (self.copinha_id, self.round_name), fetch_one=True)
@@ -8889,7 +8891,7 @@ class MatchResultView(discord.ui.View):
                 # Todas as partidas terminaram, buscar vencedores
                 winners_result = execute_query('''
                     SELECT winner_id FROM copinha_matches 
-                    WHERE copinha_id = ? AND round_name = ? AND status = "completed" AND winner_id IS NOT NULL
+                    WHERE copinha_id = ? AND round_name = ? AND status = 'completed' AND winner_id IS NOT NULL
                 ''', (self.copinha_id, self.round_name), fetch_all=True)
                 
                 if winners_result:
@@ -8957,7 +8959,7 @@ class MatchResultView(discord.ui.View):
                         ''', (self.copinha_id, match['round'], match['match_number'], json.dumps(match['players']), 'waiting'))
 
                     # Atualizar status da copinha
-                    cursor.execute('UPDATE copinhas SET current_round = ? WHERE id = ?', 
+                    cursor.execute('UPDATE copinhas SET current_round = %s WHERE id = %s', 
                                   (next_round, self.copinha_id))
                     
                     conn.commit()
@@ -9140,17 +9142,17 @@ class MatchResultView(discord.ui.View):
                 cursor = conn.cursor()
 
                 # Verificar quantas partidas desta fase estão completas
-                cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = ? AND round_name = ? AND status = "completed"',
+                cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = %s AND round_name = %s AND status = %s',
                               (self.copinha_id, self.round_name))
                 completed = cursor.fetchone()[0]
 
-                cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = ? AND round_name = ?',
+                cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = %s AND round_name = %s',
                               (self.copinha_id, self.round_name))
                 total = cursor.fetchone()[0]
 
                 if completed == total:
                     # Todas as partidas terminaram, criar próxima fase
-                    cursor.execute('SELECT winner_id FROM copinha_matches WHERE copinha_id = ? AND round_name = ? AND status = "completed"',
+                    cursor.execute('SELECT winner_id FROM copinha_matches WHERE copinha_id = %s AND round_name = %s AND status = %s',
                                   (self.copinha_id, self.round_name))
                     winners = [row[0] for row in cursor.fetchall()]
 
@@ -9202,7 +9204,7 @@ class MatchResultView(discord.ui.View):
                             VALUES (%s, %s, %s, %s)
                         ''', (self.copinha_id, match['round'], match['match_number'], json.dumps(match['players'])))
 
-                    cursor.execute('UPDATE copinhas SET current_round = ? WHERE id = ?', 
+                    cursor.execute('UPDATE copinhas SET current_round = %s WHERE id = %s', 
                                   (next_round, self.copinha_id))
                     conn.commit()
                     conn.close()
@@ -9245,7 +9247,7 @@ class MatchResultView(discord.ui.View):
                     with db_lock:
                         conn = get_db_connection()
                         cursor = conn.cursor()
-                        cursor.execute('UPDATE copinha_matches SET ticket_channel_id = ? WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
+                        cursor.execute('UPDATE copinha_matches SET ticket_channel_id = %s WHERE copinha_id = %s AND match_number = %s AND round_name = %s',
                                       (match_channel.id, self.copinha_id, match['match_number'], next_round))
                         conn.commit()
                         conn.close()
@@ -9298,7 +9300,7 @@ class MatchResultView(discord.ui.View):
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute('UPDATE copinhas SET status = ? WHERE id = ?', ('finished', self.copinha_id))
+                cursor.execute('UPDATE copinhas SET status = %s WHERE id = %s', ('finished', self.copinha_id))
                 conn.commit()
                 conn.close()
 
@@ -9821,7 +9823,7 @@ class CloseTicketView(discord.ui.View):
                 with db_lock:
                     conn = get_db_connection()
                     cursor = conn.cursor()
-                    cursor.execute('SELECT creator_id FROM tickets WHERE channel_id = ?', (interaction.channel.id,))
+                    cursor.execute('SELECT creator_id FROM tickets WHERE channel_id = %s', (interaction.channel.id,))
                     result = cursor.fetchone()
                     if result:
                         ticket_creator = interaction.guild.get_member(result[0])
@@ -10267,7 +10269,7 @@ async def create_ticket_channel(ctx, motivo, user):
                 with db_lock:
                     conn = get_db_connection()
                     cursor = conn.cursor()
-                    cursor.execute('SELECT creator_id FROM tickets WHERE channel_id = ?', (interaction.channel.id,))
+                    cursor.execute('SELECT creator_id FROM tickets WHERE channel_id = %s', (interaction.channel.id,))
                     result = cursor.fetchone()
                     if result and result[0] == interaction.user.id:
                         is_creator = True
@@ -10683,7 +10685,7 @@ async def teste_inventario(ctx):
             cursor = conn.cursor()
 
             # Verificar se usuário existe
-            cursor.execute('SELECT user_id, inventory FROM users WHERE user_id = ?', (user_id,))
+            cursor.execute('SELECT user_id, inventory FROM users WHERE user_id = %s', (user_id,))
             result = cursor.fetchone()
 
             if not result:
@@ -10694,7 +10696,7 @@ async def teste_inventario(ctx):
                 cursor.execute('INSERT INTO users (user_id) VALUES (%s)', (user_id,))
                 conn.commit()
 
-                cursor.execute('SELECT user_id, inventory FROM users WHERE user_id = ?', (user_id,))
+                cursor.execute('SELECT user_id, inventory FROM users WHERE user_id = %s', (user_id,))
                 result = cursor.fetchone()
 
             user_id_db, inventory_data = result
@@ -11643,7 +11645,7 @@ async def daily(ctx):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, last_daily = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET coins = %s, last_daily = %s WHERE user_id = %s',
                           (new_coins, today, user_id))
             conn.commit()
             conn.close()
@@ -12305,7 +12307,7 @@ async def weekly(ctx):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, last_weekly = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET coins = %s, last_weekly = %s WHERE user_id = %s',
                           (new_coins, week_start_str, user_id))
             conn.commit()
             conn.close()
@@ -12353,7 +12355,7 @@ async def monthly(ctx):
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE users SET coins = ?, last_monthly = ? WHERE user_id = ?',
+            cursor.execute('UPDATE users SET coins = %s, last_monthly = %s WHERE user_id = %s',
                           (new_coins, month_start, user_id))
             conn.commit()
             conn.close()
@@ -12467,7 +12469,7 @@ async def get_user_position(user_id, guild_id):
             cursor = conn.cursor()
 
             # Contar quantos usuários têm XP maior
-            cursor.execute('SELECT COUNT(*) FROM users WHERE xp > (SELECT xp FROM users WHERE user_id = ?)', (user_id,))
+            cursor.execute('SELECT COUNT(*) FROM users WHERE xp > (SELECT xp FROM users WHERE user_id = %s)', (user_id,))
             position = cursor.fetchone()[0] + 1
 
             conn.close()
@@ -13665,7 +13667,7 @@ async def usar_item(ctx, item_id: int = None):
             cursor = conn.cursor()
 
             # Buscar dados atuais
-            cursor.execute('SELECT settings, coins, xp FROM users WHERE user_id = ?', (ctx.author.id,))
+            cursor.execute('SELECT settings, coins, xp FROM users WHERE user_id = %s', (ctx.author.id,))
             user_info = cursor.fetchone()
             settings_data, current_coins, current_xp = user_info[0], user_info[1], user_info[2]
             settings = json.loads(settings_data) if settings_data else {}
@@ -13697,7 +13699,7 @@ async def usar_item(ctx, item_id: int = None):
                     premio_coins = random.randint(2000, 5000)
                     premio_xp = random.randint(100, 200)
                     coins_gained = premio_coins
-                    cursor.execute('UPDATE users SET coins = ?, xp = ? WHERE user_id = ?', (current_coins + premio_coins, current_xp + premio_xp, ctx.author.id))
+                    cursor.execute('UPDATE users SET coins = %s, xp = %s WHERE user_id = %s', (current_coins + premio_coins, current_xp + premio_xp, ctx.author.id))
                     resultado = f"🌟 **JACKPOT!** {premio_coins:,} moedas + {premio_xp} XP! ✅ **Automaticamente adicionados!**"
                 elif sorte <= 25:  # 20% - Bom
                     premio_coins = random.randint(500, 1500)
@@ -13706,7 +13708,7 @@ async def usar_item(ctx, item_id: int = None):
                     resultado = f"💰 **SORTE!** Você ganhou {premio_coins:,} moedas! ✅ **Automaticamente adicionadas!**"
                 elif sorte <= 50:  # 25% - Regular
                     premio_xp = random.randint(50, 100)
-                    cursor.execute('UPDATE users SET xp = ? WHERE user_id = ?', (current_xp + premio_xp, ctx.author.id))
+                    cursor.execute('UPDATE users SET xp = %s WHERE user_id = %s', (current_xp + premio_xp, ctx.author.id))
                     resultado = f"⭐ **XP!** Você ganhou {premio_xp} pontos de experiência! ✅ **Automaticamente adicionados!**"
                 elif sorte <= 80:  # 30% - Pequeno
                     premio_coins = random.randint(100, 300)
@@ -16159,7 +16161,7 @@ def api_user(user_id):
             conn = get_db_connection()
             cursor = conn.cursor()
 
-            cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+            cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
             user_data = cursor.fetchone()
 
             if user_data:

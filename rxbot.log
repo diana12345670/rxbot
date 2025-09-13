@@ -1,0 +1,18 @@
+2025-09-13 12:15:27,340 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 12:15:27,532 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 12:15:27,543 - RXbot - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-13 12:15:27,543 - RXbot - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-13 12:15:27,745 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.74.66:5000
+2025-09-13 12:15:27,746 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 12:26:12,766 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 12:26:12,790 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 12:26:12,790 - RXbot - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-13 12:26:12,790 - RXbot - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-13 12:26:12,822 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.74.66:5000
+2025-09-13 12:26:12,823 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
