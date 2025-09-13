@@ -145,16 +145,21 @@ async def safe_send_response(interaction: discord.Interaction, embed=None, conte
         try:
             return await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral)
         except Exception as followup_error:
-            logger.error(f"Erro no followup: {followup_error}")
+            logger.info(f"Followup falhou, tentando canal direto: {followup_error}")
+            if hasattr(interaction, 'channel') and interaction.channel:
+                try:
+                    return await interaction.channel.send(embed=embed, content=content)
+                except Exception as channel_error:
+                    logger.error(f"Erro ao enviar no canal: {channel_error}")
             return None
             
-    except discord.errors.NotFound:
-        # Se a interação expirou, tenta enviar no canal como último recurso
+    except (discord.errors.NotFound, discord.errors.HTTPException):
+        # Se a interação expirou ou token inválido, tenta enviar no canal como último recurso
         if hasattr(interaction, 'channel') and interaction.channel:
             try:
                 return await interaction.channel.send(embed=embed, content=content)
             except Exception as channel_error:
-                logger.error(f"Erro ao enviar no canal: {channel_error}")
+                logger.info(f"Canal direto falhou: {channel_error}")
         return None
         
     except Exception as e:
@@ -283,7 +288,7 @@ def is_production():
     return bool(os.getenv('DATABASE_URL') or os.getenv('RAILWAY_ENVIRONMENT'))
 
 def get_db_connection():
-    """Get PostgreSQL database connection"""
+    """Get PostgreSQL database connection with schema normalization"""
     database_url = os.getenv('DATABASE_URL')
     if not database_url:
         raise Exception("DATABASE_URL não encontrada. PostgreSQL é obrigatório.")
@@ -291,6 +296,20 @@ def get_db_connection():
     try:
         conn = psycopg2.connect(database_url)
         conn.autocommit = False
+        
+        # Normalize schema to 'public' and log connection details
+        cursor = conn.cursor()
+        cursor.execute("SET search_path TO public;")
+        
+        # Log diagnostic information (mask credentials)
+        cursor.execute("SELECT current_database(), current_user, current_setting('search_path');")
+        db_name, db_user, search_path = cursor.fetchone()
+        
+        # Mask user details for security
+        masked_user = db_user[:3] + "***" if len(db_user) > 3 else "***"
+        logger.info(f"🔗 DB Connected: {db_name} | User: {masked_user} | Schema: {search_path}")
+        
+        conn.commit()
         return conn
     except Exception as e:
         logger.error(f"Erro ao conectar PostgreSQL: {e}")
@@ -534,6 +553,7 @@ def init_database():
                 title {text_type},
                 prize {text_type},
                 winners_count {integer_type} DEFAULT 1,
+                bet_amount {integer_type} DEFAULT 0,
                 end_time TIMESTAMP,
                 message_id {integer_type},
                 participants {text_type} DEFAULT '[]',
@@ -633,7 +653,38 @@ def init_database():
                 created_at {timestamp_type}
             )''')
 
+            # Migração: Adicionar coluna bet_amount se não existir
+            try:
+                cursor.execute("ALTER TABLE giveaways ADD COLUMN bet_amount BIGINT DEFAULT 0")
+                logger.info("✅ Coluna bet_amount adicionada à tabela giveaways")
+            except psycopg2.errors.DuplicateColumn:
+                # Coluna já existe, tudo bem
+                pass
+            except Exception as migration_error:
+                logger.info(f"ℹ️ Migração bet_amount: {migration_error}")
+
             conn.commit()
+            
+            # Verify table creation after commit
+            cursor.execute("""
+                SELECT COUNT(*) FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name IN ('users', 'tickets', 'giveaways', 'copinhas')
+            """)
+            table_count = cursor.fetchone()[0]
+            
+            if table_count != 4:
+                raise Exception(f"❌ Table verification failed! Expected 4 core tables, found {table_count} in public schema")
+            
+            # Log all created tables for diagnostic purposes
+            cursor.execute("""
+                SELECT table_name FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                ORDER BY table_name
+            """)
+            all_tables = [row[0] for row in cursor.fetchall()]
+            logger.info(f"📋 Created tables in public schema: {', '.join(all_tables[:10])}{'...' if len(all_tables) > 10 else ''}")
+            
             logger.info("✅ Database initialized successfully!")
 
         except Exception as e:
@@ -1820,7 +1871,7 @@ async def slash_copinha(interaction: discord.Interaction):
     except Exception as e:
         logger.error(f"Erro no comando copinha: {e}")
         error_embed = create_embed("❌ Erro", "Erro ao criar copinha!", color=0xff0000)
-        await safe_interaction_response(interaction, error_embed, ephemeral=True)
+        await safe_send_response(interaction, embed=error_embed, ephemeral=True)
 
 # 3. COMANDOS DE ECONOMIA (50 comandos)
 @bot.tree.command(name="saldo", description="Ver saldo de moedas")
@@ -2456,6 +2507,31 @@ async def on_message(message):
 
 @bot.event
 async def on_ready():
+    # Environment check with diagnostic logging
+    logger.info("🎯 Inicializando sistema completo...")
+    
+    # Diagnostic environment check
+    database_url = os.getenv('DATABASE_URL')
+    railway_env = os.getenv('RAILWAY_ENVIRONMENT')
+    port = os.getenv('PORT', '5000')
+    
+    if database_url:
+        # Mask the URL for security (show only first and last part)
+        masked_url = database_url[:15] + "***" + database_url[-10:] if len(database_url) > 25 else "***"
+        logger.info(f"🔗 DATABASE_URL found: {masked_url}")
+    else:
+        logger.error("❌ DATABASE_URL not found in environment!")
+    
+    logger.info(f"🌐 Environment: {'Railway' if railway_env else 'Local'} | Port: {port}")
+    
+    # Inicializar database imediatamente quando bot estiver pronto
+    try:
+        init_database()
+        logger.info("✅ Database inicializado")
+    except Exception as db_error:
+        logger.error(f"❌ Erro ao inicializar database: {db_error}")
+        logger.error(f"💡 DATABASE_URL status: {'SET' if database_url else 'NOT SET'}")
+    
     logger.info(f"🤖 RXbot está online! Conectado como {bot.user}")
     logger.info(f"📊 Conectado em {len(bot.guilds)} servidores")
     logger.info(f"👥 Servindo {len(set(bot.get_all_members()))} usuários únicos")
@@ -4315,6 +4391,7 @@ class CopinhaConfigModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
+            # IMMEDIATE defer to prevent webhook timeout - PUBLIC since tournament needs to be visible
             await interaction.response.defer()
             
             title = self.title_input.value
@@ -4346,14 +4423,14 @@ class CopinhaConfigModal(discord.ui.Modal):
             view = CopinhaJoinView(title, map_name, team_format, max_players, interaction.user.id)
             message = await interaction.followup.send(embed=embed, view=view)
             
-            # Salvar no banco
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players, status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ''', (
+            # Async database save to prevent event loop blocking
+            await asyncio.to_thread(
+                execute_query,
+                '''
+                INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ''',
+                [
                     interaction.guild.id,
                     interaction.user.id,
                     interaction.channel.id,
@@ -4363,15 +4440,14 @@ class CopinhaConfigModal(discord.ui.Modal):
                     team_format,
                     max_players,
                     'active'
-                ))
-                conn.commit()
-                conn.close()
+                ]
+            )
             
         except ValueError:
-            await interaction.followup.send("❌ Número de participantes inválido!", ephemeral=True)
+            await safe_send_response(interaction, content="❌ Número de participantes inválido!", ephemeral=True)
         except Exception as e:
             logger.error(f"Erro ao criar copinha: {e}")
-            await interaction.followup.send("❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+            await safe_send_response(interaction, content="❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
 
 class CopinhaJoinView(discord.ui.View):
     def __init__(self, title, map_name, team_format, max_players, creator_id):
@@ -4386,6 +4462,7 @@ class CopinhaJoinView(discord.ui.View):
     @discord.ui.button(label="📝 Inscrever-se", style=discord.ButtonStyle.success, emoji="🎮")
     async def join_tournament(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
+            # Check eligibility first, then respond accordingly
             if interaction.user.id in self.participants:
                 await interaction.response.send_message("❌ Você já está inscrito!", ephemeral=True)
                 return
@@ -4393,9 +4470,11 @@ class CopinhaJoinView(discord.ui.View):
             if len(self.participants) >= self.max_players:
                 await interaction.response.send_message("❌ Copinha lotada!", ephemeral=True)
                 return
-                
+            
+            # Add participant first
             self.participants.append(interaction.user.id)
             
+            # Create updated embed
             embed = create_embed(
                 f"🏆 {self.title}",
                 f"**🗺️ Mapa:** {self.map_name}\n"
@@ -4406,14 +4485,16 @@ class CopinhaJoinView(discord.ui.View):
                 color=0xffd700 if len(self.participants) < self.max_players else 0x00ff00
             )
             
+            # Edit the tournament message (not the interaction response)
             await interaction.response.edit_message(embed=embed, view=self if len(self.participants) < self.max_players else None)
             
+            # If tournament is full, start it
             if len(self.participants) == self.max_players:
                 await self.start_tournament(interaction)
                 
         except Exception as e:
             logger.error(f"Erro ao inscrever na copinha: {e}")
-            await interaction.response.send_message("❌ Erro ao se inscrever!", ephemeral=True)
+            await safe_send_response(interaction, content="❌ Erro ao se inscrever!", ephemeral=True)
 
     async def start_tournament(self, interaction):
         """Iniciar torneio quando lotado"""
@@ -4426,7 +4507,9 @@ class CopinhaJoinView(discord.ui.View):
                 color=0x00ff00
             )
             
-            await interaction.edit_original_response(embed=embed, view=None)
+            # Since this is called from the join button handler that just edited the message,
+            # we need to send a followup instead of trying to edit again
+            await interaction.followup.send(embed=embed, ephemeral=False)
             
         except Exception as e:
             logger.error(f"Erro ao iniciar copinha: {e}")
@@ -6863,7 +6946,7 @@ async def check_next_round(copinha_id):
                 elif len(winners) >= 2:
                     # Criar próxima rodada
                     logger.info(f"Criando próxima rodada com {len(winners)} vencedores")
-                    await create_next_round(copinha, winners, current_round, copinha_id, cursor)
+                    await create_next_round(copinha, winners, current_round, copinha_id)
                 else:
                     logger.warning(f"Número insuficiente de vencedores: {len(winners)}")
             
@@ -6873,6 +6956,177 @@ async def check_next_round(copinha_id):
         logger.error(f"Erro ao verificar próxima rodada: {e}")
         import traceback
         logger.error(traceback.format_exc())
+
+async def create_next_round(copinha, winners, current_round, copinha_id):
+    """Criar próxima rodada do torneio"""
+    try:
+        # Extrair dados da copinha de forma segura
+        if isinstance(copinha, dict):
+            guild_id = copinha.get('guild_id')
+            team_format = copinha.get('team_format', '1v1')
+            copinha_title = copinha.get('title', 'Copinha')
+            copinha_map = copinha.get('map_name', 'Desconhecido')
+        else:
+            guild_id = copinha[1] if len(copinha) > 1 else None
+            team_format = copinha[7] if len(copinha) > 7 else '1v1'
+            copinha_title = copinha[5] if len(copinha) > 5 else 'Copinha'
+            copinha_map = copinha[6] if len(copinha) > 6 else 'Desconhecido'
+
+        if not guild_id:
+            logger.error("Guild ID não encontrado para criar próxima rodada")
+            return
+
+        guild = bot.get_guild(guild_id)
+        if not guild:
+            logger.error(f"Guild {guild_id} não encontrada")
+            return
+
+        # Determinar nome da próxima rodada
+        round_names = {
+            'primeira_rodada': 'Quartas de Final',
+            'Primeira Rodada': 'Quartas de Final',
+            'quartas_de_final': 'Semifinal',
+            'Quartas de Final': 'Semifinal',
+            'semifinal': 'Final',
+            'Semifinal': 'Final'
+        }
+        
+        next_round_name = round_names.get(current_round, 'Próxima Rodada')
+        next_round_key = next_round_name.lower().replace(' ', '_')
+
+        # Encontrar categoria da copinha
+        category = None
+        for cat in guild.categories:
+            if copinha_title[:20] in cat.name:
+                category = cat
+                break
+
+        if not category:
+            logger.error("Categoria da copinha não encontrada")
+            return
+
+        # Buscar dados dos times vencedores da rodada anterior
+        winner_teams = []
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            for winner_id in winners:
+                # Buscar o match onde este jogador venceu para pegar os dados da equipe
+                cursor.execute('''
+                    SELECT players FROM copinha_matches 
+                    WHERE copinha_id = %s AND winner_id = %s AND status = %s
+                ''', (copinha_id, winner_id, 'finished'))
+                
+                match_data = cursor.fetchone()
+                if match_data:
+                    try:
+                        players_data = json.loads(match_data[0])
+                        
+                        # Determinar qual equipe venceu
+                        if isinstance(players_data, dict) and 'team1' in players_data:
+                            # Novo formato com equipes
+                            if winner_id in players_data['team1']:
+                                winner_teams.append(players_data['team1'])
+                            elif winner_id in players_data['team2']:
+                                winner_teams.append(players_data['team2'])
+                        else:
+                            # Formato antigo - assumir 1v1
+                            winner_teams.append([winner_id])
+                    except (json.JSONDecodeError, KeyError):
+                        # Fallback para formato antigo
+                        winner_teams.append([winner_id])
+
+        # Criar matches da próxima rodada
+        num_matches = len(winner_teams) // 2
+        
+        with db_lock:
+            for i in range(num_matches):
+                team1 = winner_teams[i * 2]
+                team2 = winner_teams[i * 2 + 1]
+
+                # Criar canal para a partida
+                match_channel = await guild.create_text_channel(
+                    f"🏆-{next_round_key}-{i+1}",
+                    category=category
+                )
+
+                # Dar permissão aos jogadores das duas equipes
+                await match_channel.set_permissions(guild.default_role, read_messages=False)
+                
+                # Permissões para time 1
+                for player_id in team1:
+                    member = guild.get_member(player_id)
+                    if member:
+                        await match_channel.set_permissions(member, read_messages=True, send_messages=True)
+                
+                # Permissões para time 2
+                for player_id in team2:
+                    member = guild.get_member(player_id)
+                    if member:
+                        await match_channel.set_permissions(member, read_messages=True, send_messages=True)
+
+                # Salvar match no banco
+                cursor.execute('''
+                    INSERT INTO copinha_matches (copinha_id, round_name, match_number, players, ticket_channel_id, status)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                ''', (
+                    copinha_id,
+                    next_round_name,
+                    i + 1,
+                    json.dumps({'team1': team1, 'team2': team2}),
+                    match_channel.id,
+                    'waiting'
+                ))
+
+                # Criar embed da partida
+                team1_display = format_team_display_simple(team1, "🔴", team_format)
+                team2_display = format_team_display_simple(team2, "🔵", team_format)
+                
+                match_embed = create_embed(
+                    f"🏆 {next_round_name} - Partida {i+1}",
+                    f"""**🏆 Copinha:** {copinha_title}
+**🗺️ Mapa:** {copinha_map}
+**👥 Formato:** {team_format}
+
+**⚔️ {next_round_name}:**
+{team1_display}
+
+VS
+
+{team2_display}
+
+**📋 Instruções:**
+1. Coordenem o horário da partida entre as equipes
+2. Joguem no mapa **{copinha_map}** no formato **{team_format}**
+3. A equipe vencedora deve avisar aqui
+4. Aguardem um moderador confirmar o resultado
+
+**🎯 Boa sorte para ambas as equipes!**""",
+                    color=0xffd700
+                )
+
+                await match_channel.send(embed=match_embed)
+
+            # Atualizar rodada atual da copinha
+            cursor.execute('UPDATE copinhas SET current_round = %s WHERE id = %s', 
+                         (next_round_key, copinha_id))
+            conn.commit()
+            conn.close()
+
+        logger.info(f"Próxima rodada '{next_round_name}' criada com {num_matches} partidas")
+
+    except Exception as e:
+        logger.error(f"Erro ao criar próxima rodada: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+
+def format_team_display_simple(team, emoji, team_format):
+    """Função auxiliar para formatar exibição da equipe"""
+    if team_format.lower() == '1v1':
+        return f"{emoji} <@{team[0]}>"
+    else:
+        return f"{emoji} **Equipe:** " + " & ".join([f"<@{p}>" for p in team])
 
 async def announce_tournament_winner(copinha, winner_id):
     """Anunciar vencedor do torneio"""
@@ -7936,17 +8190,31 @@ class CopinhaConfigModal(discord.ui.Modal, title="🏆 Criar Copinha Stumble Guy
         try:
             # Validar formato
             if self.formato.value.lower() not in ['1v1', '2v2', '3v3']:
-                await interaction.response.send_message("❌ Formato deve ser 1v1, 2v2 ou 3v3!", ephemeral=True)
+                await safe_send_response(interaction, content="❌ Formato deve ser 1v1, 2v2 ou 3v3!", ephemeral=True)
                 return
 
-            # Validar número de jogadores
+            # Validar número de jogadores baseado no formato
             try:
                 max_players = int(self.max_players.value)
-                if max_players not in [4, 8, 16, 32]:
-                    await interaction.response.send_message("❌ Número de jogadores deve ser 4, 8, 16 ou 32!", ephemeral=True)
+                format_type = self.formato.value.lower()
+                
+                if format_type == '1v1':
+                    if max_players not in [2, 4, 8, 16, 32]:
+                        await safe_send_response(interaction, content="❌ Para 1v1: 2, 4, 8, 16 ou 32 jogadores!", ephemeral=True)
+                        return
+                elif format_type == '2v2':
+                    if max_players not in [4, 8, 16, 32]:
+                        await safe_send_response(interaction, content="❌ Para 2v2: 4, 8, 16 ou 32 jogadores!", ephemeral=True)
+                        return
+                elif format_type == '3v3':
+                    if max_players not in [6, 12, 18, 24, 30]:
+                        await safe_send_response(interaction, content="❌ Para 3v3: 6, 12, 18, 24 ou 30 jogadores!", ephemeral=True)
+                        return
+                else:
+                    await safe_send_response(interaction, content="❌ Formato inválido!", ephemeral=True)
                     return
             except ValueError:
-                await interaction.response.send_message("❌ Número de jogadores deve ser um número válido!", ephemeral=True)
+                await safe_send_response(interaction, content="❌ Número de jogadores deve ser um número válido!", ephemeral=True)
                 return
 
             # Criar copinha no banco de dados
@@ -8007,7 +8275,19 @@ Clique no botão "🎮 Participar" abaixo!
 
         except Exception as e:
             logger.error(f"Erro ao criar copinha: {e}")
-            await interaction.response.send_message("❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+            # Robust error handling without depending on webhooks
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+                else:
+                    await interaction.followup.send("❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+            except (discord.errors.NotFound, discord.errors.HTTPException):
+                # If interaction expired, try channel fallback
+                try:
+                    if hasattr(interaction, 'channel') and interaction.channel:
+                        await interaction.channel.send("❌ Erro ao criar copinha! Tente novamente.")
+                except Exception:
+                    logger.error("Failed to send error message - interaction and channel both failed")
 
 # View para fechar tickets
 class CloseTicketView(discord.ui.View):
@@ -8085,23 +8365,23 @@ class CopinhaView(discord.ui.View):
                 conn.close()
 
             if not copinha:
-                await interaction.response.send_message("❌ Copinha não encontrada!", ephemeral=True)
+                await safe_send_response(interaction, content="❌ Copinha não encontrada!", ephemeral=True)
                 return
 
             # Verificar se copinha ainda está ativa
             if copinha[12] != 'active':  # status
-                await interaction.response.send_message("❌ Esta copinha já foi finalizada!", ephemeral=True)
+                await safe_send_response(interaction, content="❌ Esta copinha já foi finalizada!", ephemeral=True)
                 return
 
             # Verificar participantes atuais
             participants = json.loads(copinha[9]) if copinha[9] else []  # participants
 
             if interaction.user.id in participants:
-                await interaction.response.send_message("❌ Você já está participando desta copinha!", ephemeral=True)
+                await safe_send_response(interaction, content="❌ Você já está participando desta copinha!", ephemeral=True)
                 return
 
             if len(participants) >= self.max_players:
-                await interaction.response.send_message("❌ Copinha lotada! Não há mais vagas.", ephemeral=True)
+                await safe_send_response(interaction, content="❌ Copinha lotada! Não há mais vagas.", ephemeral=True)
                 return
 
             # Adicionar participante
@@ -8137,51 +8417,80 @@ class CopinhaView(discord.ui.View):
                 # Desabilitar botão
                 button.disabled = True
                 button.label = "🔒 Copinha Cheia"
-                await interaction.response.edit_message(embed=embed, view=self)
+                
+                # Usar safe_edit_message personalizada
+                await self.safe_edit_message(interaction, embed, self)
             else:
-                await interaction.response.edit_message(embed=embed, view=self)
+                await self.safe_edit_message(interaction, embed, self)
 
         except Exception as e:
             logger.error(f"Erro ao participar da copinha: {e}")
-            await interaction.response.send_message("❌ Erro ao entrar na copinha!", ephemeral=True)
+            await safe_send_response(interaction, content="❌ Erro ao entrar na copinha!", ephemeral=True)
+
+    async def safe_edit_message(self, interaction, embed, view):
+        """Método para editar mensagem de forma segura"""
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(embed=embed, view=view)
+            else:
+                await interaction.edit_original_response(embed=embed, view=view)
+        except (discord.errors.NotFound, discord.errors.InteractionResponded, discord.errors.HTTPException) as e:
+            logger.info(f"Edit message falhou, ignorando: {e}")
+            # Se não conseguir editar, não é crítico para a funcionalidade
+            pass
 
     async def create_brackets(self, interaction, copinha, participants):
         """Criar brackets automáticos quando a copinha encher"""
         try:
             # Embaralhar participantes
             random.shuffle(participants)
+            
+            # Extrair formato e título
+            team_format = copinha[7]  # team_format
+            copinha_title = copinha[5]  # title
+            copinha_map = copinha[6]  # map_name
 
             # Criar categoria para a copinha
-            category_name = f"🏆 {copinha[5][:20]}"
+            category_name = f"🏆 {copinha_title[:20]}"
             category = await interaction.guild.create_category(category_name)
 
             # Criar canal de informações
             info_channel = await interaction.guild.create_text_channel(
-                f"📋-info-{copinha[5][:15]}",
+                f"📋-info-{copinha_title[:15]}",
                 category=category
             )
 
-            # Calcular number de rounds
-            num_rounds = int(math.log2(len(participants)))
-            matches_first_round = len(participants) // 2
+            # Criar times baseado no formato
+            teams = self.create_teams(participants, team_format)
+            num_matches = len(teams) // 2
 
             # Criar matches da primeira rodada
-            for i in range(matches_first_round):
-                player1_id = participants[i * 2]
-                player2_id = participants[i * 2 + 1]
-
+            for i in range(num_matches):
+                team1 = teams[i * 2]
+                team2 = teams[i * 2 + 1]
+                
                 # Criar canal para a partida
                 match_channel = await interaction.guild.create_text_channel(
                     f"🎮-partida-{i+1}",
                     category=category
                 )
 
-                # Dar permissão apenas aos jogadores
+                # Dar permissão aos jogadores das duas equipes
                 await match_channel.set_permissions(interaction.guild.default_role, read_messages=False)
-                await match_channel.set_permissions(interaction.guild.get_member(player1_id), read_messages=True, send_messages=True)
-                await match_channel.set_permissions(interaction.guild.get_member(player2_id), read_messages=True, send_messages=True)
+                
+                # Permissões para time 1
+                for player_id in team1:
+                    member = interaction.guild.get_member(player_id)
+                    if member:
+                        await match_channel.set_permissions(member, read_messages=True, send_messages=True)
+                
+                # Permissões para time 2
+                for player_id in team2:
+                    member = interaction.guild.get_member(player_id)
+                    if member:
+                        await match_channel.set_permissions(member, read_messages=True, send_messages=True)
 
-                # Salvar match no banco
+                # Salvar match no banco com todos os jogadores
                 with db_lock:
                     conn = get_db_connection()
                     cursor = conn.cursor()
@@ -8192,31 +8501,37 @@ class CopinhaView(discord.ui.View):
                         self.copinha_id,
                         'Primeira Rodada',
                         i + 1,
-                        json.dumps([player1_id, player2_id]),
+                        json.dumps({'team1': team1, 'team2': team2}),
                         match_channel.id,
                         'waiting'
                     ))
                     conn.commit()
                     conn.close()
 
-                # Enviar embed da partida
+                # Criar embed da partida baseado no formato
+                team1_text = self.format_team_display(team1, "🔴", team_format)
+                team2_text = self.format_team_display(team2, "🔵", team_format)
+                
                 match_embed = create_embed(
-                    f"🎮 Partida {i+1} - Primeira Rodada",
-                    f"""**🏆 Copinha:** {copinha[4]}
-**🗺️ Mapa:** {copinha[5]}
-**👥 Formato:** {copinha[6]}
+                    f"🎮 Partida {i+1} - Primeira Rodada ({team_format})",
+                    f"""**🏆 Copinha:** {copinha_title}
+**🗺️ Mapa:** {copinha_map}
+**👥 Formato:** {team_format}
 
-**⚔️ Jogadores:**
-🔴 <@{player1_id}>
-🔵 <@{player2_id}>
+**⚔️ Teams:**
+{team1_text}
+
+VS
+
+{team2_text}
 
 **📋 Instruções:**
-1. Coordenem o horário da partida
-2. Joguem no mapa **{copinha[5]}**
-3. O vencedor deve avisar aqui
-4. Aguardem um moderador confirmar
+1. Coordenem o horário da partida entre as equipes
+2. Joguem no mapa **{copinha_map}** no formato **{team_format}**
+3. A equipe vencedora deve avisar aqui
+4. Aguardem um moderador confirmar o resultado
 
-**🎯 Boa sorte para ambos!**""",
+**🎯 Boa sorte para ambas as equipes!**""",
                     color=0x00ff00
                 )
 
@@ -8231,23 +8546,34 @@ class CopinhaView(discord.ui.View):
                 conn.commit()
                 conn.close()
 
+            # Criar texto das partidas para o resumo
+            matches_text = []
+            for i in range(num_matches):
+                team1 = teams[i * 2]
+                team2 = teams[i * 2 + 1]
+                team1_simple = " & ".join([f"<@{p}>" for p in team1])
+                team2_simple = " & ".join([f"<@{p}>" for p in team2])
+                matches_text.append(f"**Partida {i+1}:** ({team1_simple}) vs ({team2_simple})")
+
             # Enviar resumo no canal de info
             brackets_embed = create_embed(
-                f"🏆 {copinha[4]} - Brackets Criados!",
+                f"🏆 {copinha_title} - Brackets Criados!",
                 f"""**🎉 A copinha está oficialmente iniciada!**
 
 **📊 Informações:**
 • **Participantes:** {len(participants)}
-• **Partidas da 1ª rodada:** {matches_first_round}
+• **Formato:** {team_format}
+• **Equipes:** {len(teams)}
+• **Partidas da 1ª rodada:** {num_matches}
 • **Categoria:** {category.mention}
 
 **🎮 Partidas da Primeira Rodada:**
-""" + "\n".join([f"**Partida {i+1}:** <@{participants[i*2]}> vs <@{participants[i*2+1]}>" for i in range(matches_first_round)]) + f"""
+""" + "\n".join(matches_text) + f"""
 
 **📋 Próximos passos:**
-• Os jogadores devem ir aos seus canais específicos
-• Coordenar horários e jogar as partidas
-• Vencedores devem reportar no canal da partida
+• As equipes devem ir aos seus canais específicos
+• Coordenar horários e jogar as partidas no formato {team_format}
+• Equipes vencedoras devem reportar no canal da partida
 • Moderadores confirmarão os resultados
 
 **🏆 Que comecem os jogos!**""",
@@ -8258,6 +8584,33 @@ class CopinhaView(discord.ui.View):
 
         except Exception as e:
             logger.error(f"Erro ao criar brackets: {e}")
+            
+    def create_teams(self, participants, team_format):
+        """Criar equipes baseado no formato"""
+        teams = []
+        
+        if team_format.lower() == '1v1':
+            # Para 1v1, cada participante é uma "equipe" de 1
+            teams = [[p] for p in participants]
+        elif team_format.lower() == '2v2':
+            # Para 2v2, criar equipes de 2
+            for i in range(0, len(participants), 2):
+                if i + 1 < len(participants):
+                    teams.append([participants[i], participants[i + 1]])
+        elif team_format.lower() == '3v3':
+            # Para 3v3, criar equipes de 3
+            for i in range(0, len(participants), 3):
+                if i + 2 < len(participants):
+                    teams.append([participants[i], participants[i + 1], participants[i + 2]])
+                    
+        return teams
+        
+    def format_team_display(self, team, emoji, team_format):
+        """Formatar exibição da equipe"""
+        if team_format.lower() == '1v1':
+            return f"{emoji} <@{team[0]}>"
+        else:
+            return f"{emoji} **Equipe:** " + " & ".join([f"<@{p}>" for p in team])
 
 # Modal para resultado XClan
 class XClanResultModal(discord.ui.Modal, title="🏆 Resultado XClan VS"):
@@ -8538,7 +8891,19 @@ class CopinhaConfigModal(discord.ui.Modal, title="🏆 Configurar Copinha Stumbl
 
         except Exception as e:
             logger.error(f"Erro ao criar copinha: {e}")
-            await interaction.response.send_message("❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+            # Robust error handling without depending on webhooks
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+                else:
+                    await interaction.followup.send("❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+            except (discord.errors.NotFound, discord.errors.HTTPException):
+                # If interaction expired, try channel fallback
+                try:
+                    if hasattr(interaction, 'channel') and interaction.channel:
+                        await interaction.channel.send("❌ Erro ao criar copinha! Tente novamente.")
+                except Exception:
+                    logger.error("Failed to send error message - interaction and channel both failed")
 
 # View para participar da copinha
 class CopinhaParticipationView(discord.ui.View):
@@ -8550,11 +8915,11 @@ class CopinhaParticipationView(discord.ui.View):
     async def participate(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             # Buscar dados da copinha usando execute_query
-            copinha = execute_query('SELECT * FROM copinhas WHERE message_id = ? AND status = ?', (interaction.message.id, "active"), fetch_one=True)
+            copinha = execute_query('SELECT * FROM copinhas WHERE message_id = %s AND status = %s', (interaction.message.id, "active"), fetch_one=True)
 
             if not copinha:
                 logger.error("Dados da copinha: Não encontrada")
-                await interaction.response.send_message("❌ Copinha não encontrada ou já finalizada!", ephemeral=True)
+                await safe_send_response(interaction, content="❌ Copinha não encontrada ou já finalizada!", ephemeral=True)
                 return
 
             # Verificar participantes atuais - compatível com PostgreSQL e SQLite
@@ -8574,17 +8939,17 @@ class CopinhaParticipationView(discord.ui.View):
 
             # Verificar se já está inscrito
             if interaction.user.id in participants:
-                await interaction.response.send_message("❌ Você já está inscrito nesta copinha!", ephemeral=True)
+                await safe_send_response(interaction, content="❌ Você já está inscrito nesta copinha!", ephemeral=True)
                 return
 
             # Verificar se há vagas
             if len(participants) >= max_players:
-                await interaction.response.send_message("❌ Copinha lotada! Não há mais vagas.", ephemeral=True)
+                await safe_send_response(interaction, content="❌ Copinha lotada! Não há mais vagas.", ephemeral=True)
                 return
 
             # Adicionar participante
             participants.append(interaction.user.id)
-            execute_query('UPDATE copinhas SET participants = ? WHERE id = ?', 
+            execute_query('UPDATE copinhas SET participants = %s WHERE id = %s', 
                          (json.dumps(participants), copinha_id))
 
             # Atualizar embed - compatível com PostgreSQL e SQLite
@@ -8729,7 +9094,7 @@ class CopinhaParticipationView(discord.ui.View):
 
                 # Salvar canal no banco
                 copinha_id = copinha.get('id') if isinstance(copinha, dict) else copinha[0]
-                execute_query('UPDATE copinha_matches SET ticket_channel_id = ? WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
+                execute_query('UPDATE copinha_matches SET ticket_channel_id = %s WHERE copinha_id = %s AND match_number = %s AND round_name = %s',
                              (match_channel.id, copinha_id, match['match_number'], 'Primeira Fase'))
 
                 # Criar embed da partida
@@ -8838,11 +9203,11 @@ class MatchResultView(discord.ui.View):
     async def set_match_winner(self, interaction, winner_id):
         try:
             # Atualizar banco com vencedor usando execute_query
-            execute_query('UPDATE copinha_matches SET winner_id = ?, status = ? WHERE copinha_id = ? AND match_number = ? AND round_name = ?',
+            execute_query('UPDATE copinha_matches SET winner_id = %s, status = %s WHERE copinha_id = %s AND match_number = %s AND round_name = %s',
                          (winner_id, 'completed', self.copinha_id, self.match_number, self.round_name))
             
             # Buscar dados da copinha
-            copinha = execute_query('SELECT * FROM copinhas WHERE id = ?', (self.copinha_id,), fetch_one=True)
+            copinha = execute_query('SELECT * FROM copinhas WHERE id = %s', (self.copinha_id,), fetch_one=True)
             
             if copinha:
                 winner = interaction.guild.get_member(winner_id)
@@ -9030,7 +9395,7 @@ class MatchResultView(discord.ui.View):
                 )
 
                 # Salvar channel_id no banco
-                execute_query('UPDATE copinha_matches SET ticket_channel_id = ? WHERE copinha_id = ? AND round_name = ? AND match_number = ?',
+                execute_query('UPDATE copinha_matches SET ticket_channel_id = %s WHERE copinha_id = %s AND round_name = %s AND match_number = %s',
                              (match_channel.id, self.copinha_id, round_name, match['match_number']))
 
                 # Criar embed da partida
@@ -9074,7 +9439,7 @@ class MatchResultView(discord.ui.View):
             winner = interaction.guild.get_member(winner_id)
 
             # Atualizar status da copinha
-            execute_query('UPDATE copinhas SET status = ? WHERE id = ?', ('finished', self.copinha_id))
+            execute_query('UPDATE copinhas SET status = %s WHERE id = %s', ('finished', self.copinha_id))
 
             # Criar embed de vitória
             copinha_data = copinha if isinstance(copinha, dict) else {
@@ -15810,47 +16175,38 @@ from flask import render_template
 def get_dashboard_stats():
     """Obter estatísticas para o dashboard"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
-            # Total de usuários
-            cursor.execute('SELECT COUNT(DISTINCT user_id) as total_users FROM users')
-            result = cursor.fetchone()
-            total_users = result[0] if result else 0
-            
-            # Total de copinhas
-            try:
-                cursor.execute('SELECT COUNT(*) as total_copinhas FROM copinhas')
-                result = cursor.fetchone()
-                total_copinhas = result[0] if result else 0
-            except:
-                total_copinhas = 0
-            
-            # Total de tickets
-            try:
-                cursor.execute('SELECT COUNT(*) as total_tickets FROM tickets WHERE status = "open"')
-                result = cursor.fetchone()
-                total_tickets = result[0] if result else 0
-            except:
-                total_tickets = 0
-            
-            # Total de giveaways
-            try:
-                cursor.execute('SELECT COUNT(*) as total_giveaways FROM giveaways')
-                result = cursor.fetchone()
-                total_giveaways = result[0] if result else 0
-            except:
-                total_giveaways = 0
-            
-            conn.close()
-            return {
-                'total_users': total_users,
-                'total_copinhas': total_copinhas,
-                'total_tickets': total_tickets,
-                'total_giveaways': total_giveaways,
-                'total_commands': 98
-            }
+        # Total de usuários
+        result = execute_query('SELECT COUNT(DISTINCT user_id) as total_users FROM users', fetch_one=True)
+        total_users = result[0] if result else 0
+        
+        # Total de copinhas
+        try:
+            result = execute_query('SELECT COUNT(*) as total_copinhas FROM copinhas', fetch_one=True)
+            total_copinhas = result[0] if result else 0
+        except:
+            total_copinhas = 0
+        
+        # Total de tickets
+        try:
+            result = execute_query('SELECT COUNT(*) as total_tickets FROM tickets WHERE status = %s', ['open'], fetch_one=True)
+            total_tickets = result[0] if result else 0
+        except:
+            total_tickets = 0
+        
+        # Total de giveaways
+        try:
+            result = execute_query('SELECT COUNT(*) as total_giveaways FROM giveaways', fetch_one=True)
+            total_giveaways = result[0] if result else 0
+        except:
+            total_giveaways = 0
+        
+        return {
+            'total_users': total_users,
+            'total_copinhas': total_copinhas,
+            'total_tickets': total_tickets,
+            'total_giveaways': total_giveaways,
+            'total_commands': 98
+        }
     except Exception as e:
         logger.error(f"Erro ao obter estatísticas dashboard: {e}")
         return {
@@ -16247,6 +16603,14 @@ if __name__ == "__main__":
             print("🚂 Detectado ambiente Railway")
             print(f"📍 Porta configurada: {os.getenv('PORT', '5000')}")
             
+        # Inicializar database SEMPRE (independente de ter TOKEN ou não)
+        logger.info("🎯 Inicializando sistema completo...")
+        try:
+            init_database()
+            logger.info("✅ Database initialized successfully!")
+        except Exception as db_error:
+            logger.warning(f"⚠️ Erro no database: {db_error}")
+            
         # Sempre iniciar Flask primeiro (Railway precisa de resposta rápida)
         print("🌐 Iniciando servidor Flask...")
         
@@ -16261,14 +16625,7 @@ if __name__ == "__main__":
                 logger.info("🛑 Servidor interrompido pelo usuário")
         else:
             # Modo completo: Flask + Bot Discord
-            logger.info("🎯 Inicializando sistema completo...")
-            
-            # Inicializar banco em background
-            try:
-                init_database()
-                logger.info("✅ Database inicializado")
-            except Exception as e:
-                logger.warning(f"⚠️ Erro no database: {e}")
+            logger.info("🎯 Modo completo: Flask + Bot Discord...")
             
             # Iniciar Flask em thread separada
             dashboard_thread = threading.Thread(target=run_dashboard, daemon=True)
@@ -16393,20 +16750,20 @@ class CopinhaParticipationView(discord.ui.View):
 
         except Exception as e:
             logger.error(f"Erro ao participar da copinha: {e}")
-            await interaction.response.send_message("❌ Erro ao entrar na copinha! Tente novamente.", ephemeral=True)
+            await safe_send_response(interaction, content="❌ Erro ao entrar na copinha! Tente novamente.", ephemeral=True)
 
     @discord.ui.button(label="❌ Sair", style=discord.ButtonStyle.red, custom_id="leave_copinha")
     async def leave_copinha(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             if interaction.user.id not in self.participants:
-                await interaction.response.send_message("❌ Você não está participando desta copinha!", ephemeral=True)
+                await safe_send_response(interaction, content="❌ Você não está participando desta copinha!", ephemeral=True)
                 return
 
             # Remover participante
             self.participants.remove(interaction.user.id)
 
             # Atualizar no banco
-            execute_query('UPDATE copinhas SET participants = ? WHERE message_id = ?', 
+            execute_query('UPDATE copinhas SET participants = %s WHERE message_id = %s', 
                         (json.dumps(self.participants), self.message_id))
 
             # Criar lista de participantes atualizada
@@ -16453,7 +16810,7 @@ class CopinhaParticipationView(discord.ui.View):
 
         except Exception as e:
             logger.error(f"Erro ao sair da copinha: {e}")
-            await interaction.response.send_message("❌ Erro ao sair da copinha! Tente novamente.", ephemeral=True)
+            await safe_send_response(interaction, content="❌ Erro ao sair da copinha! Tente novamente.", ephemeral=True)
 
     async def start_tournament(self, interaction, embed):
         """Iniciar o torneio quando a copinha encher"""
@@ -16633,4 +16990,4 @@ async def slash_copinhas_ativas(interaction: discord.Interaction):
 
     except Exception as e:
         logger.error(f"Erro ao listar copinhas: {e}")
-        await interaction.response.send_message("❌ Erro ao carregar copinhas!", ephemeral=True)
+        await safe_send_response(interaction, content="❌ Erro ao carregar copinhas!", ephemeral=True)

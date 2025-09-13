@@ -1,62 +1,146 @@
 from flask import Flask, render_template, jsonify
 from flask_cors import CORS
-import sqlite3
+import psycopg2
+import psycopg2.extras
 import json
 import os
+import threading
+import logging
+import time
 from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('Dashboard')
+
+# Database connection pool to avoid locking issues
+db_lock = threading.RLock()
+
 def get_db_connection():
-    """Conectar ao banco de dados do bot"""
-    conn = sqlite3.connect('rxbot.db')
-    conn.row_factory = sqlite3.Row
-    return conn
+    """Get PostgreSQL database connection with schema normalization"""
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        raise Exception("DATABASE_URL não encontrada. PostgreSQL é obrigatório.")
+    
+    try:
+        conn = psycopg2.connect(database_url)
+        conn.autocommit = False
+        
+        # Normalize schema to 'public' and log connection details
+        cursor = conn.cursor()
+        cursor.execute("SET search_path TO public;")
+        
+        # Log diagnostic information (mask credentials)
+        cursor.execute("SELECT current_database(), current_user, current_setting('search_path');")
+        db_name, db_user, search_path = cursor.fetchone()
+        
+        # Mask user details for security
+        masked_user = db_user[:3] + "***" if len(db_user) > 3 else "***"
+        logger.info(f"🔗 Dashboard DB Connected: {db_name} | User: {masked_user} | Schema: {search_path}")
+        
+        conn.commit()
+        return conn
+    except Exception as e:
+        logger.error(f"Erro ao conectar PostgreSQL: {e}")
+        raise e
+
+def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=10):
+    """Executar query PostgreSQL com melhor tratamento de erros"""
+    max_retries = 3
+    
+    # All queries now use native PostgreSQL %s placeholders
+    if '?' in query:
+        raise ValueError(f"SQLite placeholder '?' detected in query. Use '%s' instead: {query}")
+    
+    # Validar parâmetros
+    if params is None:
+        params = []
+    elif not isinstance(params, (list, tuple)):
+        params = [params]
+    
+    for attempt in range(max_retries):
+        conn = None
+        try:
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                
+                try:
+                    if params:
+                        cursor.execute(query, params)
+                    else:
+                        cursor.execute(query)
+
+                    result = None
+                    if fetch_one:
+                        result = cursor.fetchone()
+                    elif fetch_all:
+                        result = cursor.fetchall()
+
+                    conn.commit()
+                    return result
+
+                except psycopg2.Error as e:
+                    conn.rollback()
+                    logger.error(f"Erro PostgreSQL (tentativa {attempt + 1}): {e}")
+                    if attempt == max_retries - 1:
+                        raise e
+                except Exception as e:
+                    conn.rollback()
+                    logger.error(f"Erro na query (tentativa {attempt + 1}): {e}")
+                    if attempt == max_retries - 1:
+                        raise e
+                finally:
+                    if conn:
+                        conn.close()
+                        
+        except Exception as e:
+            logger.error(f"Erro crítico no execute_query (tentativa {attempt + 1}): {e}")
+            if attempt == max_retries - 1:
+                return None
+            
+        # Pausa progressiva antes de tentar novamente
+        time.sleep(0.1 * (attempt + 1))
+    
+    return None
 
 def get_bot_stats():
     """Obter estatísticas do bot"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
         # Contar usuários únicos com tratamento de erro
         try:
-            cursor.execute('SELECT COUNT(DISTINCT user_id) as total_users FROM users')
-            result = cursor.fetchone()
+            result = execute_query('SELECT COUNT(DISTINCT user_id) as total_users FROM users', fetch_one=True)
             total_users = result['total_users'] if result else 0
         except Exception as e:
-            print(f"Erro ao contar usuários: {e}")
+            logger.error(f"Erro ao contar usuários: {e}")
             total_users = 0
         
         # Contar copinhas criadas com tratamento de erro
         try:
-            cursor.execute('SELECT COUNT(*) as total_copinhas FROM copinhas')
-            result = cursor.fetchone()
+            result = execute_query('SELECT COUNT(*) as total_copinhas FROM copinhas', fetch_one=True)
             total_copinhas = result['total_copinhas'] if result else 0
         except Exception as e:
-            print(f"Erro ao contar copinhas: {e}")
+            logger.error(f"Erro ao contar copinhas: {e}")
             total_copinhas = 0
         
         # Contar tickets abertos com tratamento de erro
         try:
-            cursor.execute("SELECT COUNT(*) as total_tickets FROM tickets WHERE status = 'open'")
-            result = cursor.fetchone()
+            result = execute_query("SELECT COUNT(*) as total_tickets FROM tickets WHERE status = %s", ['open'], fetch_one=True)
             total_tickets = result['total_tickets'] if result else 0
         except Exception as e:
-            print(f"Erro ao contar tickets: {e}")
+            logger.error(f"Erro ao contar tickets: {e}")
             total_tickets = 0
         
         # Contar giveaways com tratamento de erro
         try:
-            cursor.execute('SELECT COUNT(*) as total_giveaways FROM giveaways')
-            result = cursor.fetchone()
+            result = execute_query('SELECT COUNT(*) as total_giveaways FROM giveaways', fetch_one=True)
             total_giveaways = result['total_giveaways'] if result else 0
         except Exception as e:
-            print(f"Erro ao contar giveaways: {e}")
+            logger.error(f"Erro ao contar giveaways: {e}")
             total_giveaways = 0
-        
-        conn.close()
         
         return {
             'total_users': total_users,
@@ -66,7 +150,7 @@ def get_bot_stats():
             'total_commands': 99
         }
     except Exception as e:
-        print(f"Erro geral nas estatísticas: {e}")
+        logger.error(f"Erro geral nas estatísticas: {e}")
         return {
             'total_users': 0,
             'total_copinhas': 0,
@@ -227,6 +311,54 @@ def api_stats():
     """API para estatísticas em tempo real"""
     stats = get_bot_stats()
     return jsonify(stats)
+
+@app.route('/health/db')
+def health_db():
+    """Health check endpoint for database debugging"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get database information
+        cursor.execute("SELECT current_database(), current_user, current_setting('search_path');")
+        db_name, db_user, search_path = cursor.fetchone()
+        
+        # Check table existence in public schema
+        cursor.execute("""
+            SELECT table_name FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            ORDER BY table_name
+        """)
+        tables = [row[0] for row in cursor.fetchall()]
+        
+        # Check for core tables
+        core_tables = ['users', 'tickets', 'giveaways', 'copinhas']
+        missing_tables = [table for table in core_tables if table not in tables]
+        
+        conn.close()
+        
+        # Mask sensitive information
+        masked_user = db_user[:3] + "***" if len(db_user) > 3 else "***"
+        
+        return jsonify({
+            'status': 'healthy' if not missing_tables else 'issues_detected',
+            'database': db_name,
+            'user': masked_user,
+            'schema': search_path,
+            'tables_count': len(tables),
+            'core_tables_status': {
+                'found': [table for table in core_tables if table in tables],
+                'missing': missing_tables
+            },
+            'all_tables': tables[:20]  # Limit to first 20 for readability
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'database_url_set': bool(os.getenv('DATABASE_URL'))
+        }), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)

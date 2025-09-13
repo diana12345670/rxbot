@@ -16,3 +16,1046 @@
  * Running on http://127.0.0.1:5000
  * Running on http://172.31.74.66:5000
 2025-09-13 12:26:12,823 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 13:18:10,977 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 13:18:11,005 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 13:18:11,006 - RXbot - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-13 13:18:11,006 - RXbot - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-13 13:18:11,033 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.107.130:5000
+2025-09-13 13:18:11,033 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 13:18:16,602 - RXbot - ERROR - Erro ao obter estatísticas dashboard: relation "users" does not exist
+LINE 1: SELECT COUNT(DISTINCT user_id) as total_users FROM users
+                                                           ^
+
+2025-09-13 13:18:16,613 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 13:18:16] "GET / HTTP/1.1" 200 -
+2025-09-13 13:19:29,103 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 13:19:29,120 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 13:19:29,121 - RXbot - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-13 13:19:29,121 - RXbot - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-13 13:19:29,128 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.107.130:5000
+2025-09-13 13:19:29,128 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 13:19:31,091 - RXbot - ERROR - Erro ao obter estatísticas dashboard: relation "users" does not exist
+LINE 1: SELECT COUNT(DISTINCT user_id) as total_users FROM users
+                                                           ^
+
+2025-09-13 13:19:31,101 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 13:19:31] "GET / HTTP/1.1" 200 -
+2025-09-13 13:19:35,556 - RXbot - ERROR - Erro ao obter estatísticas dashboard: relation "users" does not exist
+LINE 1: SELECT COUNT(DISTINCT user_id) as total_users FROM users
+                                                           ^
+
+2025-09-13 13:19:35,560 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:19:35] "GET / HTTP/1.1" 200 -
+2025-09-13 13:19:35,597 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:19:35] "GET /static/js/dashboard.js HTTP/1.1" 200 -
+2025-09-13 13:19:35,597 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:19:35] "GET /static/css/dashboard.css HTTP/1.1" 200 -
+2025-09-13 13:19:35,899 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:19:35] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-09-13 13:20:53,815 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 13:20:53,838 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 13:20:53,838 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 13:20:54,011 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:20:54,012 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:20:54,013 - RXbot - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-13 13:20:54,013 - RXbot - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-13 13:20:54,019 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.107.130:5000
+2025-09-13 13:20:54,020 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 13:20:56,106 - RXbot - ERROR - Erro ao obter estatísticas dashboard: relation "users" does not exist
+LINE 1: SELECT COUNT(DISTINCT user_id) as total_users FROM users
+                                                           ^
+
+2025-09-13 13:20:56,117 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 13:20:56] "GET / HTTP/1.1" 200 -
+2025-09-13 13:24:45,242 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 13:24:45,270 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 13:24:45,270 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 13:24:45,487 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:24:45,487 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:24:45,488 - RXbot - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-13 13:24:45,488 - RXbot - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-13 13:24:45,498 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.107.130:5000
+2025-09-13 13:24:45,501 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 13:24:46,353 - RXbot - ERROR - Erro ao obter estatísticas dashboard: relation "users" does not exist
+LINE 1: SELECT COUNT(DISTINCT user_id) as total_users FROM users
+                                                           ^
+
+2025-09-13 13:24:46,369 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:24:46] "GET / HTTP/1.1" 200 -
+2025-09-13 13:24:47,230 - RXbot - ERROR - Erro ao obter estatísticas dashboard: relation "users" does not exist
+LINE 1: SELECT COUNT(DISTINCT user_id) as total_users FROM users
+                                                           ^
+
+2025-09-13 13:24:47,231 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 13:24:47] "GET / HTTP/1.1" 200 -
+2025-09-13 13:24:51,417 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:24:51] "GET /static/css/dashboard.css HTTP/1.1" 200 -
+2025-09-13 13:24:51,424 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:24:51] "GET /static/js/dashboard.js HTTP/1.1" 200 -
+2025-09-13 13:24:51,730 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:24:51] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-09-13 13:25:41,922 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 13:25:42,002 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 13:25:42,003 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 13:25:42,206 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:25:42,206 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:25:42,207 - RXbot - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-13 13:25:42,207 - RXbot - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-13 13:25:42,212 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.107.130:5000
+2025-09-13 13:25:42,212 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 13:25:43,102 - RXbot - ERROR - Erro PostgreSQL (tentativa 1): relation "users" does not exist
+LINE 1: SELECT COUNT(DISTINCT user_id) as total_users FROM users
+                                                           ^
+
+2025-09-13 13:25:43,218 - RXbot - ERROR - Erro PostgreSQL (tentativa 2): relation "users" does not exist
+LINE 1: SELECT COUNT(DISTINCT user_id) as total_users FROM users
+                                                           ^
+
+2025-09-13 13:25:43,437 - RXbot - ERROR - Erro PostgreSQL (tentativa 3): relation "users" does not exist
+LINE 1: SELECT COUNT(DISTINCT user_id) as total_users FROM users
+                                                           ^
+
+2025-09-13 13:25:43,437 - RXbot - ERROR - Erro crítico no execute_query (tentativa 3): relation "users" does not exist
+LINE 1: SELECT COUNT(DISTINCT user_id) as total_users FROM users
+                                                           ^
+
+2025-09-13 13:25:43,455 - RXbot - ERROR - Erro PostgreSQL (tentativa 1): relation "copinhas" does not exist
+LINE 1: SELECT COUNT(*) as total_copinhas FROM copinhas
+                                               ^
+
+2025-09-13 13:25:43,570 - RXbot - ERROR - Erro PostgreSQL (tentativa 2): relation "copinhas" does not exist
+LINE 1: SELECT COUNT(*) as total_copinhas FROM copinhas
+                                               ^
+
+2025-09-13 13:25:43,782 - RXbot - ERROR - Erro PostgreSQL (tentativa 3): relation "copinhas" does not exist
+LINE 1: SELECT COUNT(*) as total_copinhas FROM copinhas
+                                               ^
+
+2025-09-13 13:25:43,782 - RXbot - ERROR - Erro crítico no execute_query (tentativa 3): relation "copinhas" does not exist
+LINE 1: SELECT COUNT(*) as total_copinhas FROM copinhas
+                                               ^
+
+2025-09-13 13:25:43,795 - RXbot - ERROR - Erro PostgreSQL (tentativa 1): relation "tickets" does not exist
+LINE 1: SELECT COUNT(*) as total_tickets FROM tickets WHERE status =...
+                                              ^
+
+2025-09-13 13:25:43,905 - RXbot - ERROR - Erro PostgreSQL (tentativa 2): relation "tickets" does not exist
+LINE 1: SELECT COUNT(*) as total_tickets FROM tickets WHERE status =...
+                                              ^
+
+2025-09-13 13:25:44,116 - RXbot - ERROR - Erro PostgreSQL (tentativa 3): relation "tickets" does not exist
+LINE 1: SELECT COUNT(*) as total_tickets FROM tickets WHERE status =...
+                                              ^
+
+2025-09-13 13:25:44,116 - RXbot - ERROR - Erro crítico no execute_query (tentativa 3): relation "tickets" does not exist
+LINE 1: SELECT COUNT(*) as total_tickets FROM tickets WHERE status =...
+                                              ^
+
+2025-09-13 13:25:44,130 - RXbot - ERROR - Erro PostgreSQL (tentativa 1): relation "giveaways" does not exist
+LINE 1: SELECT COUNT(*) as total_giveaways FROM giveaways
+                                                ^
+
+2025-09-13 13:25:44,249 - RXbot - ERROR - Erro PostgreSQL (tentativa 2): relation "giveaways" does not exist
+LINE 1: SELECT COUNT(*) as total_giveaways FROM giveaways
+                                                ^
+
+2025-09-13 13:25:44,471 - RXbot - ERROR - Erro PostgreSQL (tentativa 3): relation "giveaways" does not exist
+LINE 1: SELECT COUNT(*) as total_giveaways FROM giveaways
+                                                ^
+
+2025-09-13 13:25:44,471 - RXbot - ERROR - Erro crítico no execute_query (tentativa 3): relation "giveaways" does not exist
+LINE 1: SELECT COUNT(*) as total_giveaways FROM giveaways
+                                                ^
+
+2025-09-13 13:25:44,488 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 13:25:44] "GET / HTTP/1.1" 200 -
+2025-09-13 13:27:06,628 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:27:06] "GET / HTTP/1.1" 200 -
+2025-09-13 13:32:16,882 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 13:32:16,903 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 13:32:16,903 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 13:32:16,913 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:17,054 - RXbot - INFO - ✅ Coluna bet_amount adicionada à tabela giveaways
+2025-09-13 13:32:17,066 - RXbot - INFO - 📋 Created tables in public schema: auto_mod_rules, clan_challenges, clan_events, clans, command_logs, copinha_matches, copinhas, custom_commands, events, giveaways...
+2025-09-13 13:32:17,066 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:32:17,067 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:32:17,067 - RXbot - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-13 13:32:17,067 - RXbot - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-13 13:32:17,080 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.107.130:5000
+2025-09-13 13:32:17,081 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 13:32:17,900 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:17,918 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:17,935 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:17,950 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:17,965 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:32:17] "GET / HTTP/1.1" 200 -
+2025-09-13 13:32:19,365 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:19,379 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:19,393 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:19,404 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:19,406 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 13:32:19] "GET / HTTP/1.1" 200 -
+2025-09-13 13:32:22,987 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:32:22] "GET /static/css/dashboard.css HTTP/1.1" 200 -
+2025-09-13 13:32:22,991 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:32:22] "GET /static/js/dashboard.js HTTP/1.1" 200 -
+2025-09-13 13:32:23,282 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:32:23] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-09-13 13:32:37,081 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:32:37] "[33mGET /health/db HTTP/1.1[0m" 404 -
+2025-09-13 13:32:51,735 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:51,748 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:51,760 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:51,780 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:51,782 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:32:51] "GET / HTTP/1.1" 200 -
+2025-09-13 13:32:52,582 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:32:52,586 - RXbot - ERROR - Erro ao obter estatísticas: column "active" does not exist
+LINE 1: SELECT COUNT(*) FROM events WHERE status = "active"
+                                                   ^
+
+2025-09-13 13:32:52,587 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:32:52] "GET /api/stats HTTP/1.1" 200 -
+2025-09-13 13:35:37,108 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 13:35:37,133 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 13:35:37,133 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 13:35:37,142 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:35:37,154 - RXbot - INFO - 📋 Created tables in public schema: auto_mod_rules, clan_challenges, clan_events, clans, command_logs, copinha_matches, copinhas, custom_commands, events, giveaways...
+2025-09-13 13:35:37,154 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:35:37,155 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:35:37,155 - RXbot - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-13 13:35:37,161 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.107.130:5000
+2025-09-13 13:35:37,161 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 13:35:40,159 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:35:40] "GET /healthz HTTP/1.1" 200 -
+2025-09-13 13:35:40,159 - RXbot - INFO - ✅ Flask está respondendo
+2025-09-13 13:35:40,160 - RXbot - INFO - 🤖 Iniciando bot Discord...
+2025-09-13 13:35:40,160 - discord.client - INFO - logging in using static token
+2025-09-13 13:35:41,111 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: 5cb9a920bfea7463230b4384c44b4113).
+2025-09-13 13:35:43,122 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 13:35:43,123 - RXbot - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-13 13:35:43,123 - RXbot - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-13 13:35:43,141 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:35:43,154 - RXbot - INFO - 📋 Created tables in public schema: auto_mod_rules, clan_challenges, clan_events, clans, command_logs, copinha_matches, copinhas, custom_commands, events, giveaways...
+2025-09-13 13:35:43,154 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:35:43,155 - RXbot - INFO - ✅ Database inicializado
+2025-09-13 13:35:43,155 - RXbot - INFO - 🤖 RXbot está online! Conectado como RXbot#1546
+2025-09-13 13:35:43,155 - RXbot - INFO - 📊 Conectado em 1 servidores
+2025-09-13 13:35:43,156 - RXbot - INFO - 👥 Servindo 58 usuários únicos
+2025-09-13 13:35:43,156 - RXbot - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-13 13:35:43,169 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:35:43,171 - RXbot - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-13 13:35:43,174 - RXbot - INFO - ⏭️ Backup desabilitado no Railway para economia de recursos
+2025-09-13 13:35:43,191 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:35:43,204 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:35:43,218 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:35:43,634 - RXbot - INFO - ✅ 100 slash commands sincronizados
+2025-09-13 13:35:43,634 - RXbot - INFO - 📋 Comandos slash disponíveis: ping, ajuda, jokenpo, dado, moeda, piada, copinha, saldo, daily, trabalhar...
+2025-09-13 13:35:43,635 - RXbot - INFO - 🚀 Total de comandos slash: 100
+2025-09-13 13:35:43,635 - RXbot - INFO -    /ping - Ver latência do bot
+2025-09-13 13:35:43,635 - RXbot - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-13 13:35:43,635 - RXbot - INFO -    /jokenpo - Jogar pedra, papel ou tesoura
+2025-09-13 13:35:43,635 - RXbot - INFO -    /dado - Rolar um dado
+2025-09-13 13:35:43,635 - RXbot - INFO -    /moeda - Cara ou coroa
+2025-09-13 13:35:43,635 - RXbot - INFO -    /piada - Contar uma piada
+2025-09-13 13:35:43,635 - RXbot - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-13 13:35:43,635 - RXbot - INFO -    /saldo - Ver saldo de moedas
+2025-09-13 13:35:43,635 - RXbot - INFO -    /daily - Recompensa diária
+2025-09-13 13:35:43,635 - RXbot - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-13 13:35:43,635 - RXbot - INFO -    /weekly - Recompensa semanal
+2025-09-13 13:35:43,636 - RXbot - INFO -    /monthly - Recompensa mensal
+2025-09-13 13:35:43,636 - RXbot - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-13 13:35:43,636 - RXbot - INFO -    /loja - Ver loja de itens
+2025-09-13 13:35:43,636 - RXbot - INFO -    /inventario - Ver inventário de itens
+2025-09-13 13:35:43,636 - RXbot - INFO -    ... e mais 85 comandos!
+2025-09-13 13:35:43,637 - RXbot - INFO - ✅ Status inicial configurado
+2025-09-13 13:35:59,251 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:35:59,268 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:35:59,278 - RXbot - INFO - Usuário 1401079606311784448 criado com dados padrão
+2025-09-13 13:35:59,291 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:35:59,305 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:35:59,327 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:37:43,202 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:37:43,214 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:28,321 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:28,331 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:28,343 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:28,385 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:36,091 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:36,101 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:36,114 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:36,132 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:37,680 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:37,694 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:37,702 - RXbot - INFO - Usuário 951500315767762994 criado com dados padrão
+2025-09-13 13:39:37,718 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:37,739 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:37,763 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:43,189 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:39:43,202 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:40:03,473 - RXbot - ERROR - Erro no comando copinha: 400 Bad Request (error code: 40060): Interaction has already been acknowledged.
+2025-09-13 13:40:03,692 - RXbot - ERROR - Erro geral ao enviar resposta: 400 Bad Request (error code: 40060): Interaction has already been acknowledged.
+2025-09-13 13:40:50,082 - RXbot - ERROR - Erro ao criar copinha: 404 Not Found (error code: 10015): Unknown Webhook
+2025-09-13 13:40:50,216 - discord.ui.modal - ERROR - Ignoring exception in modal <CopinhaConfigModal timeout=None children=4>:
+Traceback (most recent call last):
+  File "/home/runner/workspace/rxbot/main.py", line 8593, in on_submit
+    message = await interaction.followup.send(embed=embed, wait=True)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 1900, in send
+    data = await adapter.execute_webhook(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 224, in request
+    raise NotFound(response, data)
+discord.errors.NotFound: 404 Not Found (error code: 10015): Unknown Webhook
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/ui/modal.py", line 193, in _scheduled_task
+    await self.on_submit(interaction)
+  File "/home/runner/workspace/rxbot/main.py", line 8612, in on_submit
+    await interaction.response.send_message("❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/interactions.py", line 1051, in send_message
+    response = await adapter.create_interaction_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 224, in request
+    raise NotFound(response, data)
+discord.errors.NotFound: 404 Not Found (error code: 10062): Unknown interaction
+2025-09-13 13:40:55,751 - RXbot - ERROR - Erro ao criar copinha: 404 Not Found (error code: 10015): Unknown Webhook
+2025-09-13 13:40:55,898 - discord.ui.modal - ERROR - Ignoring exception in modal <CopinhaConfigModal timeout=None children=4>:
+Traceback (most recent call last):
+  File "/home/runner/workspace/rxbot/main.py", line 8593, in on_submit
+    message = await interaction.followup.send(embed=embed, wait=True)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 1900, in send
+    data = await adapter.execute_webhook(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 224, in request
+    raise NotFound(response, data)
+discord.errors.NotFound: 404 Not Found (error code: 10015): Unknown Webhook
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/ui/modal.py", line 193, in _scheduled_task
+    await self.on_submit(interaction)
+  File "/home/runner/workspace/rxbot/main.py", line 8612, in on_submit
+    await interaction.response.send_message("❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/interactions.py", line 1051, in send_message
+    response = await adapter.create_interaction_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 224, in request
+    raise NotFound(response, data)
+discord.errors.NotFound: 404 Not Found (error code: 10062): Unknown interaction
+2025-09-13 13:41:01,175 - RXbot - ERROR - Erro ao criar copinha: 404 Not Found (error code: 10015): Unknown Webhook
+2025-09-13 13:41:01,308 - discord.ui.modal - ERROR - Ignoring exception in modal <CopinhaConfigModal timeout=None children=4>:
+Traceback (most recent call last):
+  File "/home/runner/workspace/rxbot/main.py", line 8593, in on_submit
+    message = await interaction.followup.send(embed=embed, wait=True)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 1900, in send
+    data = await adapter.execute_webhook(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 224, in request
+    raise NotFound(response, data)
+discord.errors.NotFound: 404 Not Found (error code: 10015): Unknown Webhook
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/ui/modal.py", line 193, in _scheduled_task
+    await self.on_submit(interaction)
+  File "/home/runner/workspace/rxbot/main.py", line 8612, in on_submit
+    await interaction.response.send_message("❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/interactions.py", line 1051, in send_message
+    response = await adapter.create_interaction_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 224, in request
+    raise NotFound(response, data)
+discord.errors.NotFound: 404 Not Found (error code: 10062): Unknown interaction
+2025-09-13 13:41:06,271 - RXbot - ERROR - Erro ao criar copinha: 404 Not Found (error code: 10015): Unknown Webhook
+2025-09-13 13:41:06,395 - discord.ui.modal - ERROR - Ignoring exception in modal <CopinhaConfigModal timeout=None children=4>:
+Traceback (most recent call last):
+  File "/home/runner/workspace/rxbot/main.py", line 8593, in on_submit
+    message = await interaction.followup.send(embed=embed, wait=True)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 1900, in send
+    data = await adapter.execute_webhook(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 224, in request
+    raise NotFound(response, data)
+discord.errors.NotFound: 404 Not Found (error code: 10015): Unknown Webhook
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/ui/modal.py", line 193, in _scheduled_task
+    await self.on_submit(interaction)
+  File "/home/runner/workspace/rxbot/main.py", line 8612, in on_submit
+    await interaction.response.send_message("❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/interactions.py", line 1051, in send_message
+    response = await adapter.create_interaction_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 224, in request
+    raise NotFound(response, data)
+discord.errors.NotFound: 404 Not Found (error code: 10062): Unknown interaction
+2025-09-13 13:41:19,784 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:41:19,798 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:41:19,831 - RXbot - INFO - Usuário 1339336477661724674 criado com dados padrão
+2025-09-13 13:41:19,852 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:41:20,110 - RXbot - ERROR - Erro geral ao enviar resposta: 400 Bad Request (error code: 40060): Interaction has already been acknowledged.
+2025-09-13 13:41:20,322 - RXbot - INFO - Admin skplays87 adicionou 100 moedas para skplays87. Motivo: Adição manual
+2025-09-13 13:41:43,182 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:41:43,195 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:41:58,759 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:41:58,773 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:41:58,789 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:41:58,842 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:42:35,946 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:42:35,958 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:42:35,968 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:42:36,015 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:42:36,661 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:42:36,675 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:42:36,685 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:42:36,701 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:42:58,967 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:42:58,979 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:42:58,993 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:42:59,013 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:43:43,199 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:43:43,214 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:44:16,293 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:44:16,303 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:44:16,313 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:44:16,330 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:44:22,357 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:44:22,367 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:44:22,376 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:44:22,393 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:44:50,637 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:44:50,646 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:44:50,655 - RXbot - INFO - Usuário 1170017934949748856 criado com dados padrão
+2025-09-13 13:44:50,663 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:44:50,672 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:44:50,691 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:23,038 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:23,048 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:23,057 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:23,115 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:34,910 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:34,923 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:34,933 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:34,955 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:39,210 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:39,223 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:39,233 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:39,248 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:40,220 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 13:45:40,239 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 13:45:40,240 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 13:45:40,248 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:40,256 - RXbot - INFO - 📋 Created tables in public schema: auto_mod_rules, clan_challenges, clan_events, clans, command_logs, copinha_matches, copinhas, custom_commands, events, giveaways...
+2025-09-13 13:45:40,256 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:45:40,256 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:45:40,257 - RXbot - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-13 13:45:40,262 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.107.130:5000
+2025-09-13 13:45:40,262 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 13:45:41,117 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:41,130 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:41,145 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:41,186 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:41,202 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:45:41] "GET / HTTP/1.1" 200 -
+2025-09-13 13:45:42,482 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:42,495 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:42,508 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:42,522 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:42,525 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 13:45:42] "GET / HTTP/1.1" 200 -
+2025-09-13 13:45:43,260 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:45:43] "GET /healthz HTTP/1.1" 200 -
+2025-09-13 13:45:43,261 - RXbot - INFO - ✅ Flask está respondendo
+2025-09-13 13:45:43,262 - RXbot - INFO - 🤖 Iniciando bot Discord...
+2025-09-13 13:45:43,262 - discord.client - INFO - logging in using static token
+2025-09-13 13:45:44,135 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: ad2435fe6cc8d0512734d5d0245c9d3d).
+2025-09-13 13:45:46,145 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:45:46] "GET /static/css/dashboard.css HTTP/1.1" 200 -
+2025-09-13 13:45:46,147 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 13:45:46,147 - RXbot - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-13 13:45:46,147 - RXbot - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-13 13:45:46,151 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:45:46] "GET /static/js/dashboard.js HTTP/1.1" 200 -
+2025-09-13 13:45:46,190 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:46,206 - RXbot - INFO - 📋 Created tables in public schema: auto_mod_rules, clan_challenges, clan_events, clans, command_logs, copinha_matches, copinhas, custom_commands, events, giveaways...
+2025-09-13 13:45:46,206 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:45:46,207 - RXbot - INFO - ✅ Database inicializado
+2025-09-13 13:45:46,208 - RXbot - INFO - 🤖 RXbot está online! Conectado como RXbot#1546
+2025-09-13 13:45:46,208 - RXbot - INFO - 📊 Conectado em 1 servidores
+2025-09-13 13:45:46,208 - RXbot - INFO - 👥 Servindo 58 usuários únicos
+2025-09-13 13:45:46,208 - RXbot - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-13 13:45:46,234 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:46,239 - RXbot - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-13 13:45:46,245 - RXbot - INFO - ⏭️ Backup desabilitado no Railway para economia de recursos
+2025-09-13 13:45:46,288 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:46,303 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:46,320 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:46,509 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:45:46] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-09-13 13:45:46,637 - RXbot - INFO - ✅ 100 slash commands sincronizados
+2025-09-13 13:45:46,638 - RXbot - INFO - 📋 Comandos slash disponíveis: ping, ajuda, jokenpo, dado, moeda, piada, copinha, saldo, daily, trabalhar...
+2025-09-13 13:45:46,638 - RXbot - INFO - 🚀 Total de comandos slash: 100
+2025-09-13 13:45:46,638 - RXbot - INFO -    /ping - Ver latência do bot
+2025-09-13 13:45:46,638 - RXbot - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-13 13:45:46,638 - RXbot - INFO -    /jokenpo - Jogar pedra, papel ou tesoura
+2025-09-13 13:45:46,638 - RXbot - INFO -    /dado - Rolar um dado
+2025-09-13 13:45:46,638 - RXbot - INFO -    /moeda - Cara ou coroa
+2025-09-13 13:45:46,638 - RXbot - INFO -    /piada - Contar uma piada
+2025-09-13 13:45:46,638 - RXbot - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-13 13:45:46,638 - RXbot - INFO -    /saldo - Ver saldo de moedas
+2025-09-13 13:45:46,639 - RXbot - INFO -    /daily - Recompensa diária
+2025-09-13 13:45:46,639 - RXbot - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-13 13:45:46,639 - RXbot - INFO -    /weekly - Recompensa semanal
+2025-09-13 13:45:46,640 - RXbot - INFO -    /monthly - Recompensa mensal
+2025-09-13 13:45:46,640 - RXbot - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-13 13:45:46,640 - RXbot - INFO -    /loja - Ver loja de itens
+2025-09-13 13:45:46,640 - RXbot - INFO -    /inventario - Ver inventário de itens
+2025-09-13 13:45:46,640 - RXbot - INFO -    ... e mais 85 comandos!
+2025-09-13 13:45:46,640 - RXbot - INFO - ✅ Status inicial configurado
+2025-09-13 13:45:56,971 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:56,982 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:57,037 - RXbot - INFO - Usuário 1344712182205644861 criado com dados padrão
+2025-09-13 13:45:57,045 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:57,054 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:57,070 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:59,044 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:59,058 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:59,071 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:45:59,091 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:46:13,646 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:46:13,656 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:46:13,667 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:46:13,687 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:47:08,813 - RXbot - ERROR - Erro ao criar copinha: 404 Not Found (error code: 10015): Unknown Webhook
+2025-09-13 13:47:46,258 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:47:46,267 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:49:46,253 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:49:46,265 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:49:50,028 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:49:50,039 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:49:50,051 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:49:50,098 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:49:59,631 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:49:59,642 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:49:59,653 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:49:59,671 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:50:26,754 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:50:26,763 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:50:26,774 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:50:26,785 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:50:26,788 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 13:50:26] "GET / HTTP/1.1" 200 -
+2025-09-13 13:50:37,667 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:50:37,691 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:50:37,703 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:50:37,718 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:50:37,721 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 13:50:37] "GET / HTTP/1.1" 200 -
+2025-09-13 13:50:38,320 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 13:50:38] "GET /static/css/dashboard.css HTTP/1.1" 200 -
+2025-09-13 13:50:39,109 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 13:50:39] "GET /static/js/dashboard.js HTTP/1.1" 200 -
+2025-09-13 13:51:46,267 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:51:46,285 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:30,893 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:30,904 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:30,915 - RXbot - INFO - Usuário 1393361974129197238 criado com dados padrão
+2025-09-13 13:53:30,923 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:30,933 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:30,948 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:32,175 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:32,185 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:32,199 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:32,212 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:39,038 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:39,057 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:39,067 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:39,078 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:46,289 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:46,311 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:52,719 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:52,732 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:52,745 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:53:52,829 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:07,457 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:07,467 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:07,477 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:07,497 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:18,267 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:18,277 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:18,296 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:18,314 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:34,609 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:34,627 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:34,640 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:34,681 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:37,764 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:37,779 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:37,797 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:37,833 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:47,912 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:47,923 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:47,937 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:54:47,961 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:14,727 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 13:55:14,752 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 13:55:14,752 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 13:55:14,767 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:14,778 - RXbot - INFO - 📋 Created tables in public schema: auto_mod_rules, clan_challenges, clan_events, clans, command_logs, copinha_matches, copinhas, custom_commands, events, giveaways...
+2025-09-13 13:55:14,778 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:55:14,778 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:55:14,778 - RXbot - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-13 13:55:14,785 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.107.130:5000
+2025-09-13 13:55:14,785 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 13:55:15,644 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:15,664 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:15,681 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:15,695 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:15,708 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:55:15] "GET / HTTP/1.1" 200 -
+2025-09-13 13:55:17,038 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:17,051 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:17,062 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:17,075 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:17,078 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 13:55:17] "GET / HTTP/1.1" 200 -
+2025-09-13 13:55:17,792 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:55:17] "GET /healthz HTTP/1.1" 200 -
+2025-09-13 13:55:17,794 - RXbot - INFO - ✅ Flask está respondendo
+2025-09-13 13:55:17,794 - RXbot - INFO - 🤖 Iniciando bot Discord...
+2025-09-13 13:55:17,794 - discord.client - INFO - logging in using static token
+2025-09-13 13:55:18,514 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: 46bdcb6a35959c25b6f115e9926a3e78).
+2025-09-13 13:55:20,532 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 13:55:20,533 - RXbot - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-13 13:55:20,533 - RXbot - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-13 13:55:20,545 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:20,559 - RXbot - INFO - 📋 Created tables in public schema: auto_mod_rules, clan_challenges, clan_events, clans, command_logs, copinha_matches, copinhas, custom_commands, events, giveaways...
+2025-09-13 13:55:20,559 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:55:20,560 - RXbot - INFO - ✅ Database inicializado
+2025-09-13 13:55:20,560 - RXbot - INFO - 🤖 RXbot está online! Conectado como RXbot#1546
+2025-09-13 13:55:20,560 - RXbot - INFO - 📊 Conectado em 1 servidores
+2025-09-13 13:55:20,560 - RXbot - INFO - 👥 Servindo 57 usuários únicos
+2025-09-13 13:55:20,561 - RXbot - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-13 13:55:20,569 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:20,570 - RXbot - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-13 13:55:20,573 - RXbot - INFO - ⏭️ Backup desabilitado no Railway para economia de recursos
+2025-09-13 13:55:20,584 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:20,596 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:20,612 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:55:20,801 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:55:20] "GET /static/css/dashboard.css HTTP/1.1" 200 -
+2025-09-13 13:55:20,802 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:55:20] "GET /static/js/dashboard.js HTTP/1.1" 200 -
+2025-09-13 13:55:20,934 - RXbot - INFO - ✅ 100 slash commands sincronizados
+2025-09-13 13:55:20,935 - RXbot - INFO - 📋 Comandos slash disponíveis: ping, ajuda, jokenpo, dado, moeda, piada, copinha, saldo, daily, trabalhar...
+2025-09-13 13:55:20,935 - RXbot - INFO - 🚀 Total de comandos slash: 100
+2025-09-13 13:55:20,935 - RXbot - INFO -    /ping - Ver latência do bot
+2025-09-13 13:55:20,935 - RXbot - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-13 13:55:20,935 - RXbot - INFO -    /jokenpo - Jogar pedra, papel ou tesoura
+2025-09-13 13:55:20,936 - RXbot - INFO -    /dado - Rolar um dado
+2025-09-13 13:55:20,936 - RXbot - INFO -    /moeda - Cara ou coroa
+2025-09-13 13:55:20,936 - RXbot - INFO -    /piada - Contar uma piada
+2025-09-13 13:55:20,936 - RXbot - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-13 13:55:20,936 - RXbot - INFO -    /saldo - Ver saldo de moedas
+2025-09-13 13:55:20,937 - RXbot - INFO -    /daily - Recompensa diária
+2025-09-13 13:55:20,937 - RXbot - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-13 13:55:20,937 - RXbot - INFO -    /weekly - Recompensa semanal
+2025-09-13 13:55:20,937 - RXbot - INFO -    /monthly - Recompensa mensal
+2025-09-13 13:55:20,937 - RXbot - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-13 13:55:20,937 - RXbot - INFO -    /loja - Ver loja de itens
+2025-09-13 13:55:20,938 - RXbot - INFO -    /inventario - Ver inventário de itens
+2025-09-13 13:55:20,938 - RXbot - INFO -    ... e mais 85 comandos!
+2025-09-13 13:55:20,938 - RXbot - INFO - ✅ Status inicial configurado
+2025-09-13 13:55:21,091 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:55:21] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-09-13 13:56:51,530 - RXbot - ERROR - Erro ao criar copinha: 404 Not Found (error code: 10015): Unknown Webhook
+2025-09-13 13:56:51,667 - discord.ui.modal - ERROR - Ignoring exception in modal <CopinhaConfigModal timeout=None children=4>:
+Traceback (most recent call last):
+  File "/home/runner/workspace/rxbot/main.py", line 8856, in on_submit
+    message = await interaction.followup.send(embed=embed, wait=True)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 1900, in send
+    data = await adapter.execute_webhook(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 224, in request
+    raise NotFound(response, data)
+discord.errors.NotFound: 404 Not Found (error code: 10015): Unknown Webhook
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/runner/workspace/rxbot/main.py", line 138, in safe_send_response
+    return await interaction.response.send_message(embed=embed, content=content, ephemeral=ephemeral)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/interactions.py", line 1051, in send_message
+    response = await adapter.create_interaction_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/webhook/async_.py", line 224, in request
+    raise NotFound(response, data)
+discord.errors.NotFound: 404 Not Found (error code: 10062): Unknown interaction
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/ui/modal.py", line 193, in _scheduled_task
+    await self.on_submit(interaction)
+  File "/home/runner/workspace/rxbot/main.py", line 8875, in on_submit
+    await safe_send_response(interaction, content="❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+  File "/home/runner/workspace/rxbot/main.py", line 156, in safe_send_response
+    except (discord.errors.NotFound, discord.errors.WebhookTokenMissing, discord.errors.HTTPException):
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'discord.errors' has no attribute 'WebhookTokenMissing'
+2025-09-13 13:57:20,596 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:57:20,608 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:57:26,516 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:57:39,397 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:57:39,410 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:57:39,719 - RXbot - INFO - Admin skplays87 adicionou 100000 moedas para skplays87. Motivo: Adição manual
+2025-09-13 13:57:46,804 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:57:46,817 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:57:46,830 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:57:46,849 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:57:53,552 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:57:53,573 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:58:06,366 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:58:06,376 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:58:06,386 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:58:06,403 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:58:06,420 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:58:06,430 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:58:07,039 - RXbot - INFO - Item usado: skplays87 usou Cargo Exclusivo (3 dias) (ID: 8) - Coins ganhos: 0
+2025-09-13 13:59:20,605 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:20,619 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:29,473 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 13:59:29,496 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 13:59:29,496 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 13:59:29,511 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:29,523 - RXbot - INFO - 📋 Created tables in public schema: auto_mod_rules, clan_challenges, clan_events, clans, command_logs, copinha_matches, copinhas, custom_commands, events, giveaways...
+2025-09-13 13:59:29,523 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:59:29,524 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:59:29,524 - RXbot - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-13 13:59:29,530 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.107.130:5000
+2025-09-13 13:59:29,530 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 13:59:29,722 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:29,738 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:29,748 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:29,763 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:29,779 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:59:29] "GET / HTTP/1.1" 200 -
+2025-09-13 13:59:29,799 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:59:29] "[36mGET /static/js/dashboard.js HTTP/1.1[0m" 304 -
+2025-09-13 13:59:29,804 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:59:29] "[36mGET /static/css/dashboard.css HTTP/1.1[0m" 304 -
+2025-09-13 13:59:31,859 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:31,882 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:31,900 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:31,914 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:31,917 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 13:59:31] "GET / HTTP/1.1" 200 -
+2025-09-13 13:59:32,529 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 13:59:32] "GET /healthz HTTP/1.1" 200 -
+2025-09-13 13:59:32,530 - RXbot - INFO - ✅ Flask está respondendo
+2025-09-13 13:59:32,530 - RXbot - INFO - 🤖 Iniciando bot Discord...
+2025-09-13 13:59:32,530 - discord.client - INFO - logging in using static token
+2025-09-13 13:59:33,464 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: abe3cef2124c87a33cf0da964fcf13a5).
+2025-09-13 13:59:35,484 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 13:59:35,485 - RXbot - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-13 13:59:35,485 - RXbot - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-13 13:59:35,519 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:35,533 - RXbot - INFO - 📋 Created tables in public schema: auto_mod_rules, clan_challenges, clan_events, clans, command_logs, copinha_matches, copinhas, custom_commands, events, giveaways...
+2025-09-13 13:59:35,534 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 13:59:35,534 - RXbot - INFO - ✅ Database inicializado
+2025-09-13 13:59:35,534 - RXbot - INFO - 🤖 RXbot está online! Conectado como RXbot#1546
+2025-09-13 13:59:35,534 - RXbot - INFO - 📊 Conectado em 1 servidores
+2025-09-13 13:59:35,534 - RXbot - INFO - 👥 Servindo 57 usuários únicos
+2025-09-13 13:59:35,535 - RXbot - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-13 13:59:35,544 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:35,546 - RXbot - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-13 13:59:35,548 - RXbot - INFO - ⏭️ Backup desabilitado no Railway para economia de recursos
+2025-09-13 13:59:35,557 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:35,567 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:35,577 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 13:59:36,222 - RXbot - INFO - ✅ 100 slash commands sincronizados
+2025-09-13 13:59:36,222 - RXbot - INFO - 📋 Comandos slash disponíveis: ping, ajuda, jokenpo, dado, moeda, piada, copinha, saldo, daily, trabalhar...
+2025-09-13 13:59:36,222 - RXbot - INFO - 🚀 Total de comandos slash: 100
+2025-09-13 13:59:36,222 - RXbot - INFO -    /ping - Ver latência do bot
+2025-09-13 13:59:36,222 - RXbot - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-13 13:59:36,222 - RXbot - INFO -    /jokenpo - Jogar pedra, papel ou tesoura
+2025-09-13 13:59:36,222 - RXbot - INFO -    /dado - Rolar um dado
+2025-09-13 13:59:36,222 - RXbot - INFO -    /moeda - Cara ou coroa
+2025-09-13 13:59:36,222 - RXbot - INFO -    /piada - Contar uma piada
+2025-09-13 13:59:36,223 - RXbot - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-13 13:59:36,223 - RXbot - INFO -    /saldo - Ver saldo de moedas
+2025-09-13 13:59:36,223 - RXbot - INFO -    /daily - Recompensa diária
+2025-09-13 13:59:36,223 - RXbot - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-13 13:59:36,223 - RXbot - INFO -    /weekly - Recompensa semanal
+2025-09-13 13:59:36,223 - RXbot - INFO -    /monthly - Recompensa mensal
+2025-09-13 13:59:36,223 - RXbot - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-13 13:59:36,223 - RXbot - INFO -    /loja - Ver loja de itens
+2025-09-13 13:59:36,223 - RXbot - INFO -    /inventario - Ver inventário de itens
+2025-09-13 13:59:36,224 - RXbot - INFO -    ... e mais 85 comandos!
+2025-09-13 13:59:36,224 - RXbot - INFO - ✅ Status inicial configurado
+2025-09-13 14:00:34,376 - RXbot - ERROR - Erro ao criar copinha: 404 Not Found (error code: 10015): Unknown Webhook
+2025-09-13 14:01:02,662 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:02,672 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:02,684 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:02,723 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:06,388 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:06,403 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:06,415 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:06,430 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:31,215 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 14:01:31,249 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 14:01:31,250 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 14:01:31,258 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:31,268 - RXbot - INFO - 📋 Created tables in public schema: auto_mod_rules, clan_challenges, clan_events, clans, command_logs, copinha_matches, copinhas, custom_commands, events, giveaways...
+2025-09-13 14:01:31,268 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 14:01:31,269 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 14:01:31,269 - RXbot - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-13 14:01:31,275 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.107.130:5000
+2025-09-13 14:01:31,276 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 14:01:33,564 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:33,576 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:33,588 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:33,600 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:33,610 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 14:01:33] "GET / HTTP/1.1" 200 -
+2025-09-13 14:01:34,272 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 14:01:34] "GET /healthz HTTP/1.1" 200 -
+2025-09-13 14:01:34,273 - RXbot - INFO - ✅ Flask está respondendo
+2025-09-13 14:01:34,273 - RXbot - INFO - 🤖 Iniciando bot Discord...
+2025-09-13 14:01:34,274 - discord.client - INFO - logging in using static token
+2025-09-13 14:01:35,063 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: a3a391c647616f4979270d278a36d6f8).
+2025-09-13 14:01:37,076 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 14:01:37,076 - RXbot - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-13 14:01:37,077 - RXbot - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-13 14:01:37,088 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:37,099 - RXbot - INFO - 📋 Created tables in public schema: auto_mod_rules, clan_challenges, clan_events, clans, command_logs, copinha_matches, copinhas, custom_commands, events, giveaways...
+2025-09-13 14:01:37,099 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 14:01:37,099 - RXbot - INFO - ✅ Database inicializado
+2025-09-13 14:01:37,099 - RXbot - INFO - 🤖 RXbot está online! Conectado como RXbot#1546
+2025-09-13 14:01:37,100 - RXbot - INFO - 📊 Conectado em 1 servidores
+2025-09-13 14:01:37,100 - RXbot - INFO - 👥 Servindo 57 usuários únicos
+2025-09-13 14:01:37,100 - RXbot - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-13 14:01:37,110 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:37,111 - RXbot - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-13 14:01:37,114 - RXbot - INFO - ⏭️ Backup desabilitado no Railway para economia de recursos
+2025-09-13 14:01:37,126 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:37,139 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:37,149 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:01:37,573 - RXbot - INFO - ✅ 100 slash commands sincronizados
+2025-09-13 14:01:37,573 - RXbot - INFO - 📋 Comandos slash disponíveis: ping, ajuda, jokenpo, dado, moeda, piada, copinha, saldo, daily, trabalhar...
+2025-09-13 14:01:37,574 - RXbot - INFO - 🚀 Total de comandos slash: 100
+2025-09-13 14:01:37,574 - RXbot - INFO -    /ping - Ver latência do bot
+2025-09-13 14:01:37,574 - RXbot - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-13 14:01:37,574 - RXbot - INFO -    /jokenpo - Jogar pedra, papel ou tesoura
+2025-09-13 14:01:37,574 - RXbot - INFO -    /dado - Rolar um dado
+2025-09-13 14:01:37,574 - RXbot - INFO -    /moeda - Cara ou coroa
+2025-09-13 14:01:37,574 - RXbot - INFO -    /piada - Contar uma piada
+2025-09-13 14:01:37,574 - RXbot - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-13 14:01:37,574 - RXbot - INFO -    /saldo - Ver saldo de moedas
+2025-09-13 14:01:37,575 - RXbot - INFO -    /daily - Recompensa diária
+2025-09-13 14:01:37,575 - RXbot - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-13 14:01:37,575 - RXbot - INFO -    /weekly - Recompensa semanal
+2025-09-13 14:01:37,575 - RXbot - INFO -    /monthly - Recompensa mensal
+2025-09-13 14:01:37,575 - RXbot - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-13 14:01:37,575 - RXbot - INFO -    /loja - Ver loja de itens
+2025-09-13 14:01:37,575 - RXbot - INFO -    /inventario - Ver inventário de itens
+2025-09-13 14:01:37,575 - RXbot - INFO -    ... e mais 85 comandos!
+2025-09-13 14:01:37,576 - RXbot - INFO - ✅ Status inicial configurado
+2025-09-13 14:02:11,067 - RXbot - ERROR - Erro ao criar copinha: 404 Not Found (error code: 10015): Unknown Webhook
+2025-09-13 14:02:16,367 - RXbot - ERROR - Erro ao criar copinha: 404 Not Found (error code: 10015): Unknown Webhook
+2025-09-13 14:03:02,467 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:02,477 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:02,488 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:02,541 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:16,022 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:16,033 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:16,039 - RXbot - INFO - Usuário 1397700553349533937 criado com dados padrão
+2025-09-13 14:03:16,047 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:16,056 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:16,076 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:22,074 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:22,085 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:22,096 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:22,114 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:29,407 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:29,435 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:29,453 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:29,474 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:32,938 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:32,947 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:32,956 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:32,968 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:37,126 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:03:37,141 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:04:23,583 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:04:23,602 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:04:23,624 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:04:23,648 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:04:24,804 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:04:24,822 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:04:24,843 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:04:24,868 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:04:35,675 - RXbot - ERROR - Erro ao criar copinha: 404 Not Found (error code: 10015): Unknown Webhook
+2025-09-13 14:05:04,054 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:05:04,066 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:05:04,077 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:05:04,122 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:05:07,751 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:05:07,767 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:05:07,791 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:05:07,817 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:05:16,521 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:05:16,533 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:05:16,546 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:05:16,560 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:05:37,141 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:05:37,165 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:15,940 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-13 14:06:15,959 - RXbot - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-13 14:06:15,960 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 14:06:15,969 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:15,980 - RXbot - INFO - 📋 Created tables in public schema: auto_mod_rules, clan_challenges, clan_events, clans, command_logs, copinha_matches, copinhas, custom_commands, events, giveaways...
+2025-09-13 14:06:15,981 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 14:06:15,981 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 14:06:15,983 - RXbot - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-13 14:06:15,994 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.107.130:5000
+2025-09-13 14:06:15,994 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-13 14:06:16,806 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:16,818 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:16,831 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:16,846 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:16,860 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 14:06:16] "GET / HTTP/1.1" 200 -
+2025-09-13 14:06:17,938 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:17,954 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:17,969 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:17,988 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:17,991 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 14:06:17] "GET / HTTP/1.1" 200 -
+2025-09-13 14:06:18,542 - werkzeug - INFO - 172.31.107.130 - - [13/Sep/2025 14:06:18] "[36mGET /static/css/dashboard.css HTTP/1.1[0m" 304 -
+2025-09-13 14:06:18,991 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 14:06:18] "GET /healthz HTTP/1.1" 200 -
+2025-09-13 14:06:18,992 - RXbot - INFO - ✅ Flask está respondendo
+2025-09-13 14:06:18,992 - RXbot - INFO - 🤖 Iniciando bot Discord...
+2025-09-13 14:06:18,993 - discord.client - INFO - logging in using static token
+2025-09-13 14:06:19,879 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: bdeddf46954308786bbdaee3e783bbca).
+2025-09-13 14:06:21,891 - RXbot - INFO - 🎯 Inicializando sistema completo...
+2025-09-13 14:06:21,892 - RXbot - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-13 14:06:21,892 - RXbot - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-13 14:06:21,900 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:21,913 - RXbot - INFO - 📋 Created tables in public schema: auto_mod_rules, clan_challenges, clan_events, clans, command_logs, copinha_matches, copinhas, custom_commands, events, giveaways...
+2025-09-13 14:06:21,913 - RXbot - INFO - ✅ Database initialized successfully!
+2025-09-13 14:06:21,914 - RXbot - INFO - ✅ Database inicializado
+2025-09-13 14:06:21,914 - RXbot - INFO - 🤖 RXbot está online! Conectado como RXbot#1546
+2025-09-13 14:06:21,914 - RXbot - INFO - 📊 Conectado em 1 servidores
+2025-09-13 14:06:21,914 - RXbot - INFO - 👥 Servindo 57 usuários únicos
+2025-09-13 14:06:21,914 - RXbot - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-13 14:06:21,925 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:21,928 - RXbot - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-13 14:06:21,931 - RXbot - INFO - ⏭️ Backup desabilitado no Railway para economia de recursos
+2025-09-13 14:06:21,942 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:21,958 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:21,980 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:22,126 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 14:06:22] "GET /static/css/dashboard.css HTTP/1.1" 200 -
+2025-09-13 14:06:22,128 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 14:06:22] "GET /static/js/dashboard.js HTTP/1.1" 200 -
+2025-09-13 14:06:22,287 - RXbot - INFO - ✅ 100 slash commands sincronizados
+2025-09-13 14:06:22,288 - RXbot - INFO - 📋 Comandos slash disponíveis: ping, ajuda, jokenpo, dado, moeda, piada, copinha, saldo, daily, trabalhar...
+2025-09-13 14:06:22,288 - RXbot - INFO - 🚀 Total de comandos slash: 100
+2025-09-13 14:06:22,288 - RXbot - INFO -    /ping - Ver latência do bot
+2025-09-13 14:06:22,288 - RXbot - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-13 14:06:22,289 - RXbot - INFO -    /jokenpo - Jogar pedra, papel ou tesoura
+2025-09-13 14:06:22,289 - RXbot - INFO -    /dado - Rolar um dado
+2025-09-13 14:06:22,289 - RXbot - INFO -    /moeda - Cara ou coroa
+2025-09-13 14:06:22,289 - RXbot - INFO -    /piada - Contar uma piada
+2025-09-13 14:06:22,289 - RXbot - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-13 14:06:22,289 - RXbot - INFO -    /saldo - Ver saldo de moedas
+2025-09-13 14:06:22,289 - RXbot - INFO -    /daily - Recompensa diária
+2025-09-13 14:06:22,290 - RXbot - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-13 14:06:22,290 - RXbot - INFO -    /weekly - Recompensa semanal
+2025-09-13 14:06:22,290 - RXbot - INFO -    /monthly - Recompensa mensal
+2025-09-13 14:06:22,290 - RXbot - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-13 14:06:22,290 - RXbot - INFO -    /loja - Ver loja de itens
+2025-09-13 14:06:22,290 - RXbot - INFO -    /inventario - Ver inventário de itens
+2025-09-13 14:06:22,290 - RXbot - INFO -    ... e mais 85 comandos!
+2025-09-13 14:06:22,291 - RXbot - INFO - ✅ Status inicial configurado
+2025-09-13 14:06:22,392 - werkzeug - INFO - 127.0.0.1 - - [13/Sep/2025 14:06:22] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-09-13 14:06:28,164 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:28,177 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:28,191 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:28,205 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:51,854 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:51,863 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:51,872 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:06:51,939 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:23,411 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:23,422 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:23,433 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:23,490 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:25,874 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:25,885 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:25,895 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:25,923 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:32,659 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:32,669 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:32,678 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:32,697 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:56,077 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:56,096 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:56,111 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:07:56,163 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:19,004 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:19,015 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:19,026 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:19,040 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:21,946 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:21,963 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:24,749 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:24,767 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:24,783 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:24,804 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:29,008 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:29,025 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:29,052 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:29,113 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:31,100 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:31,111 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:31,121 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:31,150 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:38,366 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:38,382 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:38,398 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:38,418 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:49,497 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:49,510 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:49,524 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:49,552 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:56,188 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:56,198 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:56,209 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:08:56,224 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:09:01,464 - RXbot - ERROR - Erro ao criar copinha: 404 Not Found (error code: 10015): Unknown Webhook
+2025-09-13 14:09:27,290 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:09:27,301 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:09:27,311 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:09:27,382 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:09:29,471 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:09:29,480 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:09:29,492 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:09:29,508 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:09:55,565 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:09:55,582 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:09:55,605 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:09:55,658 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:10,448 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:10,460 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:10,472 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:10,491 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:21,940 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:21,950 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:26,962 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:26,983 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:26,997 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:27,054 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:27,375 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:27,391 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:27,422 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-13 14:10:27,449 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
