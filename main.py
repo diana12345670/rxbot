@@ -17,15 +17,19 @@ def get_safe_channel(channel_id):
         if isinstance(channel, (discord.ForumChannel, discord.CategoryChannel)):
             logger.warning(f"Canal {channel_id} não suporta envio direto de mensagens (ForumChannel/CategoryChannel)")
             return None
+        
+        # Canais privados (DM, GroupDM) são sempre válidos
+        if isinstance(channel, discord.abc.PrivateChannel):
+            return channel
             
-        # Verificar permissões para canais de servidor
-        if hasattr(channel, 'guild') and hasattr(channel, 'permissions_for') and channel.guild:
+        # Verificar permissões para canais de servidor (apenas se não for PrivateChannel)
+        if not isinstance(channel, discord.abc.PrivateChannel) and hasattr(channel, 'guild') and channel.guild and channel.guild.me:
             try:
-                if not channel.permissions_for(channel.guild.me).send_messages:
+                if hasattr(channel, 'permissions_for') and not channel.permissions_for(channel.guild.me).send_messages:
                     logger.warning(f"Bot não tem permissão para enviar mensagens no canal {channel_id}")
                     return None
-            except AttributeError:
-                # Canal sem permissões (ex: PrivateChannel)
+            except (AttributeError, TypeError):
+                # Canal sem permissões disponíveis ou guild.me None
                 pass
             
         return channel
@@ -34,6 +38,7 @@ def get_safe_channel(channel_id):
         return None
 import discord
 from discord.ext import commands, tasks
+from discord import app_commands
 # Removido import desnecessário - usando commands.* diretamente
 import asyncio
 import json
@@ -112,7 +117,7 @@ except ImportError:
     gzip = None
 
 # Função helper para envio seguro de mensagens Discord
-async def safe_send_response(interaction: discord.Interaction, embed=None, content=None, ephemeral=False):
+async def safe_send_response(interaction: discord.Interaction, embed=None, content=None, ephemeral=False, view=None):
     """Envia resposta de forma segura, verificando se já foi respondida"""
     try:
         # Verificar se a interação ainda é válida
@@ -135,31 +140,35 @@ async def safe_send_response(interaction: discord.Interaction, embed=None, conte
         
         if not interaction.response.is_done():
             # Se ainda não respondeu, usa response.send_message
-            return await interaction.response.send_message(embed=embed, content=content, ephemeral=ephemeral)
+            return await interaction.response.send_message(embed=embed, content=content, ephemeral=ephemeral, view=view)
         else:
             # Se já respondeu, usa followup.send
-            return await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral)
+            return await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral, view=view)
             
     except discord.errors.InteractionResponded:
         # Interação já foi respondida, tentar followup
         try:
-            return await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral)
+            return await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral, view=view)
         except Exception as followup_error:
             logger.info(f"Followup falhou, tentando canal direto: {followup_error}")
             if hasattr(interaction, 'channel') and interaction.channel:
-                try:
-                    return await interaction.channel.send(embed=embed, content=content)
-                except Exception as channel_error:
-                    logger.error(f"Erro ao enviar no canal: {channel_error}")
+                # Verificar se o canal suporta envio de mensagens
+                if hasattr(interaction.channel, 'send') and not isinstance(interaction.channel, (discord.ForumChannel, discord.CategoryChannel)):
+                    try:
+                        return await interaction.channel.send(embed=embed, content=content, view=view)
+                    except Exception as channel_error:
+                        logger.error(f"Erro ao enviar no canal: {channel_error}")
             return None
             
     except (discord.errors.NotFound, discord.errors.HTTPException):
         # Se a interação expirou ou token inválido, tenta enviar no canal como último recurso
         if hasattr(interaction, 'channel') and interaction.channel:
-            try:
-                return await interaction.channel.send(embed=embed, content=content)
-            except Exception as channel_error:
-                logger.info(f"Canal direto falhou: {channel_error}")
+            # Verificar se o canal suporta envio de mensagens
+            if hasattr(interaction.channel, 'send') and not isinstance(interaction.channel, (discord.ForumChannel, discord.CategoryChannel)):
+                try:
+                    return await interaction.channel.send(embed=embed, content=content, view=view)
+                except Exception as channel_error:
+                    logger.info(f"Canal direto falhou: {channel_error}")
         return None
         
     except Exception as e:
@@ -167,7 +176,9 @@ async def safe_send_response(interaction: discord.Interaction, embed=None, conte
         # Última tentativa: enviar erro simples no canal
         try:
             if hasattr(interaction, 'channel') and interaction.channel:
-                await interaction.channel.send("❌ Erro interno do bot. Tente novamente.")
+                # Verificar se o canal suporta envio de mensagens
+                if hasattr(interaction.channel, 'send') and not isinstance(interaction.channel, (discord.ForumChannel, discord.CategoryChannel)):
+                    await interaction.channel.send("❌ Erro interno do bot. Tente novamente.")
         except:
             pass
         return None
@@ -282,6 +293,10 @@ def make_http_request(url, method='GET', **kwargs):
 import threading
 db_lock = threading.RLock()  # Usar RLock para permitir múltiplas aquisições pela mesma thread
 
+# Track database connection state to avoid spam logging
+_db_connection_logged = False
+_db_connection_error_state = False
+
 # Detectar se está no Railway ou ambiente de produção
 def is_production():
     """Detectar se está rodando em produção (Railway)"""
@@ -289,6 +304,8 @@ def is_production():
 
 def get_db_connection():
     """Get PostgreSQL database connection with schema normalization"""
+    global _db_connection_logged, _db_connection_error_state
+    
     database_url = os.getenv('DATABASE_URL')
     if not database_url:
         raise Exception("DATABASE_URL não encontrada. PostgreSQL é obrigatório.")
@@ -301,17 +318,27 @@ def get_db_connection():
         cursor = conn.cursor()
         cursor.execute("SET search_path TO public;")
         
-        # Log diagnostic information (mask credentials)
-        cursor.execute("SELECT current_database(), current_user, current_setting('search_path');")
-        db_name, db_user, search_path = cursor.fetchone()
+        # Log diagnostic information (mask credentials) - only log once or after error recovery
         
-        # Mask user details for security
-        masked_user = db_user[:3] + "***" if len(db_user) > 3 else "***"
-        logger.info(f"🔗 DB Connected: {db_name} | User: {masked_user} | Schema: {search_path}")
+        if not _db_connection_logged or _db_connection_error_state:
+            cursor.execute("SELECT current_database(), current_user, current_setting('search_path');")
+            db_name, db_user, search_path = cursor.fetchone()
+            
+            # Mask user details for security
+            masked_user = db_user[:3] + "***" if len(db_user) > 3 else "***"
+            
+            if _db_connection_error_state:
+                logger.info(f"🔄 DB Reconnected: {db_name} | User: {masked_user} | Schema: {search_path}")
+            else:
+                logger.info(f"🔗 DB Connected: {db_name} | User: {masked_user} | Schema: {search_path}")
+            
+            _db_connection_logged = True
+            _db_connection_error_state = False
         
         conn.commit()
         return conn
     except Exception as e:
+        _db_connection_error_state = True
         logger.error(f"Erro ao conectar PostgreSQL: {e}")
         raise e
 
@@ -757,6 +784,106 @@ def get_user_rank(xp):
         else:
             break
     return current_rank, RANK_SYSTEM[current_rank]
+
+# Sistema de cargos Discord baseado em ranks
+async def ensure_rank_roles(guild):
+    """Cria cargos Discord para cada rank se não existirem"""
+    try:
+        for rank_id, rank_data in RANK_SYSTEM.items():
+            role_name = f"🎖️ {rank_data['name']}"
+            
+            # Verificar se o cargo já existe
+            existing_role = discord.utils.get(guild.roles, name=role_name)
+            
+            if not existing_role:
+                # Criar cargo com a cor do rank
+                permissions = discord.Permissions(send_messages=True, read_messages=True, connect=True, speak=True)
+                await guild.create_role(
+                    name=role_name,
+                    color=discord.Color(rank_data['color']),
+                    permissions=permissions,
+                    mentionable=False,
+                    hoist=True,  # Separar na lista de membros
+                    reason=f"Auto-criação de cargo para rank {rank_data['name']}"
+                )
+                logger.info(f"✅ Cargo criado: {role_name}")
+    
+    except Exception as e:
+        logger.error(f"Erro ao criar cargos de rank: {e}")
+
+async def update_user_rank_role(member, new_rank_id):
+    """Atualiza o cargo Discord do usuário baseado no novo rank"""
+    try:
+        if not member or not member.guild:
+            return
+            
+        guild = member.guild
+        new_rank_data = RANK_SYSTEM[new_rank_id]
+        new_role_name = f"🎖️ {new_rank_data['name']}"
+        
+        # Buscar o cargo do novo rank
+        new_role = discord.utils.get(guild.roles, name=new_role_name)
+        if not new_role:
+            # Se não existe, criar todos os cargos
+            await ensure_rank_roles(guild)
+            new_role = discord.utils.get(guild.roles, name=new_role_name)
+        
+        if not new_role:
+            logger.error(f"Não foi possível encontrar/criar cargo para rank {new_rank_data['name']}")
+            return
+        
+        # Remover cargos de ranks anteriores
+        rank_roles_to_remove = []
+        for rank_id, rank_data in RANK_SYSTEM.items():
+            if rank_id != new_rank_id:
+                old_role_name = f"🎖️ {rank_data['name']}"
+                old_role = discord.utils.get(guild.roles, name=old_role_name)
+                if old_role and old_role in member.roles:
+                    rank_roles_to_remove.append(old_role)
+        
+        # Remover cargos antigos
+        if rank_roles_to_remove:
+            await member.remove_roles(*rank_roles_to_remove, reason="Atualização de rank")
+        
+        # Adicionar novo cargo se não tiver
+        if new_role not in member.roles:
+            await member.add_roles(new_role, reason=f"Rank up para {new_rank_data['name']}")
+            logger.info(f"✅ Cargo atualizado: {member.name} -> {new_role_name}")
+    
+    except Exception as e:
+        logger.error(f"Erro ao atualizar cargo de rank para {member.name}: {e}")
+
+async def organize_rank_roles(guild):
+    """Organiza os cargos de rank na hierarquia correta"""
+    try:
+        # Buscar cargo "membro" ou similar para posicionar acima dele
+        member_role = None
+        for role in guild.roles:
+            if role.name.lower() in ['membro', 'member', '@everyone']:
+                if role.name != '@everyone':  # Não usar @everyone como referência
+                    member_role = role
+                    break
+        
+        # Organizar cargos de rank em ordem decrescente (maior rank = posição mais alta)
+        for rank_id in reversed(range(1, 13)):  # 12 ranks, do maior para o menor
+            if rank_id in RANK_SYSTEM:
+                rank_data = RANK_SYSTEM[rank_id]
+                role_name = f"🎖️ {rank_data['name']}"
+                role = discord.utils.get(guild.roles, name=role_name)
+                
+                if role:
+                    # Posicionar acima do cargo de membro (se existir)
+                    if member_role:
+                        position = member_role.position + rank_id
+                    else:
+                        position = rank_id
+                    
+                    await role.edit(position=position)
+        
+        logger.info("✅ Cargos de rank organizados na hierarquia")
+    
+    except Exception as e:
+        logger.error(f"Erro ao organizar cargos de rank: {e}")
 
 # Palavras que geram warn automático
 AUTO_WARN_WORDS = [
@@ -1577,7 +1704,7 @@ def add_xp(user_id, amount):
         rank_up = new_rank_id > old_rank_id
 
         update_user_data(user_id, xp=new_xp, level=new_level)
-        return leveled_up, new_level, rank_up, new_rank_id
+        return leveled_up, new_level, rank_up, new_rank_id, old_rank_id
     except Exception as e:
         logger.error(f"Error adding XP: {e}")
         return False, 1, False, 1
@@ -1855,23 +1982,102 @@ async def slash_piada(interaction: discord.Interaction):
         await safe_interaction_response(interaction, error_embed, ephemeral=True)
 
 @bot.tree.command(name="copinha", description="Criar uma copinha/torneio de Stumble Guys")
-async def slash_copinha(interaction: discord.Interaction):
+@app_commands.describe(
+    nome="Nome da copinha (ex: Copa RX de Stumble Guys)",
+    mapa="Mapa do jogo (ex: Hex-A-Gone, Fall Mountain, Door Dash)",
+    formato="Formato do torneio (1v1, 2v2, 3v3, 4v4)",
+    max_jogadores="Número máximo de participantes (4, 8, 16, 32, 64)"
+)
+@app_commands.choices(mapa=[
+    app_commands.Choice(name="🧱 Block Dash", value="Block Dash"),
+    app_commands.Choice(name="🏃 Rush Hour", value="Rush Hour"),
+    app_commands.Choice(name="🌋 Lava Land", value="Lava Land"),
+    app_commands.Choice(name="💣 Bombardment", value="Bombardment"),
+    app_commands.Choice(name="🍯 Honey Drop", value="Honey Drop"),
+    app_commands.Choice(name="⚡ Laser Tracer", value="Laser Tracer")
+])
+@app_commands.choices(formato=[
+    app_commands.Choice(name="⚔️ 1v1 (Individual)", value="1v1"),
+    app_commands.Choice(name="👥 2v2 (Duplas)", value="2v2"),
+    app_commands.Choice(name="🏅 3v3 (Trios)", value="3v3"),
+    app_commands.Choice(name="🏆 4v4 (Squads)", value="4v4")
+])
+@app_commands.choices(max_jogadores=[
+    app_commands.Choice(name="4 participantes", value=4),
+    app_commands.Choice(name="8 participantes", value=8),
+    app_commands.Choice(name="16 participantes", value=16),
+    app_commands.Choice(name="32 participantes", value=32),
+    app_commands.Choice(name="64 participantes", value=64)
+])
+async def slash_copinha(interaction: discord.Interaction, 
+                       nome: str, 
+                       mapa: str, 
+                       formato: str, 
+                       max_jogadores: int):
     """Slash command para criar copinha de Stumble Guys"""
     try:
-        # Verificar se é moderador ou administrador
-        if not any(role.permissions.manage_messages for role in interaction.user.roles):
-            embed = create_embed("❌ Permissão negada", "Apenas moderadores podem criar copinhas!", color=0xff0000)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+        # Verificar permissões
+        if not interaction.user.guild_permissions.manage_messages:
+            embed = create_embed(
+                "❌ Permissão negada", 
+                "Você precisa da permissão 'Gerenciar Mensagens' para criar copinhas!", 
+                color=0xff0000
+            )
+            await safe_interaction_response(interaction, embed, ephemeral=True)
             return
 
-        # Abrir modal de configuração
-        modal = CopinhaConfigModal()
-        await interaction.response.send_modal(modal)
+        # Validar parâmetros
+        valid_formats = ['1v1', '2v2', '3v3', '4v4']
+        valid_players = [4, 8, 16, 32, 64]
+        
+        if formato not in valid_formats:
+            embed = create_embed("❌ Formato inválido", f"Use: {', '.join(valid_formats)}", color=0xff0000)
+            await safe_interaction_response(interaction, embed, ephemeral=True)
+            return
+            
+        if max_jogadores not in valid_players:
+            embed = create_embed("❌ Número inválido", f"Use: {', '.join(map(str, valid_players))} participantes", color=0xff0000)
+            await safe_interaction_response(interaction, embed, ephemeral=True)
+            return
+
+        # Criar embed da copinha
+        embed = create_embed(
+            f"🏆 {nome}",
+            f"**🗺️ Mapa:** {mapa}\n"
+            f"**👥 Formato:** {formato}\n"
+            f"**📊 Participantes:** 0/{max_jogadores}\n"
+            f"**📋 Status:** Inscrições abertas\n"
+            f"**👑 Organizador:** {interaction.user.mention}\n\n"
+            f"**🎮 Clique no botão abaixo para se inscrever!**",
+            color=0xffd700
+        )
+
+        # Criar view com botão de participar
+        view = CopinhaJoinView(nome, mapa, formato, max_jogadores, interaction.user.id)
+
+        # Enviar mensagem
+        await interaction.response.send_message(embed=embed, view=view)
+        
+        # Buscar a mensagem criada para salvar no banco
+        try:
+            message = await interaction.original_response()
+            
+            # Salvar no banco
+            execute_query(
+                '''INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players, status)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+                (interaction.guild.id, interaction.user.id, interaction.channel.id, 
+                 message.id, nome, mapa, formato, max_jogadores, 'active')
+            )
+            logger.info(f"Copinha criada: {nome} por {interaction.user}")
+            
+        except Exception as db_error:
+            logger.error(f"Erro ao salvar copinha no banco: {db_error}")
 
     except Exception as e:
-        logger.error(f"Erro no comando copinha: {e}")
-        error_embed = create_embed("❌ Erro", "Erro ao criar copinha!", color=0xff0000)
-        await safe_send_response(interaction, embed=error_embed, ephemeral=True)
+        logger.error(f"Erro ao criar copinha: {e}")
+        embed = create_embed("❌ Erro", "Erro ao criar copinha! Tente novamente.", color=0xff0000)
+        await safe_interaction_response(interaction, embed, ephemeral=True)
 
 # 3. COMANDOS DE ECONOMIA (50 comandos)
 @bot.tree.command(name="saldo", description="Ver saldo de moedas")
@@ -2471,7 +2677,16 @@ async def on_message(message):
 
     # Sistema de XP
     try:
-        leveled_up, new_level, rank_up, new_rank_id = add_xp(message.author.id, XP_PER_MESSAGE)
+        leveled_up, new_level, rank_up, new_rank_id, old_rank_id = add_xp(message.author.id, XP_PER_MESSAGE)
+        
+        # Atualizar cargo Discord se houve rank up
+        if rank_up and message.guild:
+            try:
+                member = message.guild.get_member(message.author.id)
+                if member:
+                    await update_user_rank_role(member, new_rank_id)
+            except Exception as e:
+                logger.error(f"Erro ao atualizar cargo de rank: {e}")
 
         if leveled_up:
             embed = create_embed(
@@ -2527,6 +2742,7 @@ async def on_ready():
     # Inicializar database imediatamente quando bot estiver pronto
     try:
         init_database()
+        init_copinha_scoreboard_table()  # Inicializar tabelas do scoreboard
         logger.info("✅ Database inicializado")
     except Exception as db_error:
         logger.error(f"❌ Erro ao inicializar database: {db_error}")
@@ -2582,6 +2798,15 @@ async def on_ready():
         except Exception as e:
             logger.error(f"Erro ao iniciar background tasks: {e}")
 
+        # Inicializar cargos de rank em todos os servidores
+        try:
+            for guild in bot.guilds:
+                await ensure_rank_roles(guild)
+                await organize_rank_roles(guild)
+            logger.info("✅ Cargos de rank inicializados em todos os servidores")
+        except Exception as e:
+            logger.error(f"Erro ao inicializar cargos de rank: {e}")
+
     # Restaurar mensagens interativas após reinício
     await restore_interactive_messages()
 
@@ -2633,7 +2858,721 @@ async def on_ready():
     print("📋 Use / no Discord para ver TODOS os comandos disponíveis!")
     print("🎯 Sistema dual: Use / ou RX - Ambos funcionam!")
 
-    # ============ COMANDO ESPECIAL PARA TICKETS PERSISTENTE ============
+    # ============ SISTEMA DE SCOREBOARD DA COPINHA ============
+
+# Tabela para scoreboard da copinha
+def init_copinha_scoreboard_table():
+    """Inicializar tabela do scoreboard da copinha"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Tabela de scoreboard da copinha
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS copinha_scoreboard (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT,
+                user_id BIGINT,
+                username TEXT,
+                points BIGINT DEFAULT 0,
+                wins BIGINT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+            
+            # Tabela para configuração de canais do servidor
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS guild_channels (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT,
+                channel_type TEXT,
+                channel_id BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+            
+            conn.commit()
+            conn.close()
+            logger.info("✅ Tabelas do scoreboard da copinha criadas")
+    except Exception as e:
+        logger.error(f"Erro ao criar tabelas do scoreboard: {e}")
+
+class CopinhaScoreboardView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=300)
+
+    @discord.ui.button(label="🏆 Top 10", style=discord.ButtonStyle.primary, emoji="🏆")
+    async def show_top10(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT user_id, username, points, wins 
+                    FROM copinha_scoreboard 
+                    WHERE guild_id = %s 
+                    ORDER BY points DESC 
+                    LIMIT 10
+                ''', (interaction.guild.id,))
+                results = cursor.fetchall()
+                conn.close()
+
+            if not results:
+                embed = create_embed("🏆 Scoreboard Vazio", "Nenhum vencedor registrado ainda!", color=0xffaa00)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+
+            scoreboard_text = ""
+            medals = ["🥇", "🥈", "🥉"]
+            
+            for i, (user_id, username, points, wins) in enumerate(results):
+                medal = medals[i] if i < 3 else f"{i+1}º"
+                user = interaction.guild.get_member(user_id)
+                display_name = user.display_name if user else username
+                scoreboard_text += f"{medal} **{display_name}** - {points:,} pontos ({wins} vitórias)\n"
+
+            embed = create_embed(
+                "🏆 Top 10 - Scoreboard da Copinha",
+                scoreboard_text,
+                color=0xffd700
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            logger.error(f"Erro no top 10: {e}")
+            await interaction.response.send_message("❌ Erro ao carregar ranking!", ephemeral=True)
+
+    @discord.ui.button(label="➕ Adicionar Troféus", style=discord.ButtonStyle.success, emoji="➕")
+    async def add_points(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_messages:
+            await interaction.response.send_message("❌ Apenas staff pode usar este botão!", ephemeral=True)
+            return
+        
+        view = PlayerSelectView(action='add', guild=interaction.guild)
+        embed = create_embed(
+            "➕ Adicionar Troféus",
+            "Selecione um player para adicionar troféus:\n\n"
+            "🔍 **Dica:** Use a busca abaixo para encontrar rapidamente entre os 300+ membros!",
+            color=0x00ff00
+        )
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    @discord.ui.button(label="➖ Remover Troféus", style=discord.ButtonStyle.danger, emoji="➖")
+    async def remove_points(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_messages:
+            await interaction.response.send_message("❌ Apenas staff pode usar este botão!", ephemeral=True)
+            return
+        
+        view = PlayerSelectView(action='remove', guild=interaction.guild)
+        embed = create_embed(
+            "➖ Remover Troféus",
+            "Selecione um player para remover troféus:\n\n"
+            "🔍 **Dica:** Use a busca abaixo para encontrar rapidamente entre os 300+ membros!",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    @discord.ui.button(label="🔄 Atualizar", style=discord.ButtonStyle.secondary, emoji="🔄")
+    async def refresh_scoreboard(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            embed = create_embed(
+                "🏆 Scoreboard da Copinha",
+                "Sistema de pontuação dos vencedores das copinhas!\n\n"
+                "**🎯 Como funciona:**\n"
+                "• Vencedores ganham pontos automaticamente\n"
+                "• Staff pode adicionar/remover pontos manualmente\n"
+                "• Ranking atualizado em tempo real\n\n"
+                "**🏆 Sistema de pontuação:**\n"
+                "• O vencedor da copinha ganha 1 troféu\n"
+                "• Sistema simples e justo para todos\n\n"
+                "**💡 Use os botões abaixo para interagir:**",
+                color=0x7289da
+            )
+            
+            view = CopinhaScoreboardView()
+            await interaction.response.edit_message(embed=embed, view=view)
+        except Exception as e:
+            logger.error(f"Erro ao atualizar: {e}")
+            await interaction.response.send_message("❌ Erro ao atualizar!", ephemeral=True)
+
+class PlayerSelectView(discord.ui.View):
+    def __init__(self, action, guild):
+        super().__init__(timeout=300)
+        self.action = action  # 'add' ou 'remove'
+        self.guild = guild
+        self.selected_user = None
+        self.search_term = ""
+        self.update_player_select()
+
+    def update_player_select(self):
+        # Limpar componentes existentes
+        self.clear_items()
+        
+        # Filtrar membros baseado no termo de busca
+        members = []
+        for member in self.guild.members:
+            if not member.bot:  # Excluir bots
+                if not self.search_term or self.search_term.lower() in member.display_name.lower():
+                    members.append(member)
+        
+        # Limitar a 25 membros (limite do Discord)
+        members = sorted(members, key=lambda m: m.display_name.lower())[:25]
+        
+        if members:
+            # Select menu para escolher player
+            select_options = []
+            for member in members:
+                # Verificar pontos atuais no scoreboard
+                with db_lock:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        SELECT points, wins FROM copinha_scoreboard 
+                        WHERE guild_id = %s AND user_id = %s
+                    ''', (self.guild.id, member.id))
+                    result = cursor.fetchone()
+                    conn.close()
+                
+                current_points = result[0] if result else 0
+                current_wins = result[1] if result else 0
+                
+                description = f"🏆 {current_points} troféus • {current_wins} vitórias"
+                select_options.append(
+                    discord.SelectOption(
+                        label=member.display_name[:100],
+                        value=str(member.id),
+                        description=description[:100],
+                        emoji="👤"
+                    )
+                )
+            
+            player_select = PlayerSelect(select_options, self.action)
+            self.add_item(player_select)
+        
+        # Campo de busca
+        search_button = discord.ui.Button(
+            label=f"🔍 Buscar: '{self.search_term}'" if self.search_term else "🔍 Buscar Player",
+            style=discord.ButtonStyle.secondary,
+            custom_id="search_player"
+        )
+        search_button.callback = self.search_callback
+        self.add_item(search_button)
+        
+        # Botão para limpar busca
+        if self.search_term:
+            clear_button = discord.ui.Button(
+                label="🗑️ Limpar Busca",
+                style=discord.ButtonStyle.secondary,
+                custom_id="clear_search"
+            )
+            clear_button.callback = self.clear_search_callback
+            self.add_item(clear_button)
+        
+        if not members:
+            no_results_button = discord.ui.Button(
+                label="❌ Nenhum resultado encontrado",
+                style=discord.ButtonStyle.secondary,
+                disabled=True
+            )
+            self.add_item(no_results_button)
+
+    async def search_callback(self, interaction: discord.Interaction):
+        modal = SearchModal(self)
+        await interaction.response.send_modal(modal)
+
+    async def clear_search_callback(self, interaction: discord.Interaction):
+        self.search_term = ""
+        self.update_player_select()
+        
+        embed = create_embed(
+            f"{'➕ Adicionar Troféus' if self.action == 'add' else '➖ Remover Troféus'}",
+            "Busca limpa! Selecione um player da lista:\n\n"
+            f"🔍 **Mostrando:** Primeiros 25 membros em ordem alfabética",
+            color=0x00ff00 if self.action == 'add' else 0xff0000
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+class SearchModal(discord.ui.Modal):
+    def __init__(self, parent_view):
+        super().__init__(title="🔍 Buscar Player")
+        self.parent_view = parent_view
+        
+        self.search_input = discord.ui.TextInput(
+            label="Nome do Player",
+            placeholder="Digite parte do nome do player...",
+            required=True,
+            max_length=50
+        )
+        self.add_item(self.search_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.parent_view.search_term = self.search_input.value.strip()
+        self.parent_view.update_player_select()
+        
+        embed = create_embed(
+            f"{'➕ Adicionar Troféus' if self.parent_view.action == 'add' else '➖ Remover Troféus'}",
+            f"**🔍 Busca:** '{self.parent_view.search_term}'\n\n"
+            "Selecione um player da lista filtrada:",
+            color=0x00ff00 if self.parent_view.action == 'add' else 0xff0000
+        )
+        await interaction.response.edit_message(embed=embed, view=self.parent_view)
+
+class PlayerSelect(discord.ui.Select):
+    def __init__(self, options, action):
+        super().__init__(
+            placeholder=f"Escolha um player para {'adicionar' if action == 'add' else 'remover'} troféus...",
+            options=options,
+            custom_id="player_select"
+        )
+        self.action = action
+
+    async def callback(self, interaction: discord.Interaction):
+        user_id = int(self.values[0])
+        member = interaction.guild.get_member(user_id)
+        
+        if not member:
+            await interaction.response.send_message("❌ Player não encontrado!", ephemeral=True)
+            return
+        
+        # Buscar dados atuais
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT points, wins FROM copinha_scoreboard 
+                WHERE guild_id = %s AND user_id = %s
+            ''', (interaction.guild.id, user_id))
+            result = cursor.fetchone()
+            conn.close()
+        
+        current_points = result[0] if result else 0
+        current_wins = result[1] if result else 0
+        
+        # Criar view de confirmação
+        view = PointsConfirmView(member, self.action, current_points, current_wins)
+        
+        emoji = "➕" if self.action == 'add' else "➖"
+        action_text = "adicionar" if self.action == 'add' else "remover"
+        
+        embed = create_embed(
+            f"{emoji} {action_text.title()} Troféus - {member.display_name}",
+            f"**👤 Player:** {member.mention}\n"
+            f"**🏆 Troféus atuais:** {current_points}\n"
+            f"**🎯 Vitórias:** {current_wins}\n\n"
+            f"**Quantos troféus deseja {action_text}?**",
+            color=0x00ff00 if self.action == 'add' else 0xff0000
+        )
+        embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+        
+        await interaction.response.edit_message(embed=embed, view=view)
+
+class PointsConfirmView(discord.ui.View):
+    def __init__(self, member, action, current_points, current_wins):
+        super().__init__(timeout=300)
+        self.member = member
+        self.action = action
+        self.current_points = current_points
+        self.current_wins = current_wins
+
+    @discord.ui.button(label="1 🏆", style=discord.ButtonStyle.primary)
+    async def one_point(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_points_change(interaction, 1)
+
+    @discord.ui.button(label="2 🏆", style=discord.ButtonStyle.primary)
+    async def two_points(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_points_change(interaction, 2)
+
+    @discord.ui.button(label="5 🏆", style=discord.ButtonStyle.primary)
+    async def five_points(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_points_change(interaction, 5)
+
+    @discord.ui.button(label="10 🏆", style=discord.ButtonStyle.primary)
+    async def ten_points(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_points_change(interaction, 10)
+
+    @discord.ui.button(label="❌ Cancelar", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = create_embed(
+            "❌ Operação Cancelada",
+            "Nenhuma alteração foi feita no scoreboard.",
+            color=0x808080
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+
+    async def handle_points_change(self, interaction: discord.Interaction, points):
+        try:
+            if self.action == 'add':
+                # Adicionar pontos
+                new_total = add_copinha_points(
+                    interaction.guild.id, 
+                    self.member.id, 
+                    self.member.display_name, 
+                    points, 
+                    "adição manual por staff"
+                )
+                
+                embed = create_embed(
+                    "✅ Troféus Adicionados!",
+                    f"**👤 Player:** {self.member.mention}\n"
+                    f"**➕ Adicionado:** {points} 🏆\n"
+                    f"**📊 Total atual:** {new_total} troféus\n"
+                    f"**👑 Por:** {interaction.user.mention}",
+                    color=0x00ff00
+                )
+            else:
+                # Remover pontos
+                if self.current_points < points:
+                    embed = create_embed(
+                        "❌ Erro!",
+                        f"**{self.member.display_name}** tem apenas **{self.current_points}** troféus!\n"
+                        f"Não é possível remover **{points}** troféus.",
+                        color=0xff0000
+                    )
+                    await interaction.response.edit_message(embed=embed, view=None)
+                    return
+                
+                new_points = max(0, self.current_points - points)
+                
+                with db_lock:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        UPDATE copinha_scoreboard 
+                        SET points = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE guild_id = %s AND user_id = %s
+                    ''', (new_points, interaction.guild.id, self.member.id))
+                    conn.commit()
+                    conn.close()
+                
+                embed = create_embed(
+                    "✅ Troféus Removidos!",
+                    f"**👤 Player:** {self.member.mention}\n"
+                    f"**➖ Removido:** {points} 🏆\n"
+                    f"**📊 Total atual:** {new_points} troféus\n"
+                    f"**👑 Por:** {interaction.user.mention}",
+                    color=0xff6600
+                )
+            
+            await interaction.response.edit_message(embed=embed, view=None)
+            
+        except Exception as e:
+            logger.error(f"Erro ao modificar pontos: {e}")
+            embed = create_embed(
+                "❌ Erro!",
+                "Ocorreu um erro ao modificar os troféus. Tente novamente.",
+                color=0xff0000
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+
+class AddPointsModal(discord.ui.Modal):
+    def __init__(self):
+        super().__init__(title="➕ Adicionar Pontos")
+        
+        self.user_input = discord.ui.TextInput(
+            label="Usuário",
+            placeholder="@usuário ou ID do usuário",
+            required=True
+        )
+        
+        self.points_input = discord.ui.TextInput(
+            label="Pontos",
+            placeholder="Quantidade de pontos para adicionar",
+            required=True
+        )
+        
+        self.reason_input = discord.ui.TextInput(
+            label="Motivo",
+            placeholder="Motivo da adição de pontos",
+            required=False,
+            default="Adição manual por staff"
+        )
+        
+        self.add_item(self.user_input)
+        self.add_item(self.points_input)
+        self.add_item(self.reason_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # Parsear usuário
+            user_input = self.user_input.value.strip()
+            user = None
+            
+            if user_input.startswith('<@') and user_input.endswith('>'):
+                user_id = int(user_input[2:-1].replace('!', ''))
+                user = interaction.guild.get_member(user_id)
+            elif user_input.isdigit():
+                user = interaction.guild.get_member(int(user_input))
+            else:
+                # Buscar por nome
+                user = discord.utils.find(lambda m: m.display_name.lower() == user_input.lower(), interaction.guild.members)
+            
+            if not user:
+                await interaction.response.send_message("❌ Usuário não encontrado!", ephemeral=True)
+                return
+            
+            points = int(self.points_input.value)
+            if points <= 0:
+                await interaction.response.send_message("❌ Pontos devem ser positivos!", ephemeral=True)
+                return
+            
+            reason = self.reason_input.value or "Adição manual por staff"
+            
+            # Adicionar pontos
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                # Verificar se usuário já existe
+                cursor.execute('''
+                    SELECT points, wins FROM copinha_scoreboard 
+                    WHERE guild_id = %s AND user_id = %s
+                ''', (interaction.guild.id, user.id))
+                result = cursor.fetchone()
+                
+                if result:
+                    new_points = result[0] + points
+                    cursor.execute('''
+                        UPDATE copinha_scoreboard 
+                        SET points = %s, username = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE guild_id = %s AND user_id = %s
+                    ''', (new_points, user.display_name, interaction.guild.id, user.id))
+                else:
+                    cursor.execute('''
+                        INSERT INTO copinha_scoreboard (guild_id, user_id, username, points, wins)
+                        VALUES (%s, %s, %s, %s, %s)
+                    ''', (interaction.guild.id, user.id, user.display_name, points, 0))
+                    new_points = points
+                
+                conn.commit()
+                conn.close()
+            
+            embed = create_embed(
+                "✅ Pontos Adicionados!",
+                f"**Usuário:** {user.mention}\n"
+                f"**Pontos adicionados:** +{points:,}\n"
+                f"**Novo total:** {new_points:,} pontos\n"
+                f"**Motivo:** {reason}\n"
+                f"**Staff:** {interaction.user.mention}",
+                color=0x00ff00
+            )
+            await interaction.response.send_message(embed=embed)
+            
+            # Notificar canal da copinha se configurado
+            await notify_copinha_channel(interaction.guild, f"➕ {user.display_name} ganhou {points} pontos! (Total: {new_points})")
+            
+        except ValueError:
+            await interaction.response.send_message("❌ Número de pontos inválido!", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Erro ao adicionar pontos: {e}")
+            await interaction.response.send_message("❌ Erro ao adicionar pontos!", ephemeral=True)
+
+class RemovePointsModal(discord.ui.Modal):
+    def __init__(self):
+        super().__init__(title="➖ Remover Pontos")
+        
+        self.user_input = discord.ui.TextInput(
+            label="Usuário",
+            placeholder="@usuário ou ID do usuário",
+            required=True
+        )
+        
+        self.points_input = discord.ui.TextInput(
+            label="Pontos",
+            placeholder="Quantidade de pontos para remover",
+            required=True
+        )
+        
+        self.reason_input = discord.ui.TextInput(
+            label="Motivo",
+            placeholder="Motivo da remoção de pontos",
+            required=False,
+            default="Remoção manual por staff"
+        )
+        
+        self.add_item(self.user_input)
+        self.add_item(self.points_input)
+        self.add_item(self.reason_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # Parsear usuário (mesmo código do AddPointsModal)
+            user_input = self.user_input.value.strip()
+            user = None
+            
+            if user_input.startswith('<@') and user_input.endswith('>'):
+                user_id = int(user_input[2:-1].replace('!', ''))
+                user = interaction.guild.get_member(user_id)
+            elif user_input.isdigit():
+                user = interaction.guild.get_member(int(user_input))
+            else:
+                user = discord.utils.find(lambda m: m.display_name.lower() == user_input.lower(), interaction.guild.members)
+            
+            if not user:
+                await interaction.response.send_message("❌ Usuário não encontrado!", ephemeral=True)
+                return
+            
+            points = int(self.points_input.value)
+            if points <= 0:
+                await interaction.response.send_message("❌ Pontos devem ser positivos!", ephemeral=True)
+                return
+            
+            reason = self.reason_input.value or "Remoção manual por staff"
+            
+            # Remover pontos
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    SELECT points FROM copinha_scoreboard 
+                    WHERE guild_id = %s AND user_id = %s
+                ''', (interaction.guild.id, user.id))
+                result = cursor.fetchone()
+                
+                if not result:
+                    await interaction.response.send_message("❌ Usuário não está no scoreboard!", ephemeral=True)
+                    return
+                
+                current_points = result[0]
+                new_points = max(0, current_points - points)
+                
+                cursor.execute('''
+                    UPDATE copinha_scoreboard 
+                    SET points = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE guild_id = %s AND user_id = %s
+                ''', (new_points, interaction.guild.id, user.id))
+                
+                conn.commit()
+                conn.close()
+            
+            embed = create_embed(
+                "✅ Pontos Removidos!",
+                f"**Usuário:** {user.mention}\n"
+                f"**Pontos removidos:** -{points:,}\n"
+                f"**Novo total:** {new_points:,} pontos\n"
+                f"**Motivo:** {reason}\n"
+                f"**Staff:** {interaction.user.mention}",
+                color=0xff6b6b
+            )
+            await interaction.response.send_message(embed=embed)
+            
+        except ValueError:
+            await interaction.response.send_message("❌ Número de pontos inválido!", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Erro ao remover pontos: {e}")
+            await interaction.response.send_message("❌ Erro ao remover pontos!", ephemeral=True)
+
+class ChannelSelectView(discord.ui.View):
+    def __init__(self, channel_type, channel_name):
+        super().__init__(timeout=60)
+        self.channel_type = channel_type
+        self.channel_name = channel_name
+
+    @discord.ui.select(
+        cls=discord.ui.ChannelSelect,
+        placeholder="Escolha um canal...",
+        channel_types=[discord.ChannelType.text, discord.ChannelType.news]
+    )
+    async def select_channel(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        try:
+            channel = select.values[0]
+            
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                # Verificar se já existe configuração para este tipo
+                cursor.execute('''
+                    SELECT id FROM guild_channels 
+                    WHERE guild_id = %s AND channel_type = %s
+                ''', (interaction.guild.id, self.channel_type))
+                existing = cursor.fetchone()
+                
+                if existing:
+                    # Atualizar
+                    cursor.execute('''
+                        UPDATE guild_channels 
+                        SET channel_id = %s 
+                        WHERE guild_id = %s AND channel_type = %s
+                    ''', (channel.id, interaction.guild.id, self.channel_type))
+                else:
+                    # Inserir novo
+                    cursor.execute('''
+                        INSERT INTO guild_channels (guild_id, channel_type, channel_id)
+                        VALUES (%s, %s, %s)
+                    ''', (interaction.guild.id, self.channel_type, channel.id))
+                
+                conn.commit()
+                conn.close()
+            
+            embed = create_embed(
+                "✅ Canal Configurado!",
+                f"**{self.channel_name}** foi definido como: {channel.mention}",
+                color=0x00ff00
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+            
+        except Exception as e:
+            logger.error(f"Erro ao configurar canal: {e}")
+            await interaction.response.send_message("❌ Erro ao configurar canal!", ephemeral=True)
+
+async def notify_copinha_channel(guild, message):
+    """Notificar canal da copinha sobre eventos"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT channel_id FROM guild_channels 
+                WHERE guild_id = %s AND channel_type = %s
+            ''', (guild.id, 'copinha'))
+            result = cursor.fetchone()
+            conn.close()
+            
+        if result:
+            channel = guild.get_channel(result[0])
+            if channel:
+                embed = create_embed("🏆 Copinha - Atualização", message, color=0xffd700)
+                await channel.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Erro ao notificar canal da copinha: {e}")
+
+def add_copinha_points(guild_id, user_id, username, points, phase="vitoria"):
+    """Adicionar pontos automaticamente quando definir vencedor"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Verificar se usuário já existe
+            cursor.execute('''
+                SELECT points, wins FROM copinha_scoreboard 
+                WHERE guild_id = %s AND user_id = %s
+            ''', (guild_id, user_id))
+            result = cursor.fetchone()
+            
+            if result:
+                new_points = result[0] + points
+                new_wins = result[1] + 1
+                cursor.execute('''
+                    UPDATE copinha_scoreboard 
+                    SET points = %s, wins = %s, username = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE guild_id = %s AND user_id = %s
+                ''', (new_points, new_wins, username, guild_id, user_id))
+            else:
+                cursor.execute('''
+                    INSERT INTO copinha_scoreboard (guild_id, user_id, username, points, wins)
+                    VALUES (%s, %s, %s, %s, %s)
+                ''', (guild_id, user_id, username, points, 1))
+                new_points = points
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"✅ {points} pontos adicionados para {username} (fase: {phase})")
+            return new_points
+    except Exception as e:
+        logger.error(f"Erro ao adicionar pontos automáticos: {e}")
+        return 0
+
+# ============ COMANDO ESPECIAL PARA TICKETS PERSISTENTE ============
 
 async def create_persistent_ticket_message(ctx_or_interaction):
     """Criar mensagem de ticket persistente que sobrevive a redeploys"""
@@ -2703,6 +3642,158 @@ async def create_persistent_ticket_message(ctx_or_interaction):
     except Exception as e:
         logger.error(f"Erro ao criar mensagem de ticket persistente: {e}")
         raise
+
+# ============ COMANDOS COM PREFIXO RX (NÃO-SLASH) ============
+
+@bot.command(name='escolhercanais', aliases=['configcanais'])
+async def rx_escolher_canais(ctx):
+    """Comando RX para escolher canais padrão do servidor"""
+    try:
+        if not ctx.author.guild_permissions.manage_channels:
+            embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
+            await ctx.send(embed=embed)
+            return
+
+        embed = create_embed(
+            "⚙️ Configurar Canais do Servidor",
+            "**Escolha qual tipo de canal deseja configurar:**\n\n"
+            "🔔 **Avisos** - Para anúncios importantes\n"
+            "⚔️ **X-Clan** - Para eventos entre clans\n"
+            "📋 **Logs** - Para logs de moderação\n"
+            "🏆 **Copinha** - Para eventos e scoreboards\n"
+            "👋 **Boas-vindas** - Para dar boas-vindas\n\n"
+            "**Clique nos botões abaixo para configurar:**",
+            color=0x7289da
+        )
+
+        view = ConfigChannelsView()
+        await ctx.send(embed=embed, view=view)
+
+    except Exception as e:
+        logger.error(f"Erro no comando escolhercanais: {e}")
+        await ctx.send("❌ Erro ao carregar configurações de canais!")
+
+class ConfigChannelsView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+
+    @discord.ui.button(label="🔔 Avisos", style=discord.ButtonStyle.primary, emoji="🔔")
+    async def config_avisos(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = ChannelSelectView('avisos', 'Canal de Avisos')
+        embed = create_embed("🔔 Configurar Canal de Avisos", "Selecione o canal para avisos importantes:", color=0x7289da)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    @discord.ui.button(label="⚔️ X-Clan", style=discord.ButtonStyle.secondary, emoji="⚔️")
+    async def config_xclan(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = ChannelSelectView('xclan', 'Canal X-Clan')
+        embed = create_embed("⚔️ Configurar Canal X-Clan", "Selecione o canal para eventos entre clans:", color=0x7289da)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    @discord.ui.button(label="📋 Logs", style=discord.ButtonStyle.secondary, emoji="📋")
+    async def config_logs(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = ChannelSelectView('logs', 'Canal de Logs')
+        embed = create_embed("📋 Configurar Canal de Logs", "Selecione o canal para logs de moderação:", color=0x7289da)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    @discord.ui.button(label="🏆 Copinha", style=discord.ButtonStyle.success, emoji="🏆")
+    async def config_copinha(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = ChannelSelectView('copinha', 'Canal da Copinha')
+        embed = create_embed("🏆 Configurar Canal da Copinha", "Selecione o canal para eventos e scoreboards da copinha:", color=0x7289da)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    @discord.ui.button(label="👋 Boas-vindas", style=discord.ButtonStyle.secondary, emoji="👋")
+    async def config_welcome(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = ChannelSelectView('welcome', 'Canal de Boas-vindas')
+        embed = create_embed("👋 Configurar Canal de Boas-vindas", "Selecione o canal para dar boas-vindas:", color=0x7289da)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+@bot.command(name='scorecup', aliases=['scorecopinha'])
+async def rx_score_cup(ctx):
+    """Comando RX para mostrar scoreboard da copinha"""
+    try:
+        embed = create_embed(
+            "🏆 Scoreboard da Copinha",
+            "Sistema de pontuação dos vencedores das copinhas!\n\n"
+            "**🎯 Como funciona:**\n"
+            "• Vencedores ganham pontos automaticamente\n"
+            "• Staff pode adicionar/remover pontos manualmente\n"
+            "• Ranking atualizado em tempo real\n\n"
+            "**🏆 Sistema de pontuação:**\n"
+            "• O vencedor da copinha ganha 1 troféu\n"
+            "• Sistema simples e justo para todos\n\n"
+            "**💡 Use os botões abaixo para interagir:**",
+            color=0x7289da
+        )
+        
+        view = CopinhaScoreboardView()
+        await ctx.send(embed=embed, view=view)
+
+    except Exception as e:
+        logger.error(f"Erro no comando scorecup: {e}")
+        await ctx.send("❌ Erro ao carregar scoreboard!")
+
+@bot.tree.command(name="cuptop10", description="Ver top 10 do ranking das copinhas")
+async def slash_cup_top10(interaction: discord.Interaction):
+    """Slash command para mostrar top 10 do scoreboard das copinhas de forma organizada"""
+    global_stats['commands_used'] += 1
+    ctx = interaction
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT user_id, username, points, wins 
+                FROM copinha_scoreboard 
+                WHERE guild_id = %s 
+                ORDER BY points DESC 
+                LIMIT 10
+            ''', (interaction.guild.id,))
+            results = cursor.fetchall()
+            conn.close()
+
+        if not results:
+            embed = create_embed(
+                "🏆 Top 10 Copinhas", 
+                "Nenhum vencedor registrado ainda!\n\nParticipe das copinhas para aparecer aqui! 🎮", 
+                color=0xffaa00
+            )
+            await interaction.response.send_message(embed=embed)
+            return
+
+        # Criar texto organizado do ranking
+        ranking_text = ""
+        medals = ["🥇", "🥈", "🥉"]
+        
+        for i, (user_id, username, points, wins) in enumerate(results):
+            medal = medals[i] if i < 3 else f"**{i+1}º**"
+            user = interaction.guild.get_member(user_id)
+            display_name = user.display_name if user else username
+            
+            # Formatação bonita com troféus e vitórias
+            if points == 1:
+                trophies_text = "1 🏆"
+            else:
+                trophies_text = f"{points} 🏆" if points > 0 else "0 🏆"
+            
+            victories_text = f"{wins} vitórias" if wins != 1 else "1 vitória"
+            
+            ranking_text += f"{medal} **{display_name}**\n"
+            ranking_text += f"   └ {trophies_text} • {victories_text}\n\n"
+
+        embed = create_embed(
+            "🏆 Top 10 - Campeões das Copinhas",
+            f"**🎯 Os maiores campeões do servidor:**\n\n{ranking_text}"
+            f"**🏅 Total de jogadores no ranking:** {len(results)}\n"
+            f"**🎮 Participe das copinhas e apareça aqui!**",
+            color=0xffd700
+        )
+        
+        embed.set_footer(text="Use RXscoreCup para gerenciar o scoreboard")
+        await interaction.response.send_message(embed=embed)
+
+    except Exception as e:
+        logger.error(f"Erro no comando cuptop10: {e}")
+        await interaction.response.send_message("❌ Erro ao carregar ranking das copinhas!")
 
 # ============ TODOS OS SLASH COMMANDS - MAIS DE 300 COMANDOS ============
 
@@ -3486,8 +4577,8 @@ async def slash_clear(interaction: discord.Interaction, quantidade: int = 10):
             return
 
         # Verificar se o bot tem permissões no canal
-        bot_member = interaction.guild.me
-        if not interaction.channel.permissions_for(bot_member).manage_messages:
+        bot_member = interaction.guild.me if interaction.guild else None
+        if not bot_member or not interaction.channel.permissions_for(bot_member).manage_messages:
             embed = create_embed("❌ Bot sem permissão", "O bot não tem permissão para gerenciar mensagens neste canal!", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -4185,60 +5276,7 @@ async def slash_ranklist(interaction: discord.Interaction):
     await safe_send_response(interaction, embed=embed)
 
 # 4. COMANDOS DE RANKS (30 comandos)
-@bot.tree.command(name="rank", description="Ver rank de usuário")
-async def slash_rank(interaction: discord.Interaction, usuario: discord.Member = None):
-    """Slash command para rank"""
-    try:
-        target = usuario or interaction.user
-        data = get_user_data(target.id)
-
-        if not data:
-            update_user_data(target.id)
-            xp, level = 0, 1
-        else:
-            xp, level = data[2], data[3]
-
-        current_rank_id, current_rank = get_user_rank(xp)
-        next_rank_id = current_rank_id + 1 if current_rank_id < 12 else 12
-        next_rank = RANK_SYSTEM.get(next_rank_id, RANK_SYSTEM[12])
-
-        if current_rank_id < 12:
-            xp_needed = next_rank["xp"] - xp
-            progress = ((xp - current_rank["xp"]) / (next_rank["xp"] - current_rank["xp"])) * 100
-            progress_bar = "█" * int(progress // 10) + "░" * (10 - int(progress // 10))
-        else:
-            xp_needed = 0
-            progress = 100
-            progress_bar = "█" * 10
-
-        custom_title = ""
-        if data:
-            settings_data = data[11]
-            settings = json.loads(settings_data) if settings_data else {}
-            if settings.get('custom_title'):
-                custom_title = f" | {settings['custom_title']}"
-
-        embed = create_embed(
-            f"{current_rank['emoji']} Rank de {target.display_name}{custom_title}",
-            f"""**🏆 Rank Atual:** {current_rank['name']} (#{current_rank_id})
-**⭐ Level:** {level}
-**💫 XP Total:** {xp:,}
-
-**📊 Progresso para próximo rank:**
-{progress_bar} {progress:.1f}%
-**{next_rank['emoji']} Próximo:** {next_rank['name']}
-**💪 XP Necessário:** {xp_needed:,}
-
-**🎯 Estatísticas:**
-• Mensagens para próximo rank: ~{xp_needed // XP_PER_MESSAGE:,}""",
-            color=current_rank["color"]
-        )
-
-        embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        logger.error(f"Erro no rank: {e}")
-        await interaction.response.send_message("Erro ao carregar rank!", ephemeral=True)
+# Rank slash command moved to avoid conflicts
 
 # Classes de Modal e View para interações
 
@@ -4391,63 +5429,86 @@ class CopinhaConfigModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            # IMMEDIATE defer to prevent webhook timeout - PUBLIC since tournament needs to be visible
-            await interaction.response.defer()
-            
             title = self.title_input.value
             map_name = self.map_input.value
             team_format = self.format_input.value
-            max_players = int(self.max_players_input.value)
+            
+            try:
+                max_players = int(self.max_players_input.value)
+            except ValueError:
+                embed = create_embed("❌ Erro", "Número de participantes deve ser um número válido!", color=0xff0000)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
             
             valid_formats = ['1v1', '2v2', '3v3', '4v4']
             valid_players = [8, 16, 32, 64]
             
             if team_format not in valid_formats:
-                await interaction.followup.send("❌ Formato inválido! Use: 1v1, 2v2, 3v3 ou 4v4", ephemeral=True)
+                embed = create_embed("❌ Formato inválido", "Use: 1v1, 2v2, 3v3 ou 4v4", color=0xff0000)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
                 
             if max_players not in valid_players:
-                await interaction.followup.send("❌ Número inválido! Use: 8, 16, 32 ou 64", ephemeral=True)
+                embed = create_embed("❌ Número inválido", "Use: 8, 16, 32 ou 64 participantes", color=0xff0000)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
             
+            # Criar embed da copinha
             embed = create_embed(
                 f"🏆 {title}",
                 f"**🗺️ Mapa:** {map_name}\n"
                 f"**👥 Formato:** {team_format}\n"
                 f"**📊 Participantes:** 0/{max_players}\n"
-                f"**📋 Status:** Inscrições abertas\n\n"
-                f"**Clique no botão abaixo para se inscrever!**",
+                f"**📋 Status:** Inscrições abertas\n"
+                f"**👑 Organizador:** {interaction.user.mention}\n\n"
+                f"**🎮 Clique no botão abaixo para se inscrever!**",
                 color=0xffd700
             )
             
+            # Criar view com botão de participar
             view = CopinhaJoinView(title, map_name, team_format, max_players, interaction.user.id)
-            message = await interaction.followup.send(embed=embed, view=view)
             
-            # Async database save to prevent event loop blocking
-            await asyncio.to_thread(
-                execute_query,
-                '''
-                INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ''',
-                [
-                    interaction.guild.id,
-                    interaction.user.id,
-                    interaction.channel.id,
-                    message.id,
-                    title,
-                    map_name,
-                    team_format,
-                    max_players,
-                    'active'
-                ]
-            )
+            # Enviar mensagem no canal usando interaction.response
+            await interaction.response.send_message(embed=embed, view=view)
             
-        except ValueError:
-            await safe_send_response(interaction, content="❌ Número de participantes inválido!", ephemeral=True)
+            # Buscar a mensagem criada para salvar no banco
+            try:
+                message = await interaction.original_response()
+                
+                # Database save
+                execute_query(
+                    '''
+                    INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''',
+                    (
+                        interaction.guild.id,
+                        interaction.user.id,
+                        interaction.channel.id,
+                        message.id,
+                        title,
+                        map_name,
+                        team_format,
+                        max_players,
+                        'active'
+                    )
+                )
+                logger.info(f"Copinha criada com sucesso: {title} por {interaction.user}")
+                
+            except Exception as db_error:
+                logger.error(f"Erro ao salvar copinha no banco: {db_error}")
+                # Não falhar a criação por erro de banco
+            
+        except discord.errors.HTTPException as http_error:
+            logger.error(f"Erro HTTP ao criar copinha: {http_error}")
+            if not interaction.response.is_done():
+                embed = create_embed("❌ Erro HTTP", "Erro de comunicação com Discord. Tente novamente.", color=0xff0000)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
         except Exception as e:
-            logger.error(f"Erro ao criar copinha: {e}")
-            await safe_send_response(interaction, content="❌ Erro ao criar copinha! Tente novamente.", ephemeral=True)
+            logger.error(f"Erro geral ao criar copinha: {e}")
+            if not interaction.response.is_done():
+                embed = create_embed("❌ Erro", "Erro inesperado ao criar copinha. Tente novamente.", color=0xff0000)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
 
 class CopinhaJoinView(discord.ui.View):
     def __init__(self, title, map_name, team_format, max_players, creator_id):
@@ -4462,57 +5523,108 @@ class CopinhaJoinView(discord.ui.View):
     @discord.ui.button(label="📝 Inscrever-se", style=discord.ButtonStyle.success, emoji="🎮")
     async def join_tournament(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            # Check eligibility first, then respond accordingly
+            # Verificar se já está inscrito
             if interaction.user.id in self.participants:
-                await interaction.response.send_message("❌ Você já está inscrito!", ephemeral=True)
+                embed = create_embed("❌ Já inscrito", "Você já está inscrito nesta copinha!", color=0xff0000)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
                 
+            # Verificar se ainda há vagas
             if len(self.participants) >= self.max_players:
-                await interaction.response.send_message("❌ Copinha lotada!", ephemeral=True)
+                embed = create_embed("❌ Copinha lotada", "Não há mais vagas disponíveis!", color=0xff0000)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
             
-            # Add participant first
+            # Adicionar participante
             self.participants.append(interaction.user.id)
             
-            # Create updated embed
+            # Lista de participantes para mostrar
+            participant_list = []
+            for i, user_id in enumerate(self.participants[:10]):  # Mostrar apenas 10
+                try:
+                    user = bot.get_user(user_id)
+                    if user:
+                        participant_list.append(f"{i+1}. {user.display_name}")
+                    else:
+                        participant_list.append(f"{i+1}. Usuário #{user_id}")
+                except:
+                    participant_list.append(f"{i+1}. Usuário #{user_id}")
+            
+            participant_text = "\n".join(participant_list)
+            if len(self.participants) > 10:
+                participant_text += f"\n... e mais {len(self.participants) - 10} jogadores"
+            
+            # Criar embed atualizado
             embed = create_embed(
                 f"🏆 {self.title}",
                 f"**🗺️ Mapa:** {self.map_name}\n"
                 f"**👥 Formato:** {self.team_format}\n"
                 f"**📊 Participantes:** {len(self.participants)}/{self.max_players}\n"
-                f"**📋 Status:** {'Iniciando...' if len(self.participants) == self.max_players else 'Inscrições abertas'}\n\n"
-                f"**Clique no botão abaixo para se inscrever!**",
-                color=0xffd700 if len(self.participants) < self.max_players else 0x00ff00
+                f"**📋 Status:** {'🚀 Iniciando!' if len(self.participants) == self.max_players else '🔓 Inscrições abertas'}\n\n"
+                f"**👥 Lista de Participantes:**\n{participant_text if participant_text else 'Nenhum participante ainda'}\n\n"
+                f"**🎮 Clique no botão para se inscrever!**",
+                color=0x00ff00 if len(self.participants) == self.max_players else 0xffd700
             )
             
-            # Edit the tournament message (not the interaction response)
-            await interaction.response.edit_message(embed=embed, view=self if len(self.participants) < self.max_players else None)
-            
-            # If tournament is full, start it
-            if len(self.participants) == self.max_players:
-                await self.start_tournament(interaction)
+            # Tentar editar a mensagem original
+            try:
+                if len(self.participants) < self.max_players:
+                    await interaction.response.edit_message(embed=embed, view=self)
+                else:
+                    # Torneio completo, remover view
+                    await interaction.response.edit_message(embed=embed, view=None)
+                    # Iniciar torneio
+                    await self.start_tournament(interaction)
+            except discord.errors.NotFound:
+                # Mensagem não existe mais
+                embed_success = create_embed("✅ Inscrito!", f"Você foi inscrito na copinha **{self.title}**!", color=0x00ff00)
+                await interaction.response.send_message(embed=embed_success, ephemeral=True)
+            except discord.errors.HTTPException as e:
+                logger.error(f"Erro HTTP ao editar mensagem: {e}")
+                embed_success = create_embed("✅ Inscrito!", f"Você foi inscrito na copinha **{self.title}**!", color=0x00ff00)
+                await interaction.response.send_message(embed=embed_success, ephemeral=True)
                 
+        except discord.errors.InteractionResponded:
+            # Interação já foi respondida
+            logger.info("Interação já respondida no join_tournament")
         except Exception as e:
             logger.error(f"Erro ao inscrever na copinha: {e}")
-            await safe_send_response(interaction, content="❌ Erro ao se inscrever!", ephemeral=True)
+            try:
+                if not interaction.response.is_done():
+                    embed_error = create_embed("❌ Erro", "Erro ao se inscrever! Tente novamente.", color=0xff0000)
+                    await interaction.response.send_message(embed=embed_error, ephemeral=True)
+            except:
+                logger.error("Falha total ao responder erro de inscrição")
 
     async def start_tournament(self, interaction):
         """Iniciar torneio quando lotado"""
         try:
-            embed = create_embed(
+            # Anunciar início do torneio
+            embed_start = create_embed(
                 f"🚀 {self.title} - INICIADA!",
-                f"**Participantes confirmados: {len(self.participants)}**\n\n"
-                f"🏆 A copinha será organizada em breve!\n"
-                f"📋 Aguardem as instruções dos moderadores.",
+                f"**🎯 Participantes:** {len(self.participants)}\n"
+                f"**🗺️ Mapa:** {self.map_name}\n"
+                f"**👥 Formato:** {self.team_format}\n\n"
+                f"🏆 **A copinha está oficialmente iniciada!**\n"
+                f"📋 Os moderadores organizarão as partidas em breve.\n\n"
+                f"🎮 **Boa sorte a todos os participantes!**",
                 color=0x00ff00
             )
             
-            # Since this is called from the join button handler that just edited the message,
-            # we need to send a followup instead of trying to edit again
-            await interaction.followup.send(embed=embed, ephemeral=False)
+            # Enviar mensagem de início
+            try:
+                await interaction.followup.send(embed=embed_start)
+            except discord.errors.NotFound:
+                # Followup não disponível, tentar no canal
+                await interaction.channel.send(embed=embed_start)
+            except discord.errors.HTTPException:
+                # Erro HTTP, tentar método alternativo
+                await interaction.channel.send(f"🚀 **{self.title}** iniciada com {len(self.participants)} participantes!")
+                
+            logger.info(f"Copinha '{self.title}' iniciada com {len(self.participants)} participantes")
             
         except Exception as e:
-            logger.error(f"Erro ao iniciar copinha: {e}")
+            logger.error(f"Erro ao anunciar início da copinha: {e}")
 
 class CloseTicketView(discord.ui.View):
     def __init__(self, authorized_user_id):
@@ -4542,86 +5654,7 @@ class CloseTicketView(discord.ui.View):
         embed = create_embed("✅ Cancelado", "Fechamento do ticket foi cancelado.", color=0x00ff00)
         await interaction.response.edit_message(embed=embed, view=None)
 
-@bot.tree.command(name="leaderboard", description="Ver ranking do servidor")
-async def slash_leaderboard(interaction: discord.Interaction, tipo: str = "xp"):
-    """Slash command para leaderboard"""
-    try:
-
-
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-
-            if tipo.lower() in ['xp', 'rank', 'nivel']:
-                cursor.execute('''
-                    SELECT user_id, xp, level FROM users
-                    ORDER BY xp DESC LIMIT 15
-                ''')
-                title = "🏆 Top XP/Rank do Servidor"
-                field_name = "Ranking por XP"
-            elif tipo.lower() in ['coins', 'money', 'dinheiro']:
-                cursor.execute('''
-                    SELECT user_id, coins, bank FROM users
-                    ORDER BY (coins + bank) DESC LIMIT 15
-                ''')
-                title = "💰 Top Economia do Servidor"
-                field_name = "Ranking por Dinheiro"
-            else:
-                cursor.execute('''
-                    SELECT user_id, xp, level FROM users
-                    ORDER BY xp DESC LIMIT 15
-                ''')
-                title = "🏆 Top XP/Rank do Servidor"
-                field_name = "Ranking por XP"
-
-            results = cursor.fetchall()
-            conn.close()
-
-        if not results:
-            embed = create_embed("📊 Ranking Vazio", "Ainda não há dados suficientes para o ranking!", color=0xffaa00)
-            await safe_send_response(interaction, embed=embed)
-            return
-
-        embed = create_embed(title, f"Top {len(results)} usuários do servidor:", color=0xffd700)
-
-        leaderboard_text = ""
-        medals = ["🥇", "🥈", "🥉"]
-
-        for i, result in enumerate(results):
-            user_id = result[0]
-            user = interaction.guild.get_member(user_id)
-
-            if not user:
-                continue
-
-            medal = medals[i] if i < 3 else f"{i+1}º"
-
-            if tipo.lower() in ['xp', 'rank', 'nivel']:
-                xp, level = result[1], result[2]
-                rank_id, rank_data = get_user_rank(xp)
-                leaderboard_text += f"{medal} **{user.display_name}**\n"
-                leaderboard_text += f"   {rank_data['emoji']} {rank_data['name']} | Level {level} | {xp:,} XP\n\n"
-
-            elif tipo.lower() in ['coins', 'money', 'dinheiro']:
-                coins, bank = result[1], result[2]
-                total = coins + bank
-                leaderboard_text += f"{medal} **{user.display_name}**\n"
-                leaderboard_text += f"   💰 {total:,} moedas (💵 {coins:,} + 🏦 {bank:,})\n\n"
-
-        if leaderboard_text:
-            embed.add_field(name=field_name, value=leaderboard_text[:1024], inline=False)
-
-        try:
-            user_position = await get_user_position(interaction.user.id, interaction.guild.id)
-            embed.set_footer(text=f"Use: /leaderboard xp/coins • Sua posição: #{user_position}")
-        except:
-            embed.set_footer(text=f"Use: /leaderboard xp/coins")
-        
-        await safe_send_response(interaction, embed=embed)
-
-    except Exception as e:
-        logger.error(f"Erro no leaderboard: {e}")
-        await interaction.response.send_message("Erro ao carregar ranking!", ephemeral=True)
+# Leaderboard slash command removed to avoid conflict with prefix command
 
 # COMANDO LEMBRETE JÁ DEFINIDO ANTERIORMENTE - REMOVIDO DUPLICATA
 
@@ -6711,6 +7744,8 @@ async def slash_lockserver(interaction: discord.Interaction, motivo: str = "Emer
         logger.error(f"Erro no lockserver: {e}")
         await interaction.followup.send("Erro ao bloquear servidor!", ephemeral=True)
 
+
+
 @bot.tree.command(name="unlockserver", description="Desbloquear servidor")
 async def slash_unlockserver(interaction: discord.Interaction):
     """Desbloquear servidor"""
@@ -6897,22 +7932,23 @@ async def check_next_round(copinha_id):
             
             # Extrair current_round de forma segura
             if isinstance(copinha, dict):
-                current_round = copinha.get('current_round', 'primeira_rodada')
+                current_round = copinha.get('current_round', 'inscricoes')
             else:
-                current_round = copinha[7] if len(copinha) > 7 else 'primeira_rodada'
+                current_round = copinha[10] if len(copinha) > 10 else 'inscricoes'  # current_round está no índice 10
             
-            # Verificar partidas pendentes da rodada atual
-            cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = %s AND round_name = %s AND status = %s', 
-                         (copinha_id, current_round, 'waiting'))
+            # Verificar partidas pendentes da rodada atual (normalizar para pesquisa)
+            current_round_normalized = current_round.lower().strip()
+            cursor.execute('SELECT COUNT(*) FROM copinha_matches WHERE copinha_id = %s AND LOWER(round_name) = %s AND status = %s', 
+                         (copinha_id, current_round_normalized, 'waiting'))
             pending_result = cursor.fetchone()
             pending_matches = pending_result[0] if pending_result else 0
             
             logger.info(f"Verificando rodada {current_round}: {pending_matches} partidas pendentes")
             
             if pending_matches == 0:
-                # Todas as partidas terminaram, buscar vencedores
-                cursor.execute('SELECT * FROM copinha_matches WHERE copinha_id = %s AND round_name = %s AND status = %s', 
-                             (copinha_id, current_round, 'finished'))
+                # Todas as partidas terminaram, buscar vencedores (normalizar para pesquisa)
+                cursor.execute('SELECT * FROM copinha_matches WHERE copinha_id = %s AND LOWER(round_name) = %s AND status = %s', 
+                             (copinha_id, current_round_normalized, 'finished'))
                 finished_matches = cursor.fetchall()
                 
                 if not finished_matches:
@@ -6932,6 +7968,13 @@ async def check_next_round(copinha_id):
                         winners.append(winner_id)
                 
                 logger.info(f"Vencedores da rodada {current_round}: {len(winners)}")
+                
+                # Verificar se número de vencedores é válido para próxima rodada
+                if len(winners) % 2 != 0 and len(winners) > 1:
+                    logger.warning(f"Número ímpar de vencedores ({len(winners)}) - impossível criar próxima rodada")
+                    # Não fazer nada, deixar como está
+                    conn.close()
+                    return
                 
                 if len(winners) == 1:
                     # É o vencedor final!
@@ -6981,28 +8024,47 @@ async def create_next_round(copinha, winners, current_round, copinha_id):
             logger.error(f"Guild {guild_id} não encontrada")
             return
 
-        # Determinar nome da próxima rodada
-        round_names = {
-            'primeira_rodada': 'Quartas de Final',
-            'Primeira Rodada': 'Quartas de Final',
-            'quartas_de_final': 'Semifinal',
-            'Quartas de Final': 'Semifinal',
-            'semifinal': 'Final',
-            'Semifinal': 'Final'
+        # Determinar nome da próxima rodada (normalizar case)
+        current_round_normalized = current_round.lower().strip()
+        
+        round_progression = {
+            'inscricoes': 'primeira_rodada',
+            'primeira_rodada': 'quartas',
+            'quartas': 'semifinal',
+            'semifinal': 'final'
         }
         
-        next_round_name = round_names.get(current_round, 'Próxima Rodada')
-        next_round_key = next_round_name.lower().replace(' ', '_')
+        next_round_key = round_progression.get(current_round_normalized, 'proxima_rodada')
+        
+        # Nome amigável para exibição
+        round_display_names = {
+            'primeira_rodada': 'Primeira Rodada',
+            'quartas': 'Quartas de Final',
+            'semifinal': 'Semifinal',
+            'final': 'Final'
+        }
+        
+        next_round_name = round_display_names.get(next_round_key, 'Próxima Rodada')
 
-        # Encontrar categoria da copinha
+        # Encontrar categoria da copinha (busca mais robusta)
         category = None
+        search_terms = [
+            copinha_title[:20],  # Primeira busca: primeiros 20 caracteres
+            copinha_title.lower()[:15],  # Segunda busca: 15 caracteres minúsculos
+            f"🏆 {copinha_title[:15]}"  # Terceira busca: com emoji
+        ]
+        
         for cat in guild.categories:
-            if copinha_title[:20] in cat.name:
-                category = cat
+            for search_term in search_terms:
+                if search_term.lower() in cat.name.lower():
+                    category = cat
+                    break
+            if category:
                 break
 
         if not category:
-            logger.error("Categoria da copinha não encontrada")
+            logger.error(f"Categoria da copinha '{copinha_title}' não encontrada")
+            logger.info(f"Categorias disponíveis: {[c.name for c in guild.categories]}")
             return
 
         # Buscar dados dos times vencedores da rodada anterior
@@ -7066,13 +8128,13 @@ async def create_next_round(copinha, winners, current_round, copinha_id):
                     if member:
                         await match_channel.set_permissions(member, read_messages=True, send_messages=True)
 
-                # Salvar match no banco
+                # Salvar match no banco (usar key normalizada para consistência)
                 cursor.execute('''
                     INSERT INTO copinha_matches (copinha_id, round_name, match_number, players, ticket_channel_id, status)
                     VALUES (%s, %s, %s, %s, %s, %s)
                 ''', (
                     copinha_id,
-                    next_round_name,
+                    next_round_key,  # Usar versão normalizada para pesquisas consistentes
                     i + 1,
                     json.dumps({'team1': team1, 'team2': team2}),
                     match_channel.id,
@@ -7204,7 +8266,7 @@ async def announce_tournament_winner(copinha, winner_id):
         
         await channel.send(embed=embed)
         
-        # Dar coins de prêmio ao vencedor
+        # Dar coins de prêmio ao vencedor e 1 ponto no scoreboard
         try:
             prize_coins = 1000  # Prêmio base
             user_data = get_user_data(winner_id)
@@ -7222,9 +8284,14 @@ async def announce_tournament_winner(copinha, winner_id):
                     conn.commit()
                     conn.close()
                 
+                # Adicionar 1 ponto no scoreboard da copinha
+                points_added = add_copinha_points(guild_id, winner_id, winner.display_name, 1, "vitoria_copinha")
+                
                 prize_embed = create_embed(
-                    "💰 Prêmio do Campeão!",
-                    f"**{winner.mention}** ganhou **{prize_coins:,} coins** por vencer a copinha!",
+                    "🏆 Prêmio do Campeão!",
+                    f"**{winner.mention}** ganhou:\n"
+                    f"💰 **{prize_coins:,} coins**\n"
+                    f"🏆 **1 troféu** (Total: {points_added} troféus)",
                     color=0xffd700
                 )
                 await channel.send(embed=prize_embed)
@@ -7894,7 +8961,15 @@ async def on_member_join(member):
         logger.info(f"👋 Boas-vindas enviadas para {member.name} em {member.guild.name}")
 
         # Dar XP inicial para novos membros
-        add_xp(member.id, 25)  # XP bônus para novos membros
+        leveled_up, new_level, rank_up, new_rank_id, old_rank_id = add_xp(member.id, 25)  # XP bônus para novos membros
+        
+        # Criar cargos de rank se não existirem e atribuir cargo inicial
+        if member.guild:
+            try:
+                await ensure_rank_roles(member.guild)
+                await update_user_rank_role(member, new_rank_id)
+            except Exception as e:
+                logger.error(f"Erro ao configurar cargo inicial para {member.name}: {e}")
 
     except Exception as e:
         logger.error(f"Erro ao enviar boas-vindas para {member.name}: {e}")
@@ -9489,7 +10564,7 @@ class MatchResultView(discord.ui.View):
             original_channel = interaction.guild.get_channel(interaction.channel.id)
             if original_channel:
                 async for message in original_channel.history(limit=50):
-                    if message.author == interaction.guild.me and message.embeds:
+                    if interaction.guild and interaction.guild.me and message.author == interaction.guild.me and message.embeds:
                         await message.edit(embed=embed, view=self)
                         break
 
@@ -10828,7 +11903,7 @@ async def level_info(ctx, user: discord.Member = None):
         embed = create_embed("❌ Erro", "Erro ao carregar informações de level.", color=0xff0000)
         await ctx.send(embed=embed)
 
-@bot.command(name='top', aliases=['ranking'])
+@bot.command(name='top', aliases=['toplist'])
 async def top_users(ctx):
     """Ranking geral do servidor"""
     global_stats['commands_used'] += 1
@@ -12528,7 +13603,16 @@ async def trabalhar(ctx):
         # Chance de ganhar XP
         if random.randint(1, 100) <= 30:  # 30% chance
             xp_bonus = random.randint(10, 25)
-            add_xp(ctx.author.id, xp_bonus)
+            leveled_up, new_level, rank_up, new_rank_id, old_rank_id = add_xp(ctx.author.id, xp_bonus)
+            
+            # Atualizar cargo se houve rank up
+            if rank_up and ctx.guild:
+                try:
+                    member = ctx.guild.get_member(ctx.author.id)
+                    if member:
+                        await update_user_rank_role(member, new_rank_id)
+                except Exception as e:
+                    logger.error(f"Erro ao atualizar cargo após trabalho: {e}")
             await ctx.send(f"🎉 Bônus: +{xp_bonus} XP por trabalhar bem!")
 
     except Exception as e:
@@ -12737,7 +13821,7 @@ async def monthly(ctx):
     )
     await ctx.send(embed=embed)
 
-@bot.command(name='leaderboard', aliases=['lb', 'toplist'])
+@bot.command(name='leaderboard', aliases=['lb'])
 async def leaderboard(ctx, tipo='xp'):
     """Ver ranking do servidor"""
     global_stats['commands_used'] += 1
@@ -15660,7 +16744,18 @@ async def finalizar_evento_clan(ctx, evento_id: int, resultado: str = "empate"):
             xp_bonus = 50 if resultado.lower() == "vitoria" else 25  # XP baseado no resultado
 
             for user_id in participants:
-                add_xp(user_id, xp_bonus)
+                leveled_up, new_level, rank_up, new_rank_id, old_rank_id = add_xp(user_id, xp_bonus)
+                
+                # Atualizar cargo se houve rank up
+                if rank_up:
+                    try:
+                        guild = bot.get_guild(guild_id) if 'guild_id' in locals() else None
+                        if guild:
+                            member = guild.get_member(user_id)
+                            if member:
+                                await update_user_rank_role(member, new_rank_id)
+                    except Exception as e:
+                        logger.error(f"Erro ao atualizar cargo após daily: {e}")
 
             # Marcar como finalizado
             cursor.execute('''

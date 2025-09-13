@@ -19,6 +19,10 @@ logger = logging.getLogger('Dashboard')
 # Database connection pool to avoid locking issues
 db_lock = threading.RLock()
 
+# Track database connection state to avoid spam logging
+_db_connection_logged = False
+_db_connection_error_state = False
+
 def get_db_connection():
     """Get PostgreSQL database connection with schema normalization"""
     database_url = os.getenv('DATABASE_URL')
@@ -33,17 +37,34 @@ def get_db_connection():
         cursor = conn.cursor()
         cursor.execute("SET search_path TO public;")
         
-        # Log diagnostic information (mask credentials)
-        cursor.execute("SELECT current_database(), current_user, current_setting('search_path');")
-        db_name, db_user, search_path = cursor.fetchone()
+        # Log diagnostic information (mask credentials) - only log once or after error recovery
+        global _db_connection_logged, _db_connection_error_state
         
-        # Mask user details for security
-        masked_user = db_user[:3] + "***" if len(db_user) > 3 else "***"
-        logger.info(f"🔗 Dashboard DB Connected: {db_name} | User: {masked_user} | Schema: {search_path}")
+        if not _db_connection_logged or _db_connection_error_state:
+            cursor.execute("SELECT current_database(), current_user, current_setting('search_path');")
+            result = cursor.fetchone()
+            if result:
+                db_name, db_user, search_path = result
+                
+                # Mask user details for security
+                masked_user = db_user[:3] + "***" if len(db_user) > 3 else "***"
+                
+                if _db_connection_error_state:
+                    logger.info(f"🔄 Dashboard DB Reconnected: {db_name} | User: {masked_user} | Schema: {search_path}")
+                else:
+                    logger.info(f"🔗 Dashboard DB Connected: {db_name} | User: {masked_user} | Schema: {search_path}")
+                
+                _db_connection_logged = True
+                _db_connection_error_state = False
+        else:
+            # Still need to set search path, just don't log it
+            cursor.execute("SET search_path TO public;")
         
         conn.commit()
         return conn
     except Exception as e:
+        global _db_connection_error_state
+        _db_connection_error_state = True
         logger.error(f"Erro ao conectar PostgreSQL: {e}")
         raise e
 
@@ -321,7 +342,10 @@ def health_db():
         
         # Get database information
         cursor.execute("SELECT current_database(), current_user, current_setting('search_path');")
-        db_name, db_user, search_path = cursor.fetchone()
+        result = cursor.fetchone()
+        if not result:
+            return jsonify({'status': 'error', 'message': 'No database info returned'}), 500
+        db_name, db_user, search_path = result
         
         # Check table existence in public schema
         cursor.execute("""
