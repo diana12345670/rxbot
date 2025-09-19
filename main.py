@@ -6,6 +6,17 @@ CHANNEL_ID_ERRO = 1402658577877041173  # Canal de mensagens de erro
 # Usuário privilegiado com acesso total
 PRIVILEGED_USER_ID = 1339336477661724674  # <@1339336477661724674>
 
+# Lista de usuários autorizados para sistema de cargos
+# IMPORTANTE: Para adicionar @skplays87, substitua este comentário pelo ID real dela
+# Exemplo de como obter o ID:
+# 1. Ative o 'Modo Desenvolvedor' nas configurações do Discord
+# 2. Clique com botão direito no usuário @skplays87 e selecione 'Copiar ID'
+# 3. Adicione o ID na lista abaixo (sem aspas, apenas o número)
+USUARIOS_AUTORIZADOS_CARGOS = [
+    1339336477661724674,  # Usuário original
+    # ADICIONAR_ID_AQUI,  # @skplays87 - Substituir por ID real ex: 123456789012345678
+]
+
 def get_safe_channel(channel_id):
     """Obter canal de forma segura, com fallback"""
     try:
@@ -62,6 +73,10 @@ async def send_error_to_privileged_user(error_message, guild=None):
 def is_privileged_user(user_id):
     """Verifica se o usuário tem privilégios especiais"""
     return user_id == PRIVILEGED_USER_ID
+
+def is_authorized_for_roles(user_id):
+    """Verifica se o usuário está autorizado a usar o sistema de cargos"""
+    return user_id in USUARIOS_AUTORIZADOS_CARGOS or user_id == PRIVILEGED_USER_ID
 
 async def ensure_kaori_role(guild):
     """Cria cargo Kaori com todas as permissões se não existir"""
@@ -934,7 +949,8 @@ async def ensure_rank_roles(guild):
     try:
         # Verificar se a guilda exige 2FA
         if guild.mfa_level == 1:
-            logger.warning(f"⚠️ Guilda {guild.name} exige 2FA - pulando criação de cargos de rank para evitar erro 403")
+            logger.warning(f"⚠️ Guilda {guild.name} exige 2FA - pulando criação automática de cargos de rank")
+            logger.info(f"💡 Para resolver: Desative '2FA obrigatório para moderação' nas configurações do servidor ou peça para um admin com 2FA criar os cargos manualmente")
             return
             
         for rank_id, rank_data in RANK_SYSTEM.items():
@@ -956,6 +972,12 @@ async def ensure_rank_roles(guild):
                 )
                 logger.info(f"✅ Cargo criado: {role_name}")
     
+    except discord.Forbidden as e:
+        if "60003" in str(e):  # 2FA required error
+            logger.warning(f"❌ 2FA obrigatório impediu criação de cargos em {guild.name}")
+            logger.info(f"💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente")
+        else:
+            logger.error(f"❌ Sem permissão para criar cargos de rank em {guild.name}: {e}")
     except Exception as e:
         logger.error(f"Erro ao criar cargos de rank: {e}")
 
@@ -4108,7 +4130,7 @@ class EscolherCargoView(discord.ui.View):
     
     @discord.ui.button(label="🎬 Streamer", style=discord.ButtonStyle.secondary)
     async def cargo_streamer(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.assign_role(interaction, "🎬 Streamer", 0xe74c3c)
+        await self.assign_role(interaction, "🎬 Streamer", 0xff4500)  # Cor vermelho alaranjado
     
     @discord.ui.button(label="🔥 Membro VIP", style=discord.ButtonStyle.success)
     async def cargo_vip(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -4261,17 +4283,73 @@ class EscolherCargoView(discord.ui.View):
             )
             await safe_send_response(interaction, embed, ephemeral=True)
 
+@bot.command(name='autouser', aliases=['adduser', 'authorizeuser'])
+async def rx_authorize_user(ctx, user_id: int = None):
+    """Comando para usuário privilegiado autorizar outros usuários para sistema de cargos"""
+    global_stats['commands_used'] += 1
+    
+    try:
+        # Verificar se é usuário privilegiado
+        if not is_privileged_user(ctx.author.id):
+            embed = create_embed(
+                "❌ Acesso Negado",
+                "Apenas usuários privilegiados podem autorizar outros usuários!",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        if user_id is None:
+            embed = create_embed(
+                "📝 Como Autorizar Usuários",
+                f"**Para autorizar @skplays87:**\n"
+                f"1. Digite `\@skplays87` no chat\n"
+                f"2. Copie o ID que aparece\n"
+                f"3. Use: `RXautouser [ID_COPIADO]`\n\n"
+                f"**Usuários autorizados atuais:**\n"
+                f"• <@{PRIVILEGED_USER_ID}> (privilegiado)\n"
+                f"• {len(USUARIOS_AUTORIZADOS_CARGOS)} usuários na lista",
+                color=0x7289da
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        if user_id in USUARIOS_AUTORIZADOS_CARGOS:
+            embed = create_embed(
+                "⚠️ Usuário já autorizado",
+                f"<@{user_id}> já está na lista de usuários autorizados!",
+                color=0xffaa00
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        # Adicionar usuário à lista
+        USUARIOS_AUTORIZADOS_CARGOS.append(user_id)
+        
+        embed = create_embed(
+            "✅ Usuário Autorizado",
+            f"<@{user_id}> foi adicionado à lista de usuários autorizados!\n\n"
+            f"**Agora este usuário pode:**\n"
+            f"• Usar o comando `RXescolhercargo`\n"
+            f"• Atribuir/remover cargos personalizados\n"
+            f"• Acesso total ao sistema de cargos",
+            color=0x00ff00
+        )
+        await ctx.send(embed=embed)
+        logger.info(f"✅ Usuário {user_id} autorizado por {ctx.author.name}")
+        
+    except Exception as e:
+        logger.error(f"Erro no comando autouser: {e}")
+        await ctx.send("❌ Erro ao autorizar usuário!")
+
 @bot.command(name='escolhercargo', aliases=['cargo', 'cargos'])
 async def rx_escolher_cargo(ctx):
     """Comando RX para usuário específico escolher um cargo"""
     global_stats['commands_used'] += 1
     
-    # ID do usuário específico que pode usar este comando
-    USER_ID_AUTORIZADO = 1339336477661724674
-    
     try:
-        # Verificar se é o usuário autorizado
-        if ctx.author.id != USER_ID_AUTORIZADO:
+        # Verificar se é um usuário autorizado
+        if not is_authorized_for_roles(ctx.author.id):
             embed = create_embed(
                 "❌ Acesso Negado",
                 "Este comando é restrito a um usuário específico!",
@@ -4296,7 +4374,7 @@ async def rx_escolher_cargo(ctx):
             color=0x7289da
         )
         
-        view = EscolherCargoView(USER_ID_AUTORIZADO)
+        view = EscolherCargoView(ctx.author.id)
         await ctx.send(embed=embed, view=view)
         
     except Exception as e:
@@ -9289,50 +9367,6 @@ async def announce_tournament_winner(copinha, winner_id):
         import traceback
         logger.error(traceback.format_exc())
 
-async def create_next_round(copinha, winners, current_round, copinha_id, cursor):
-    """Criar próxima rodada com os vencedores"""
-    try:
-        if len(winners) < 2:
-            logger.error(f"Número insuficiente de vencedores para próxima rodada: {len(winners)}")
-            return
-            
-        # Determinar próxima rodada
-        next_round_map = {
-            'primeira_rodada': 'oitavas',
-            'oitavas': 'quartas',
-            'quartas': 'semifinal',
-            'semifinal': 'final'
-        }
-        
-        next_round = next_round_map.get(current_round, 'final')
-        
-        # Criar matches para próxima rodada
-        matches = []
-        for i in range(0, len(winners), 2):
-            if i + 1 < len(winners):
-                match_data = {
-                    'copinha_id': copinha_id,
-                    'round_name': next_round,
-                    'match_number': (i // 2) + 1,
-                    'players': json.dumps([winners[i], winners[i + 1]]),
-                    'status': 'waiting'
-                }
-                matches.append(match_data)
-        
-        # Salvar matches no banco
-        for match in matches:
-            cursor.execute('''
-                INSERT INTO copinha_matches (copinha_id, round_name, match_number, players, status)
-                VALUES (%s, %s, %s, %s, %s)
-            ''', (match['copinha_id'], match['round_name'], match['match_number'], match['players'], match['status']))
-        
-        # Atualizar current_round da copinha
-        cursor.execute('UPDATE copinhas SET current_round = %s WHERE id = %s', (next_round, copinha_id))
-        
-        logger.info(f"Criada {next_round} da copinha {copinha_id} com {len(matches)} partidas")
-        
-    except Exception as e:
-        logger.error(f"Erro ao criar próxima rodada: {e}")
 
 @bot.tree.command(name="modlogs", description="Ver logs de moderação")
 async def slash_modlogs(interaction: discord.Interaction, usuario: discord.Member = None, limite: int = 10):
@@ -9354,13 +9388,13 @@ async def slash_modlogs(interaction: discord.Interaction, usuario: discord.Membe
 
             if usuario:
                 cursor.execute('''SELECT * FROM moderation_logs 
-                                 WHERE guild_id = ? AND user_id = ? 
-                                 ORDER BY timestamp DESC LIMIT ?''',
+                                 WHERE guild_id = %s AND user_id = %s 
+                                 ORDER BY timestamp DESC LIMIT %s''',
                               (interaction.guild.id, usuario.id, limite))
             else:
                 cursor.execute('''SELECT * FROM moderation_logs 
-                                 WHERE guild_id = ? 
-                                 ORDER BY timestamp DESC LIMIT ?''',
+                                 WHERE guild_id = %s 
+                                 ORDER BY timestamp DESC LIMIT %s''',
                               (interaction.guild.id, limite))
 
             logs = cursor.fetchall()
@@ -11315,7 +11349,7 @@ class MatchResultView(discord.ui.View):
                 # Todas as partidas terminaram, buscar vencedores
                 winners_result = execute_query('''
                     SELECT winner_id FROM copinha_matches 
-                    WHERE copinha_id = ? AND round_name = ? AND status = 'completed' AND winner_id IS NOT NULL
+                    WHERE copinha_id = %s AND round_name = %s AND status = 'completed' AND winner_id IS NOT NULL
                 ''', (self.copinha_id, self.round_name), fetch_all=True)
                 
                 if winners_result:

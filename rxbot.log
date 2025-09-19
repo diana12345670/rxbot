@@ -1059,3 +1059,123 @@ AttributeError: module 'discord.errors' has no attribute 'WebhookTokenMissing'
 2025-09-13 14:10:27,391 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
 2025-09-13 14:10:27,422 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
 2025-09-13 14:10:27,449 - RXbot - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-19 18:05:02,628 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-19 18:05:02,650 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-19 18:05:02,650 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-19 18:05:06,940 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-19 18:05:07,075 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 0 in public schema
+2025-09-19 18:05:07,076 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-19 18:05:07,076 - Kaori - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-19 18:05:07,077 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-19 18:05:17,986 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-19 18:05:18,008 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-19 18:05:18,008 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-19 18:05:18,021 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-19 18:05:18,165 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 0 in public schema
+2025-09-19 18:05:18,165 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-19 18:05:18,166 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-19 18:05:21,170 - Kaori - WARNING - ⚠️ Não foi possível testar Flask: HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /healthz (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f4d13f982d0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-09-19 18:05:21,170 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-19 18:05:21,171 - discord.client - INFO - logging in using static token
+2025-09-19 18:05:22,174 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: 2fc5f551ad1579247985406ea4ea906f).
+2025-09-19 18:05:24,279 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-19 18:05:24,280 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-19 18:05:24,281 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-19 18:05:24,439 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 0 in public schema
+2025-09-19 18:05:24,472 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-19 18:05:24,473 - Kaori - INFO - ✅ Database inicializado
+2025-09-19 18:05:24,473 - Kaori - INFO - 🤖 Kaori está online! Conectado como [𝑹𝑿] Ka͟o͟r͟i͟#1546
+2025-09-19 18:05:24,474 - Kaori - INFO - 📊 Conectado em 2 servidores
+2025-09-19 18:05:24,474 - Kaori - INFO - 👥 Servindo 440 usuários únicos
+2025-09-19 18:05:24,474 - Kaori - INFO - 🚀 Kaori Online! Servidores: 2 | Usuários: 440 | Latência: 92.41ms
+2025-09-19 18:05:24,475 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-19 18:05:24,477 - Kaori - INFO - ⏭️ Backup desabilitado no Railway para economia de recursos
+2025-09-19 18:05:25,757 - Kaori - ERROR - Erro na limpeza de mensagens: relation "interactive_messages" does not exist
+LINE 2: ...               SELECT message_id, channel_id FROM interactiv...
+                                                             ^
+
+2025-09-19 18:05:25,760 - Kaori - ERROR - Erro ao criar cargos de rank: 403 Forbidden (error code: 60003): Two factor is required for this operation
+2025-09-19 18:05:25,765 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-19 18:05:33,165 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-19 18:05:33,165 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-19 18:05:33,179 - Kaori - ERROR - Erro ao restaurar mensagens interativas: relation "interactive_messages" does not exist
+LINE 3:                 FROM interactive_messages 
+                             ^
+
+2025-09-19 18:05:33,669 - Kaori - INFO - ✅ 88 slash commands sincronizados
+2025-09-19 18:05:33,671 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-19 18:05:33,671 - Kaori - INFO - 🚀 Total de comandos slash: 88
+2025-09-19 18:05:33,671 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-19 18:05:33,672 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-19 18:05:33,672 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-19 18:05:33,673 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-19 18:05:33,673 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-19 18:05:33,675 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-19 18:05:33,676 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-19 18:05:33,678 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-19 18:05:33,679 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-19 18:05:33,680 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-19 18:05:33,681 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-19 18:05:33,683 - Kaori - INFO -    /cuptop10 - Ver top 10 do ranking das copinhas
+2025-09-19 18:05:33,684 - Kaori - INFO -    /rankcopas - Ativar sistema de ranking das copinhas (RXscoreCup)
+2025-09-19 18:05:33,685 - Kaori - INFO -    /desbugar - Cancelar uma copinha ativa
+2025-09-19 18:05:33,685 - Kaori - INFO -    /comprar - Comprar item da loja
+2025-09-19 18:05:33,688 - Kaori - INFO -    ... e mais 73 comandos!
+2025-09-19 18:05:33,691 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-19 18:06:32,735 - Kaori - ERROR - Erro no nuke: 400 Bad Request (error code: 40060): Interaction has already been acknowledged.
+2025-09-19 18:08:46,343 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-19 18:08:46,438 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-19 18:08:46,438 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-19 18:08:46,448 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-19 18:08:46,723 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 0 in public schema
+2025-09-19 18:08:46,723 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-19 18:08:46,723 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-19 18:08:49,736 - Kaori - WARNING - ⚠️ Não foi possível testar Flask: HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /healthz (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f68ddd48610>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-09-19 18:08:49,741 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-19 18:08:49,743 - discord.client - INFO - logging in using static token
+2025-09-19 18:08:50,548 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: 027d0911ea80af1ce0ea67df92d8a962).
+2025-09-19 18:08:52,656 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-19 18:08:52,656 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-19 18:08:52,656 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-19 18:08:52,823 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 0 in public schema
+2025-09-19 18:08:52,837 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-19 18:08:52,837 - Kaori - INFO - ✅ Database inicializado
+2025-09-19 18:08:52,837 - Kaori - INFO - 🤖 Kaori está online! Conectado como [𝑹𝑿] Ka͟o͟r͟i͟#1546
+2025-09-19 18:08:52,837 - Kaori - INFO - 📊 Conectado em 2 servidores
+2025-09-19 18:08:52,838 - Kaori - INFO - 👥 Servindo 440 usuários únicos
+2025-09-19 18:08:52,838 - Kaori - INFO - 🚀 Kaori Online! Servidores: 2 | Usuários: 440 | Latência: 78.28ms
+2025-09-19 18:08:52,839 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-19 18:08:52,841 - Kaori - INFO - ⏭️ Backup desabilitado no Railway para economia de recursos
+2025-09-19 18:08:54,129 - Kaori - ERROR - Erro na limpeza de mensagens: relation "interactive_messages" does not exist
+LINE 2: ...               SELECT message_id, channel_id FROM interactiv...
+                                                             ^
+
+2025-09-19 18:08:54,131 - Kaori - WARNING - ❌ 2FA obrigatório impediu criação de cargos em ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆
+2025-09-19 18:08:54,132 - Kaori - INFO - 💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente
+2025-09-19 18:08:54,141 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-19 18:08:59,711 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-19 18:08:59,712 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-19 18:08:59,721 - Kaori - ERROR - Erro ao restaurar mensagens interativas: relation "interactive_messages" does not exist
+LINE 3:                 FROM interactive_messages 
+                             ^
+
+2025-09-19 18:09:00,208 - Kaori - INFO - ✅ 88 slash commands sincronizados
+2025-09-19 18:09:00,208 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-19 18:09:00,208 - Kaori - INFO - 🚀 Total de comandos slash: 88
+2025-09-19 18:09:00,208 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-19 18:09:00,208 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-19 18:09:00,208 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-19 18:09:00,208 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-19 18:09:00,208 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-19 18:09:00,208 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-19 18:09:00,209 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-19 18:09:00,209 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-19 18:09:00,209 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-19 18:09:00,209 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-19 18:09:00,209 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-19 18:09:00,209 - Kaori - INFO -    /cuptop10 - Ver top 10 do ranking das copinhas
+2025-09-19 18:09:00,209 - Kaori - INFO -    /rankcopas - Ativar sistema de ranking das copinhas (RXscoreCup)
+2025-09-19 18:09:00,209 - Kaori - INFO -    /desbugar - Cancelar uma copinha ativa
+2025-09-19 18:09:00,209 - Kaori - INFO -    /comprar - Comprar item da loja
+2025-09-19 18:09:00,209 - Kaori - INFO -    ... e mais 73 comandos!
+2025-09-19 18:09:00,210 - Kaori - INFO - ✅ Status inicial configurado
