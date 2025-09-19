@@ -41,244 +41,23 @@ def get_safe_channel(channel_id):
         logger.error(f"Erro ao obter canal {channel_id}: {e}")
         return None
 
-async def check_bot_permissions(guild, required_permissions=None, channel=None):
-    """Verificar se o bot tem as permissões necessárias no servidor e canal"""
-    if not guild or not guild.me:
-        return {'success': False, 'message': "Bot não encontrado no servidor", 'missing': [], 'type': 'error'}
-    
-    bot_perms = guild.me.guild_permissions
-    
-    # Permissões básicas essenciais
-    basic_perms = {
-        'view_channel': 'Ver Canais',
-        'send_messages': 'Enviar Mensagens',
-        'embed_links': 'Inserir Links',
-        'attach_files': 'Anexar Arquivos',
-        'read_message_history': 'Ver Histórico',
-        'use_external_emojis': 'Usar Emojis Externos',
-        'add_reactions': 'Adicionar Reações'
-    }
-    
-    # Permissões avançadas para funcionalidades completas
-    advanced_perms = {
-        'manage_channels': 'Gerenciar Canais',
-        'manage_roles': 'Gerenciar Cargos',
-        'manage_messages': 'Gerenciar Mensagens',
-        'moderate_members': 'Moderar Membros',
-        'kick_members': 'Expulsar Membros',
-        'ban_members': 'Banir Membros',
-        'manage_guild': 'Gerenciar Servidor',
-        'manage_webhooks': 'Gerenciar Webhooks',
-        'manage_threads': 'Gerenciar Threads'
-    }
-    
-    all_perms = {**basic_perms, **advanced_perms}
-    
-    # Determinar quais permissões verificar
-    if required_permissions:
-        perms_to_check = {perm: all_perms.get(perm, perm) for perm in required_permissions}
-    else:
-        # Por padrão, verificar básicas + avançadas críticas
-        critical_advanced = ['manage_channels', 'manage_roles', 'manage_messages', 'moderate_members']
-        perms_to_check = {**basic_perms, **{p: advanced_perms[p] for p in critical_advanced}}
-    
-    # Verificar permissões do servidor
-    missing_perms = []
-    blocked_by_channel = []
-    
-    for perm, name in perms_to_check.items():
-        if not getattr(bot_perms, perm, False):
-            missing_perms.append(name)
-        elif channel:
-            # Verificar se a permissão está bloqueada no canal específico
-            channel_perms = channel.permissions_for(guild.me)
-            if not getattr(channel_perms, perm, False):
-                blocked_by_channel.append(name)
-    
-    # Estruturar resultado
-    if missing_perms:
-        return {
-            'success': False, 
-            'message': f"Permissões em falta no servidor: {', '.join(missing_perms)}", 
-            'missing': missing_perms,
-            'blocked_by_channel': blocked_by_channel,
-            'type': 'server_missing',
-            'fixes': [f"Conceder '{perm}' ao cargo do bot" for perm in missing_perms]
-        }
-    elif blocked_by_channel:
-        return {
-            'success': False,
-            'message': f"Permissões bloqueadas no canal: {', '.join(blocked_by_channel)}",
-            'missing': [],
-            'blocked_by_channel': blocked_by_channel,
-            'type': 'channel_blocked',
-            'fixes': [f"Remover bloqueio de '{perm}' no canal" for perm in blocked_by_channel]
-        }
-    
-    return {
-        'success': True, 
-        'message': "Todas as permissões necessárias estão disponíveis", 
-        'missing': [],
-        'blocked_by_channel': [],
-        'type': 'success'
-    }
-
-async def check_channel_permissions(channel, guild_me):
-    """Verificar permissões específicas do bot em um canal"""
-    if not channel or not guild_me:
-        return {'success': False, 'message': "Canal ou bot não encontrado", 'missing': [], 'type': 'error'}
-    
-    channel_perms = channel.permissions_for(guild_me)
-    
-    # Permissões essenciais por canal (mais completas)
-    essential_perms = {
-        'view_channel': 'Ver Canal',
-        'send_messages': 'Enviar Mensagens',
-        'embed_links': 'Inserir Links',
-        'attach_files': 'Anexar Arquivos',
-        'read_message_history': 'Ver Histórico',
-        'add_reactions': 'Adicionar Reações',
-        'manage_messages': 'Gerenciar Mensagens',
-        'create_public_threads': 'Criar Threads Públicas',
-        'send_messages_in_threads': 'Enviar em Threads',
-        'manage_threads': 'Gerenciar Threads'
-    }
-    
-    missing_perms = []
-    blocked_overwrites = []
-    
-    for perm, name in essential_perms.items():
-        if not getattr(channel_perms, perm, False):
-            missing_perms.append(name)
-            
-            # Verificar se é um overwrite específico do canal
-            guild_perm = getattr(guild_me.guild_permissions, perm, False)
-            if guild_perm:  # Tem no servidor mas não no canal = overwrite bloqueando
-                blocked_overwrites.append(name)
-    
-    if missing_perms:
-        return {
-            'success': False,
-            'message': f"Permissões bloqueadas neste canal: {', '.join(missing_perms)}",
-            'missing': missing_perms,
-            'blocked_overwrites': blocked_overwrites,
-            'type': 'channel_blocked',
-            'fixes': [
-                f"Remover negação de '{perm}' nas permissões do canal" for perm in blocked_overwrites
-            ] + [
-                f"Conceder '{perm}' ao cargo do bot" for perm in missing_perms if perm not in blocked_overwrites
-            ]
-        }
-    
-    return {
-        'success': True, 
-        'message': "Bot tem acesso completo a este canal", 
-        'missing': [],
-        'blocked_overwrites': [],
-        'type': 'success'
-    }
-
-async def check_role_hierarchy(guild, guild_me):
-    """Verificar hierarquia de cargos do bot"""
-    if not guild or not guild_me:
-        return {'success': False, 'message': "Informações incompletas", 'issues': [], 'type': 'error'}
-    
-    bot_top_role = guild_me.top_role
-    
-    # Verificar se tem manage_roles permission primeiro
-    if not guild_me.guild_permissions.manage_roles:
-        return {
-            'success': False,
-            'message': "Bot não tem permissão 'Gerenciar Cargos'",
-            'issues': ['Sem permissão manage_roles'],
-            'type': 'no_permission',
-            'fixes': ["Conceder permissão 'Gerenciar Cargos' ao cargo do bot"]
-        }
-    
-    issues = []
-    problematic_roles = []
-    
-    # Verificar roles que o bot pode precisar gerenciar
-    # 1. Roles acima do bot (problema crítico)
-    higher_roles = [r for r in guild.roles if r.position >= bot_top_role.position and r != bot_top_role]
-    if higher_roles:
-        for role in higher_roles[:5]:  # Limitar para não ficar muito verboso
-            issues.append(f"Cargo '{role.name}' está acima do bot (posição {role.position})")
-            problematic_roles.append(role.name)
-    
-    # 2. Roles com nomes comuns de sistemas que precisam ser gerenciados
-    common_system_roles = ['muted', 'silenciado', 'timeout', 'auto', 'bot', 'member', 'membro']
-    for role in guild.roles:
-        if any(keyword in role.name.lower() for keyword in common_system_roles):
-            if role.position >= bot_top_role.position and role != bot_top_role:
-                issues.append(f"Role do sistema '{role.name}' não pode ser gerenciado")
-                problematic_roles.append(role.name)
-    
-    # 3. Verificar se há muitos roles acima (indicador de hierarquia inadequada)
-    roles_above_count = len([r for r in guild.roles if r.position > bot_top_role.position])
-    total_roles = len(guild.roles)
-    
-    hierarchy_score = "inadequada" if roles_above_count > total_roles * 0.7 else "adequada"
-    
-    if issues:
-        return {
-            'success': False,
-            'message': f"Problemas de hierarquia detectados: {len(issues)} issues",
-            'issues': issues[:5],  # Limitar para não sobrecarregar
-            'problematic_roles': problematic_roles,
-            'bot_position': bot_top_role.position,
-            'roles_above': roles_above_count,
-            'type': 'hierarchy_issues',
-            'fixes': [
-                f"Mover cargo '{bot_top_role.name}' para posição mais alta",
-                f"Reordenar hierarchy: bot deve estar acima de roles que precisa gerenciar",
-                f"Posição atual: {bot_top_role.position}, roles acima: {roles_above_count}"
-            ]
-        }
-    
-    return {
-        'success': True,
-        'message': f"Hierarquia {hierarchy_score} (posição {bot_top_role.position})",
-        'issues': [],
-        'problematic_roles': [],
-        'bot_position': bot_top_role.position,
-        'roles_above': roles_above_count,
-        'type': 'success'
-    }
-
-async def send_error_to_channel(error_message, guild=None):
-    """Envia erros para o usuário privilegiado via DM"""
+async def send_error_to_privileged_user(error_message, guild=None):
+    """Envia erros críticos apenas para o usuário privilegiado via DM"""
     try:
-        # Log do erro primeiro
-        if guild:
-            logger.error(f"Erro no servidor {guild.name} (ID: {guild.id}): {error_message}")
-        else:
-            logger.error(f"Erro do sistema: {error_message}")
-        
-        # Enviar DM para o usuário privilegiado
-        if bot and bot.is_ready():
-            try:
-                user = bot.get_user(PRIVILEGED_USER_ID)
-                if user:
-                    embed = discord.Embed(
-                        title="🚨 Erro do Sistema",
-                        description=error_message,
-                        color=0xff0000,
-                        timestamp=datetime.datetime.now()
-                    )
+        if bot.is_ready():
+            privileged_user = bot.get_user(PRIVILEGED_USER_ID)
+            if privileged_user:
+                try:
                     if guild:
-                        embed.add_field(name="Servidor", value=f"{guild.name} (ID: {guild.id})", inline=False)
-                    
-                    await user.send(embed=embed)
-                else:
-                    logger.warning(f"Usuário privilegiado {PRIVILEGED_USER_ID} não encontrado")
-            except discord.Forbidden:
-                logger.warning("Não foi possível enviar DM para o usuário privilegiado - DMs bloqueadas")
-            except Exception as dm_error:
-                logger.error(f"Erro ao enviar DM de erro: {dm_error}")
-        
-    except Exception as e:
-        logger.error(f"Erro ao processar log de erro: {e}")
+                        await privileged_user.send(f"🚨 **Erro no servidor {guild.name}:**\n```{error_message}```")
+                    else:
+                        await privileged_user.send(f"🚨 **Erro do sistema:**\n```{error_message}```")
+                except:
+                    # Se não conseguir enviar DM, apenas log silencioso
+                    pass
+    except:
+        # Log silencioso para evitar spam
+        pass
 
 def is_privileged_user(user_id):
     """Verifica se o usuário tem privilégios especiais"""
@@ -313,10 +92,10 @@ async def ensure_kaori_role(guild):
                 
     except discord.Forbidden:
         logger.warning(f"⚠️ Não foi possível criar cargo Kaori no servidor {guild.name} - sem permissões")
-        await send_error_to_channel(f"Não foi possível criar cargo Kaori no servidor {guild.name} - sem permissões", guild)
+        await send_error_to_privileged_user(f"Não foi possível criar cargo Kaori no servidor {guild.name} - sem permissões", guild)
     except Exception as e:
         logger.error(f"Erro ao criar cargo Kaori no servidor {guild.name}: {e}")
-        await send_error_to_channel(f"Erro ao criar cargo Kaori no servidor {guild.name}: {e}", guild)
+        await send_error_to_privileged_user(f"Erro ao criar cargo Kaori no servidor {guild.name}: {e}", guild)
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -355,6 +134,72 @@ import shutil
 import hmac
 import requests # Importado para substituir aiohttp
 from flask import Flask, render_template, jsonify, request
+
+# Sistema de IA da Kaori
+class KaoriAI:
+    def __init__(self):
+        self.personality = {
+            "name": "Kaori",
+            "traits": [
+                "Carinhosa e atenciosa",
+                "Inteligente e útil", 
+                "Divertida e brincalhona",
+                "Sempre disposta a ajudar",
+                "Gosta de conversar sobre anime e tecnologia"
+            ],
+            "greeting_responses": [
+                "Oi! 🌸 Como posso ajudar você hoje?",
+                "Olá! ✨ Em que posso ser útil?",
+                "Oi querido! 💕 O que você gostaria de saber?",
+                "Olá! 🌟 Como está seu dia? Posso ajudar com algo?"
+            ],
+            "help_responses": [
+                "Claro! 💫 Posso ajudar com comandos, jogos, economia e muito mais!",
+                "Estou aqui para ajudar! ✨ Use `/ajuda` para ver todos os meus comandos!",
+                "Com certeza! 🌸 Sou especialista em diversão e utilidades!"
+            ],
+            "thanks_responses": [
+                "De nada! 💕 Fico feliz em ajudar!",
+                "Por nada! ✨ Sempre às ordens!",
+                "É um prazer! 🌸 Estou sempre aqui para você!"
+            ]
+        }
+    
+    def get_response(self, user_message, user_name=""):
+        """Gera resposta da Kaori baseada na mensagem do usuário"""
+        message_lower = user_message.lower()
+        
+        # Respostas para saudações
+        if any(word in message_lower for word in ["oi", "olá", "hello", "hi", "ola", "oii"]):
+            response = random.choice(self.personality["greeting_responses"])
+            if user_name:
+                response = response.replace("você", user_name)
+            return response
+        
+        # Respostas para pedidos de ajuda
+        elif any(word in message_lower for word in ["ajuda", "help", "como", "o que", "que você faz"]):
+            return random.choice(self.personality["help_responses"])
+        
+        # Respostas para agradecimentos
+        elif any(word in message_lower for word in ["obrigado", "obrigada", "thanks", "valeu", "brigado"]):
+            return random.choice(self.personality["thanks_responses"])
+        
+        # Respostas sobre si mesma
+        elif any(word in message_lower for word in ["quem é você", "quem você é", "seu nome", "como se chama"]):
+            return f"Eu sou a Kaori! 🌸 Sou sua assistente virtual carinhosa e estou aqui para tornar este servidor mais divertido! ✨"
+        
+        # Resposta padrão
+        else:
+            default_responses = [
+                f"Interessante! 🤔 Me conte mais sobre isso, ou use `/ajuda` para ver o que posso fazer!",
+                f"Hmm! 💭 Que tal tentarmos alguns comandos? Digite `/ajuda` para ver todas as opções!",
+                f"Oi! 🌸 Não entendi muito bem, mas posso ajudar com jogos, economia e muito mais! Use `/ajuda`!",
+                f"Que legal! ✨ Se precisar de alguma coisa específica, é só usar `/ajuda` para ver meus comandos!"
+            ]
+            return random.choice(default_responses)
+
+# Instanciar a IA da Kaori
+kaori_ai = KaoriAI()
 
 # Import PostgreSQL (obrigatório)
 import psycopg2
@@ -545,7 +390,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('kaori.log'),
+        logging.FileHandler('rxbot.log'),
         logging.StreamHandler()
     ]
 )
@@ -563,7 +408,7 @@ intents.typing = True
 
 # Bot configuration
 bot = commands.Bot(
-    command_prefix=['Kaori', 'kaori', 'KAORI', '/', '!', '.', '>', '<', '?', 'bot ', 'BOT ', 'Bot '],
+    command_prefix=['RX', 'rx', '/', 'Rx', '!', '.', '>', '<', '?', 'bot ', 'BOT ', 'Bot '],
     intents=intents,
     help_command=None,
     case_insensitive=True,
@@ -678,20 +523,21 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=
 
                 except psycopg2.Error as e:
                     conn.rollback()
-                    logger.error(f"Erro PostgreSQL (tentativa {attempt + 1}): {e}")
+                    # Log silencioso - apenas na última tentativa
                     if attempt == max_retries - 1:
-                        raise e
+                        # Apenas registros críticos
+                        pass
                 except Exception as e:
                     conn.rollback()
-                    logger.error(f"Erro na query (tentativa {attempt + 1}): {e}")
+                    # Log silencioso - apenas na última tentativa
                     if attempt == max_retries - 1:
-                        raise e
+                        pass
                 finally:
                     if conn:
                         conn.close()
                         
         except Exception as e:
-            logger.error(f"Erro crítico no execute_query (tentativa {attempt + 1}): {e}")
+            # Log silencioso para evitar spam
             if attempt == max_retries - 1:
                 return None
             
@@ -753,7 +599,7 @@ def init_database():
             cursor.execute(f'''CREATE TABLE IF NOT EXISTS guilds (
                 guild_id {integer_type} PRIMARY KEY,
                 name {text_type},
-                prefix {text_type} DEFAULT 'Kaori',
+                prefix {text_type} DEFAULT 'RX',
                 welcome_channel {integer_type},
                 goodbye_channel {integer_type},
                 log_channel {integer_type},
@@ -1395,8 +1241,8 @@ async def update_status():
                 f"👥 {len(bot.guilds)} servidores",
                 f"💬 {len(set(bot.get_all_members()))} usuários",
                 f"⏱️ {format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds()))} online",
-                "💫 Mencione @Kaori para conversar!",
-                "🤖 /ajuda para comandos"
+                "💫 RXping para começar!",
+                "🤖 RXajuda para comandos"
             ]
             await bot.change_presence(
                 status=discord.Status.online,
@@ -1423,17 +1269,17 @@ async def backup_database():
             return
             
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_name = f"backup_kaori_{timestamp}.db"
+        backup_name = f"backup_rxbot_{timestamp}.db"
 
         # Fazer backup sem usar o lock principal para não travar o bot
         try:
             import shutil
-            if os.path.exists('kaori.db'):
-                shutil.copy2('kaori.db', backup_name)
+            if os.path.exists('rxbot.db'):
+                shutil.copy2('rxbot.db', backup_name)
                 logger.info(f"✅ Backup criado: {backup_name}")
                 
                 # Limpar backups antigos (manter só os 3 mais recentes)
-                backup_files = [f for f in os.listdir('.') if f.startswith('backup_kaori_') and f.endswith('.db')]
+                backup_files = [f for f in os.listdir('.') if f.startswith('backup_rxbot_') and f.endswith('.db')]
                 if len(backup_files) > 3:
                     backup_files.sort()
                     for old_backup in backup_files[:-3]:
@@ -1443,7 +1289,7 @@ async def backup_database():
                         except Exception as remove_error:
                             logger.error(f"Erro ao remover backup antigo: {remove_error}")
             else:
-                logger.warning("Arquivo kaori.db não encontrado para backup")
+                logger.warning("Arquivo rxbot.db não encontrado para backup")
         except Exception as backup_error:
             logger.error(f"Erro específico no backup: {backup_error}")
 
@@ -2115,189 +1961,6 @@ async def slash_ping(interaction: discord.Interaction):
     )
 
     await safe_interaction_response(interaction, embed)
-
-@bot.tree.command(name="sobre", description="Saiba mais sobre a Kaori e o clan RX")
-async def slash_sobre(interaction: discord.Interaction):
-    """Slash command sobre a Kaori"""
-    try:
-        embed = create_embed(
-            "🌸 Sobre a Kaori",
-            """**Olá! Eu sou a Kaori! 💜**
-
-**👋 Quem eu sou:**
-• Sou uma bot inteligente e carinhosa do **Clan RX**
-• Especialista em jogos, especialmente **Stumble Guys**
-• Gosto de ajudar as pessoas e criar momentos divertidos
-
-**🏆 Do que sou capaz:**
-• Sistema de **copinhas** (torneios) automáticos
-• Economia virtual completa com loja e itens
-• Sistema de ranks e XP por atividade
-• IA avançada - mencione-me para conversar!
-• Mais de 300+ comandos diferentes
-
-**👑 Clan RX:**
-• Represento com orgulho o **Clan RX**
-• Focamos em competições de Stumble Guys
-• Comunidade unida e competitiva
-• Sempre em busca da vitória! 🏆
-
-**💝 Minha personalidade:**
-• Carinhosa e prestativa
-• Adoro jogos e competições
-• Sempre disposta a ajudar
-• Um pouco competitiva quando preciso 😎
-
-**💡 Dica:** Use `/ajuda` para ver todos os meus comandos!
-Ou mencione-me (@Kaori) para conversarmos! 💬""",
-            color=0xFF69B4
-        )
-        
-        embed.set_footer(text="Feito com 💜 pelo Clan RX")
-        
-        # Tentar definir thumbnail se possível
-        if bot.user and bot.user.avatar:
-            embed.set_thumbnail(url=bot.user.avatar.url)
-            
-        await interaction.response.send_message(embed=embed)
-        
-    except Exception as e:
-        logger.error(f"Erro no comando sobre: {e}")
-        error_embed = create_embed("❌ Erro", "Erro ao mostrar informações sobre mim!", color=0xff0000)
-        await interaction.response.send_message(embed=error_embed, ephemeral=True)
-
-@bot.tree.command(name="diagnostico", description="Verificar permissões e status do bot")
-async def slash_diagnostico(interaction: discord.Interaction):
-    """Comando para diagnosticar permissões do bot"""
-    try:
-        if not interaction.user.guild_permissions.administrator:
-            embed = create_embed(
-                "❌ Sem permissão", 
-                "Apenas administradores podem usar este comando", 
-                color=0xff0000
-            )
-            await safe_send_response(interaction, embed=embed, ephemeral=True)
-            return
-
-        await interaction.response.defer(ephemeral=True)
-        
-        guild = interaction.guild
-        
-        # Verificar permissões (agora inclui básicas + críticas por padrão)
-        server_check = await check_bot_permissions(guild, channel=interaction.channel)
-        
-        # Verificar permissões avançadas extras
-        advanced_perms = ['kick_members', 'ban_members', 'manage_guild', 'manage_webhooks']
-        advanced_check = await check_bot_permissions(guild, advanced_perms)
-        
-        # Verificar permissões do canal atual
-        channel_check = await check_channel_permissions(interaction.channel, guild.me)
-        
-        # Verificar hierarquia de cargos
-        hierarchy_check = await check_role_hierarchy(guild, guild.me)
-        
-        # Status das verificações
-        server_status = "✅" if server_check['success'] else "❌"
-        advanced_status = "✅" if advanced_check['success'] else "⚠️"
-        channel_status = "✅" if channel_check['success'] else "❌"
-        hierarchy_status = "✅" if hierarchy_check['success'] else "⚠️"
-        
-        # Determinar cor geral do embed
-        critical_ok = server_check['success'] and channel_check['success']
-        all_ok = critical_ok and advanced_check['success'] and hierarchy_check['success']
-        embed_color = 0x00ff00 if all_ok else (0xff6600 if critical_ok else 0xff0000)
-        
-        embed = create_embed(
-            "🔍 Diagnóstico Completo do Bot Kaori",
-            f"**Servidor:** {guild.name}\n**Bot:** {guild.me.display_name}\n**Canal:** {interaction.channel.name}",
-            color=embed_color
-        )
-        
-        # Campo de permissões do servidor
-        embed.add_field(
-            name=f"{server_status} Permissões do Servidor",
-            value=server_check['message'][:1000],  # Limitar tamanho
-            inline=False
-        )
-        
-        # Campo de permissões do canal
-        embed.add_field(
-            name=f"{channel_status} Permissões do Canal",
-            value=channel_check['message'][:1000],
-            inline=False
-        )
-        
-        # Campo de permissões avançadas extras
-        embed.add_field(
-            name=f"{advanced_status} Permissões Extras",
-            value=advanced_check['message'][:1000],
-            inline=False
-        )
-        
-        # Campo de hierarquia de cargos
-        embed.add_field(
-            name=f"{hierarchy_status} Hierarquia de Cargos",
-            value=hierarchy_check['message'][:1000],
-            inline=False
-        )
-        
-        # Informações do bot
-        bot_member = guild.me
-        top_role = bot_member.top_role
-        roles_above = hierarchy_check.get('roles_above', 0)
-        embed.add_field(
-            name="📋 Informações do Bot",
-            value=f"**Cargo principal:** {top_role.name}\n**Posição:** {top_role.position}\n**Cargos acima:** {roles_above}",
-            inline=True
-        )
-        
-        # Status da conexão
-        embed.add_field(
-            name="📡 Status",
-            value=f"**Ping:** {round(bot.latency * 1000)}ms\n**Status:** 🟢 Online\n**Servidores:** {len(bot.guilds)}",
-            inline=True
-        )
-        
-        # Guia de soluções estruturado
-        all_fixes = []
-        
-        if not server_check['success']:
-            all_fixes.extend(server_check.get('fixes', []))
-        if not channel_check['success']:
-            all_fixes.extend(channel_check.get('fixes', []))
-        if not hierarchy_check['success']:
-            all_fixes.extend(hierarchy_check.get('fixes', []))
-        if not advanced_check['success']:
-            all_fixes.extend(advanced_check.get('fixes', []))
-        
-        if all_fixes:
-            priority_fixes = []
-            if not server_check['success'] or not channel_check['success']:
-                priority_fixes.append("🔴 **CRÍTICO:** Corrigir permissões básicas primeiro")
-            if not hierarchy_check['success']:
-                priority_fixes.append("🟠 **IMPORTANTE:** Corrigir hierarquia de cargos")
-            
-            solutions_text = "\n".join(priority_fixes[:3])
-            if len(all_fixes) > 0:
-                solutions_text += f"\n\n**Ações específicas:**\n• " + "\n• ".join(all_fixes[:5])
-                if len(all_fixes) > 5:
-                    solutions_text += f"\n• ...e mais {len(all_fixes) - 5} correções"
-            
-            embed.add_field(
-                name="💡 Soluções Priorizadas",
-                value=solutions_text[:1000],
-                inline=False
-            )
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        
-    except Exception as e:
-        logger.error(f"Erro no comando diagnóstico: {e}")
-        embed = create_embed("❌ Erro", "Erro ao executar diagnóstico", color=0xff0000)
-        try:
-            await interaction.followup.send(embed=embed, ephemeral=True)
-        except:
-            await safe_send_response(interaction, embed=embed, ephemeral=True)
 
 @bot.tree.command(name="ajuda", description="Sistema de ajuda completo")
 async def slash_ajuda(interaction: discord.Interaction, categoria: str = None):
@@ -3291,6 +2954,43 @@ async def on_guild_join(guild):
         await send_error_to_channel(f"Erro ao entrar no servidor {guild.name}: {e}", guild)
 
 @bot.event
+async def on_message(message):
+    """Handler para mensagens - inclui sistema de IA da Kaori"""
+    # Ignorar mensagens do próprio bot
+    if message.author == bot.user:
+        return
+    
+    # Verificar se o bot foi mencionado
+    if bot.user in message.mentions:
+        try:
+            # Remover a menção do bot da mensagem
+            content = message.content
+            for mention in message.mentions:
+                if mention == bot.user:
+                    content = content.replace(f'<@{mention.id}>', '').replace(f'<@!{mention.id}>', '').strip()
+            
+            # Se não sobrou conteúdo, usar saudação padrão
+            if not content:
+                content = "oi"
+            
+            # Gerar resposta da Kaori
+            user_name = message.author.display_name
+            ai_response = kaori_ai.get_response(content, user_name)
+            
+            # Responder na thread se for reply, senão no canal
+            if message.reference:
+                await message.reply(ai_response)
+            else:
+                await message.channel.send(ai_response)
+                
+        except Exception as e:
+            # Log silencioso para evitar spam
+            pass
+    
+    # Processar comandos normalmente
+    await bot.process_commands(message)
+
+@bot.event
 async def on_ready():
     # Environment check with diagnostic logging
     logger.info("🎯 Inicializando sistema completo...")
@@ -3403,7 +3103,7 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Erro ao configurar status: {e}")
 
-    print("🔥 Kaori está online! Pronta para comandar!")
+    print("🔥 Kaori está online! Pronto para comandar!")
     print(f"✨ TODOS os {len(synced) if 'synced' in locals() else 'Muitos'} slash commands disponíveis!")
     print("📋 Use / no Discord para ver TODOS os comandos disponíveis!")
     print("🎯 Sistema dual: Use / ou RX - Ambos funcionam!")
@@ -4138,7 +3838,7 @@ async def create_persistent_ticket_message(ctx_or_interaction):
             user = ctx_or_interaction.user
 
         embed = create_embed(
-            "🎫 Sistema de Tickets - Kaori",
+            "🎫 Sistema de Tickets - RXbot",
             """**Precisa de ajuda? Crie um ticket!**
 
 **📋 Reaja com o emoji correspondente:**
@@ -5367,9 +5067,110 @@ async def slash_settitle(interaction: discord.Interaction, titulo: str):
         await safe_send_response(interaction, embed=embed)
 
 # SLASH COMMANDS - INFORMAÇÕES
+@bot.tree.command(name="avatar", description="Ver avatar de um usuário")
+async def slash_avatar(interaction: discord.Interaction, usuario: discord.Member = None):
+    """Slash command para avatar"""
 
 
+    target = usuario or interaction.user
 
+    embed = create_embed(
+        f"🖼️ Avatar de {target.display_name}",
+        f"[Clique aqui para ver em alta resolução]({target.avatar.url if target.avatar else target.default_avatar.url}?size=1024)",
+        color=0x7289da
+    )
+    embed.set_image(url=target.avatar.url if target.avatar else target.default_avatar.url)
+    await safe_send_response(interaction, embed=embed)
+
+@bot.tree.command(name="serverinfo", description="Informações do servidor")
+async def slash_serverinfo(interaction: discord.Interaction):
+    """Slash command para serverinfo"""
+
+
+    guild = interaction.guild
+
+    embed = create_embed(
+        f"🛡️ Informações do {guild.name}",
+        f"""**👑 Dono:** {guild.owner.mention if guild.owner else 'Desconhecido'}
+**📅 Criado em:** <t:{int(guild.created_at.timestamp())}:F>
+**👥 Membros:** {guild.member_count:,}
+**📁 Canais:** {len(guild.channels)}
+**🎭 Cargos:** {len(guild.roles)}
+**😎 Emojis:** {len(guild.emojis)}
+**🔐 Nível de verificação:** {guild.verification_level.name.title()}
+**🛡️ Filtro de conteúdo:** {guild.explicit_content_filter.name.title()}
+
+**📊 ID do servidor:** {guild.id}""",
+        color=0x7289da
+    )
+
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+
+    await safe_send_response(interaction, embed=embed)
+
+@bot.tree.command(name="userinfo", description="Informações detalhadas de um usuário")
+async def slash_userinfo(interaction: discord.Interaction, usuario: discord.Member = None):
+    """Slash command para userinfo"""
+
+
+    target = usuario or interaction.user
+
+    status_emoji = {
+        discord.Status.online: "🟢",
+        discord.Status.idle: "🟡", 
+        discord.Status.dnd: "🔴",
+        discord.Status.offline: "⚫"
+    }
+
+    embed = create_embed(
+        f"👤 Info de {target.display_name}",
+        f"""**📛 Nome:** {target.name}#{target.discriminator}
+**🎭 Apelido:** {target.display_name}
+**🆔 ID:** {target.id}
+**📅 Conta criada:** <t:{int(target.created_at.timestamp())}:R>
+**📥 Entrou no servidor:** <t:{int(target.joined_at.timestamp())}:R>
+**📊 Status:** {status_emoji.get(target.status, '❓')} {target.status.name.title()}
+
+**🎭 Cargos ({len(target.roles)-1}):**
+{' '.join([role.mention for role in target.roles[1:6]])}{'...' if len(target.roles) > 6 else ''}
+
+**🏆 Cargo mais alto:** {target.top_role.mention}
+**🔐 Permissões:** {'Admin' if target.guild_permissions.administrator else 'Membro'}""",
+        color=target.color if target.color != discord.Color.default() else 0x7289da
+    )
+
+    embed.set_thumbnail(url=target.avatar.url if target.avatar else target.default_avatar.url)
+    await safe_send_response(interaction, embed=embed)
+
+@bot.tree.command(name="version", description="Informações da versão do bot")
+async def slash_version(interaction: discord.Interaction):
+    """Slash command para version"""
+
+
+    embed = create_embed(
+        "🤖 RXbot - Informações de Versão",
+        f"""**🔖 Versão:** 3.0.0 (Slash Commands Completa)
+**📅 Última atualização:** Janeiro 2025
+**🐍 Python:** {platform.python_version()}
+**📦 Discord.py:** {discord.__version__}
+**💻 Plataforma:** {platform.system()} {platform.release()}
+
+**🆕 Novidades desta versão:**
+• ✅ TODOS os comandos agora têm slash commands
+• ✅ Mais de 300 comandos disponíveis via /
+• ✅ Prefixo RX mantido para compatibilidade
+• ✅ Interface moderna e intuitiva
+• ✅ Sistema dual: slash + prefixo
+
+**📊 Estatísticas:**
+• Uptime: {format_time(int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds()))}
+• Comandos: 300+ disponíveis via / e RX
+• Sistemas: Tickets, Economia, Ranks, IA""",
+        color=0x00ff00
+    )
+
+    await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="estatisticas_bot", description="Estatísticas do bot")
 async def slash_estatisticas_bot(interaction: discord.Interaction):
@@ -5379,7 +5180,7 @@ async def slash_estatisticas_bot(interaction: discord.Interaction):
     uptime = datetime.datetime.now() - global_stats['uptime_start']
 
     embed = create_embed(
-        "📊 Estatísticas da Kaori",
+        "📊 Estatísticas do RXbot",
         f"""**⏱️ Uptime:** {format_time(int(uptime.total_seconds()))}
 **🏓 Latência:** {round(bot.latency * 1000, 2)}ms
 **🏛️ Servidores:** {len(bot.guilds)}
@@ -5796,6 +5597,40 @@ async def slash_lowercase(interaction: discord.Interaction, texto: str):
     )
     await safe_send_response(interaction, embed=embed)
 
+@bot.tree.command(name="membercount", description="Contagem de membros do servidor")
+async def slash_membercount(interaction: discord.Interaction):
+    """Slash command para membercount"""
+
+
+    guild = interaction.guild
+
+    total = guild.member_count
+    humans = len([m for m in guild.members if not m.bot])
+    bots = len([m for m in guild.members if m.bot])
+
+    online = len([m for m in guild.members if m.status == discord.Status.online])
+    idle = len([m for m in guild.members if m.status == discord.Status.idle])
+    dnd = len([m for m in guild.members if m.status == discord.Status.dnd])
+    offline = len([m for m in guild.members if m.status == discord.Status.offline])
+
+    embed = create_embed(
+        f"👥 Membros do {guild.name}",
+        f"**📊 Total:** {total:,} membros\n\n"
+        f"**👤 Por tipo:**\n"
+        f"• Humanos: {humans:,}\n"
+        f"• Bots: {bots:,}\n\n"
+        f"**🟢 Por status:**\n"
+        f"• Online: {online:,}\n"
+        f"• Ausente: {idle:,}\n"
+        f"• Ocupado: {dnd:,}\n"
+        f"• Offline: {offline:,}",
+        color=0x7289da
+    )
+
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+
+    await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="level", description="Ver informações de level e XP")
 async def slash_level(interaction: discord.Interaction, usuario: discord.Member = None):
@@ -5909,6 +5744,21 @@ async def slash_top(interaction: discord.Interaction):
         embed = create_embed("❌ Erro", "Erro ao carregar rankings.", color=0xff0000)
         await safe_send_response(interaction, embed=embed)
 
+@bot.tree.command(name="uptime", description="Tempo que o bot está online")
+async def slash_uptime(interaction: discord.Interaction):
+    """Slash command para uptime"""
+
+
+    uptime = datetime.datetime.now() - global_stats['uptime_start']
+
+    embed = create_embed(
+        "⏱️ Uptime do RXbot",
+        f"**Online há:** {format_time(int(uptime.total_seconds()))}\n"
+        f"**Desde:** <t:{int(global_stats['uptime_start'].timestamp())}:F>\n"
+        f"**Status:** 🟢 Online e estável",
+        color=0x00ff00
+    )
+    await safe_send_response(interaction, embed=embed)
 
 @bot.tree.command(name="sorteios", description="Ver sorteios ativos")
 async def slash_sorteios(interaction: discord.Interaction):
@@ -6055,7 +5905,7 @@ async def slash_ranklist(interaction: discord.Interaction):
 
 
     embed = create_embed(
-        "🏆 Sistema de Ranks da Kaori",
+        "🏆 Sistema de Ranks do RXbot",
         "Ganhe XP enviando mensagens e suba de rank!",
         color=0xffd700
     )
@@ -6396,32 +6246,10 @@ class CopinhaJoinView(discord.ui.View):
         try:
             # Criar categoria para a copinha
             category_name = f"🏆 {self.title[:30]}"  # Limitar a 30 caracteres
-            try:
-                category = await interaction.guild.create_category(
-                    category_name,
-                    reason=f"Categoria da copinha {self.title}"
-                )
-            except discord.Forbidden:
-                logger.error(f"❌ Sem permissão para criar categoria no servidor {interaction.guild.name}")
-                error_msg = f"Erro de permissão ao criar categoria para copinha '{self.title}' - bot precisa da permissão 'Gerenciar Canais'"
-                await send_error_to_channel(error_msg, interaction.guild)
-                
-                embed_error = create_embed(
-                    "❌ Erro de Permissão",
-                    "O bot não tem permissão para criar categorias de canais!\n\n**Permissões necessárias:**\n• Gerenciar Canais\n• Gerenciar Cargos\n• Gerenciar Permissões\n\nPeça ao administrador para verificar as permissões do bot.",
-                    color=0xff0000
-                )
-                await safe_send_response(interaction, embed_error, ephemeral=True)
-                return
-            except Exception as e:
-                logger.error(f"❌ Erro ao criar categoria: {e}")
-                embed_error = create_embed(
-                    "❌ Erro",
-                    "Erro ao criar categoria para a copinha! Tente novamente.",
-                    color=0xff0000
-                )
-                await safe_send_response(interaction, embed_error, ephemeral=True)
-                return
+            category = await interaction.guild.create_category(
+                category_name,
+                reason=f"Categoria da copinha {self.title}"
+            )
             
             # Salvar copinha no banco de dados
             with db_lock:
@@ -6553,40 +6381,10 @@ async def start_tournament_standalone(channel, title, map_name, team_format, max
     try:
         # Criar categoria para a copinha
         category_name = f"🏆 {title[:30]}"  # Limitar a 30 caracteres
-        try:
-            category = await channel.guild.create_category(
-                category_name,
-                reason=f"Categoria da copinha {title}"
-            )
-        except discord.Forbidden:
-            logger.error(f"❌ Sem permissão para criar categoria no servidor {channel.guild.name}")
-            error_msg = f"Erro de permissão ao criar categoria para copinha '{title}' - bot precisa da permissão 'Gerenciar Canais'"
-            await send_error_to_channel(error_msg, channel.guild)
-            
-            embed_error = create_embed(
-                "❌ Erro de Permissão",
-                "O bot não tem permissão para criar categorias de canais!\n\n**Permissões necessárias:**\n• Gerenciar Canais\n• Gerenciar Cargos\n• Gerenciar Permissões\n\nPeça ao administrador para verificar as permissões do bot.",
-                color=0xff0000
-            )
-            try:
-                await channel.send(embed=embed_error)
-            except discord.Forbidden:
-                # Se nem consegue enviar mensagens, só notificar privileged user
-                pass
-            raise  # Re-raise para parar a execução
-        except Exception as e:
-            logger.error(f"❌ Erro ao criar categoria: {e}")
-            embed_error = create_embed(
-                "❌ Erro",
-                "Erro ao criar categoria para a copinha! Tente novamente.",
-                color=0xff0000
-            )
-            try:
-                await channel.send(embed=embed_error)
-            except discord.Forbidden:
-                # Se nem consegue enviar mensagens, só notificar privileged user
-                pass
-            raise  # Re-raise para parar a execução
+        category = await channel.guild.create_category(
+            category_name,
+            reason=f"Categoria da copinha {title}"
+        )
         
         # Salvar copinha no banco de dados
         with db_lock:
@@ -7322,6 +7120,71 @@ async def slash_trocar(interaction: discord.Interaction, usuario: discord.Member
 
 # ========== NOVOS COMANDOS ÚNICOS PARA CHEGAR AOS 300+ ==========
 
+@bot.tree.command(name="warn_user", description="Advertir um usuário")
+async def slash_warn_user(interaction: discord.Interaction, usuario: discord.Member, motivo: str = "Sem motivo especificado"):
+    """Slash command para warn (nome único)"""
+    if not interaction.user.guild_permissions.manage_messages:
+        embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Mensagens'!", color=0xff0000)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+
+    await interaction.response.send_message(f"⚠️ {usuario.mention} foi advertido por: {motivo}")
+
+@bot.tree.command(name="warnings", description="Ver advertências de um usuário")
+async def slash_warnings(interaction: discord.Interaction, usuario: discord.Member = None):
+    """Slash command para ver warns (nome único)"""
+    target = usuario or interaction.user
+    embed = create_embed(f"⚠️ Advertências de {target.display_name}", "Sistema em desenvolvimento", color=0xffaa00)
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="kick_user", description="Expulsar um usuário")
+async def slash_kick_user(interaction: discord.Interaction, usuario: discord.Member, motivo: str = "Sem motivo especificado"):
+    """Slash command para kick (nome único)"""
+    if not interaction.user.guild_permissions.kick_members:
+        embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Expulsar Membros'!", color=0xff0000)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+
+    try:
+        await usuario.kick(reason=motivo)
+        embed = create_embed("👢 Usuário Expulso", f"{usuario.mention} foi expulso por: {motivo}", color=0xff6b6b)
+        await interaction.response.send_message(embed=embed)
+    except:
+        await interaction.response.send_message("Erro ao expulsar usuário!", ephemeral=True)
+
+@bot.tree.command(name="ban_user", description="Banir um usuário")
+async def slash_ban_user(interaction: discord.Interaction, usuario: discord.Member, motivo: str = "Sem motivo especificado"):
+    """Slash command para ban (nome único)"""
+    if not interaction.user.guild_permissions.ban_members:
+        embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Banir Membros'!", color=0xff0000)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+
+    try:
+        await usuario.ban(reason=motivo)
+        embed = create_embed("🔨 Usuário Banido", f"{usuario.mention} foi banido por: {motivo}", color=0xff0000)
+        await interaction.response.send_message(embed=embed)
+    except:
+        await interaction.response.send_message("Erro ao banir usuário!", ephemeral=True)
+
+@bot.tree.command(name="limpar_canal", description="Limpar mensagens do canal")
+async def slash_limpar_canal(interaction: discord.Interaction, quantidade: int):
+    """Slash command para limpar canal (nome único)"""
+    if not interaction.user.guild_permissions.manage_messages:
+        embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Mensagens'!", color=0xff0000)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+
+    if quantidade < 1 or quantidade > 100:
+        embed = create_embed("❌ Quantidade inválida", "Use entre 1 e 100 mensagens!", color=0xff0000)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+
+    await interaction.response.send_message(f"🧹 Limpando {quantidade} mensagens...", ephemeral=True)
+    deleted = await interaction.channel.purge(limit=quantidade)
+
+    embed = create_embed("🧹 Canal Limpo", f"**{len(deleted)} mensagens** foram deletadas!", color=0x00ff00)
+    await interaction.channel.send(embed=embed, delete_after=5)
 
 @bot.tree.command(name="info_servidor", description="Informações do servidor")
 async def slash_info_servidor(interaction: discord.Interaction):
@@ -7388,7 +7251,7 @@ async def slash_tempo_online(interaction: discord.Interaction):
 async def slash_info_bot(interaction: discord.Interaction):
     """Slash command para info bot (nome único)"""
     embed = create_embed(
-        "📊 Informações da Kaori",
+        "📊 Informações do RXbot",
         f"""**🏛️ Servidores:** {len(bot.guilds)}
 **👥 Usuários:** {len(set(bot.get_all_members()))}
 **📺 Canais:** {len(list(bot.get_all_channels()))}
@@ -7403,7 +7266,7 @@ async def slash_info_bot(interaction: discord.Interaction):
 async def slash_versao_bot(interaction: discord.Interaction):
     """Slash command para versão (nome único)"""
     embed = create_embed(
-        "🤖 Kaori v2.1.0",
+        "🤖 RXbot v2.1.0",
         "**Versão:** 2.1.0 Estável\n**Discord.py:** 2.3.2\n**Python:** 3.11+\n**Última atualização:** Hoje",
         color=0x7289da
     )
@@ -9184,97 +9047,49 @@ async def create_next_round(copinha, winners, current_round, copinha_id, forced_
 
         # Criar matches da próxima rodada
         num_matches = len(winner_teams) // 2
-        failed_matches = []
-        successful_matches = 0
         
         with db_lock:
             for i in range(num_matches):
                 team1 = winner_teams[i * 2]
                 team2 = winner_teams[i * 2 + 1]
-                match_channel = None
-                match_failed = False
 
                 # Criar canal para a partida
-                try:
-                    match_channel = await guild.create_text_channel(
-                        f"🏆-{next_round_key}-{i+1}",
-                        category=category
-                    )
-                except discord.Forbidden:
-                    logger.error(f"❌ Sem permissão para criar canais no servidor {guild.name}")
-                    error_msg = f"Erro de permissão ao criar canal da partida {i+1} da {next_round_name} - bot precisa das permissões 'Gerenciar Canais' e 'Gerenciar Permissões'"
-                    await send_error_to_channel(error_msg, guild)
-                    failed_matches.append(f"Partida {i+1}: Sem permissão para criar canal")
-                    match_failed = True
-                except Exception as e:
-                    logger.error(f"❌ Erro ao criar canal para partida {i+1}: {e}")
-                    failed_matches.append(f"Partida {i+1}: {str(e)}")
-                    match_failed = True
-
-                # Se o canal não foi criado, pular para o próximo
-                if match_failed or not match_channel:
-                    continue
+                match_channel = await guild.create_text_channel(
+                    f"🏆-{next_round_key}-{i+1}",
+                    category=category
+                )
 
                 # Dar permissão aos jogadores das duas equipes
-                permissions_failed = False
-                try:
-                    await match_channel.set_permissions(guild.default_role, read_messages=False)
-                    
-                    # Permissões para time 1
-                    for player_id in team1:
-                        member = guild.get_member(player_id)
-                        if member:
-                            await match_channel.set_permissions(member, read_messages=True, send_messages=True)
-                    
-                    # Permissões para time 2
-                    for player_id in team2:
-                        member = guild.get_member(player_id)
-                        if member:
-                            await match_channel.set_permissions(member, read_messages=True, send_messages=True)
-                            
-                except discord.Forbidden:
-                    logger.error(f"❌ Sem permissão para configurar permissões do canal {match_channel.name}")
-                    permissions_failed = True
-                    # Canal foi criado, mas sem permissões customizadas
-                    try:
-                        await match_channel.send(
-                            "⚠️ **ATENÇÃO:** O bot não conseguiu configurar as permissões deste canal.\n"
-                            "Todos os membros podem ver este canal por enquanto.\n"
-                            "Peça ao administrador para verificar as permissões do bot."
-                        )
-                    except:
-                        pass
-                except Exception as e:
-                    logger.error(f"❌ Erro ao configurar permissões do canal {match_channel.name}: {e}")
-                    permissions_failed = True
+                await match_channel.set_permissions(guild.default_role, read_messages=False)
+                
+                # Permissões para time 1
+                for player_id in team1:
+                    member = guild.get_member(player_id)
+                    if member:
+                        await match_channel.set_permissions(member, read_messages=True, send_messages=True)
+                
+                # Permissões para time 2
+                for player_id in team2:
+                    member = guild.get_member(player_id)
+                    if member:
+                        await match_channel.set_permissions(member, read_messages=True, send_messages=True)
 
                 # Salvar match no banco (usar key normalizada para consistência)
-                try:
-                    cursor.execute('''
-                        INSERT INTO copinha_matches (copinha_id, round_name, match_number, players, ticket_channel_id, status)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                        RETURNING id
-                    ''', (
-                        copinha_id,
-                        next_round_key,  # Usar versão normalizada para pesquisas consistentes
-                        i + 1,
-                        json.dumps({'team1': team1, 'team2': team2}),
-                        match_channel.id,
-                        'waiting'
-                    ))
-                    
-                    # Capturar ID do match inserido
-                    match_result = cursor.fetchone()
-                    if not match_result:
-                        logger.error("❌ Falha ao inserir match no banco - sem ID retornado")
-                        failed_matches.append(f"Partida {i+1}: Falha no banco de dados")
-                        continue
-                    match_id = match_result[0]
-                    
-                except Exception as db_error:
-                    logger.error(f"❌ Erro ao salvar match no banco: {db_error}")
-                    failed_matches.append(f"Partida {i+1}: Erro no banco de dados")
-                    continue
+                cursor.execute('''
+                    INSERT INTO copinha_matches (copinha_id, round_name, match_number, players, ticket_channel_id, status)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                ''', (
+                    copinha_id,
+                    next_round_key,  # Usar versão normalizada para pesquisas consistentes
+                    i + 1,
+                    json.dumps({'team1': team1, 'team2': team2}),
+                    match_channel.id,
+                    'waiting'
+                ))
+                
+                # Capturar ID do match inserido
+                match_id = cursor.fetchone()[0]
 
                 # Buscar creator_id da copinha
                 cursor.execute('SELECT creator_id FROM copinhas WHERE id = %s', (copinha_id,))
@@ -9317,35 +9132,27 @@ VS
                     team_format=team_format
                 )
 
-                try:
-                    # Registrar view persistente no bot
-                    bot.add_view(winner_view)
+                # Registrar view persistente no bot
+                bot.add_view(winner_view)
 
-                    # Enviar mensagem com view
-                    message = await match_channel.send(embed=match_embed, view=winner_view)
+                # Enviar mensagem com view
+                message = await match_channel.send(embed=match_embed, view=winner_view)
 
-                    # Salvar view persistente no banco para restaurar após restart
-                    save_interactive_message(
-                        message.id,
-                        match_channel.id,
-                        guild.id,
-                        'match_winner',
-                        {
-                            'copinha_id': copinha_id,
-                            'match_id': match_id,
-                            'team1': team1,
-                            'team2': team2,
-                            'creator_id': creator_id,
-                            'team_format': team_format
-                        }
-                    )
-                    
-                    # Se chegou até aqui, a partida foi criada com sucesso completo
-                    successful_matches += 1
-                    
-                except Exception as setup_error:
-                    logger.error(f"❌ Erro ao configurar partida {i+1}: {setup_error}")
-                    failed_matches.append(f"Partida {i+1}: Erro na configuração")
+                # Salvar view persistente no banco para restaurar após restart
+                save_interactive_message(
+                    message.id,
+                    match_channel.id,
+                    guild.id,
+                    'match_winner',
+                    {
+                        'copinha_id': copinha_id,
+                        'match_id': match_id,
+                        'team1': team1,
+                        'team2': team2,
+                        'creator_id': creator_id,
+                        'team_format': team_format
+                    }
+                )
 
             # Atualizar rodada atual da copinha
             cursor.execute('UPDATE copinhas SET current_round = %s WHERE id = %s', 
@@ -9353,48 +9160,7 @@ VS
             conn.commit()
             conn.close()
 
-        # Enviar resumo dos resultados
-        if successful_matches > 0 or failed_matches:
-            summary_text = f"**📊 Resumo da {next_round_name}:**\n"
-            summary_text += f"✅ **Partidas criadas:** {successful_matches}/{num_matches}\n"
-            
-            if failed_matches:
-                summary_text += f"\n❌ **Falhas:**\n"
-                for failure in failed_matches[:5]:  # Limitar a 5 para não ficar muito longo
-                    summary_text += f"• {failure}\n"
-                if len(failed_matches) > 5:
-                    summary_text += f"• ... e mais {len(failed_matches) - 5} erros\n"
-                
-                summary_text += f"\n💡 **Soluções:**\n"
-                summary_text += f"• Verificar permissões do bot: **Gerenciar Canais**, **Gerenciar Permissões**\n"
-                summary_text += f"• Contatar administrador se erros persistirem"
-            
-            # Enviar no canal original da copinha se possível
-            summary_sent = False
-            try:
-                original_channel = guild.get_channel(copinha_channel_id) if 'copinha_channel_id' in locals() else None
-                if original_channel:
-                    summary_embed = create_embed("📊 Resumo da Rodada", summary_text, color=0x00ff00 if not failed_matches else 0xff6600)
-                    await original_channel.send(embed=summary_embed)
-                    summary_sent = True
-                elif category and category.text_channels:
-                    # Usar primeiro canal da categoria
-                    summary_embed = create_embed("📊 Resumo da Rodada", summary_text, color=0x00ff00 if not failed_matches else 0xff6600)
-                    await category.text_channels[0].send(embed=summary_embed)
-                    summary_sent = True
-            except Exception as summary_error:
-                logger.error(f"❌ Erro ao enviar resumo: {summary_error}")
-            
-            # Se houve falhas, notificar privileged user
-            if failed_matches:
-                error_summary = f"Falhas na criação da {next_round_name}: {len(failed_matches)} de {num_matches} partidas falharam"
-                await send_error_to_channel(error_summary, guild)
-                
-            # Se não conseguiu enviar o resumo no canal, tentar como último recurso
-            if not summary_sent and failed_matches:
-                logger.error(f"⚠️ Resumo da rodada não foi enviado - {len(failed_matches)} falhas não reportadas aos usuários")
-                
-        logger.info(f"Próxima rodada '{next_round_name}' criada: {successful_matches}/{num_matches} partidas com sucesso")
+        logger.info(f"Próxima rodada '{next_round_name}' criada com {num_matches} partidas")
 
     except Exception as e:
         logger.error(f"Erro ao criar próxima rodada: {e}")
@@ -9705,7 +9471,7 @@ async def slash_unban(interaction: discord.Interaction, usuario_id: str, motivo:
     except Exception as e:
         logger.error(f"Erro ao configurar status: {e}")
 
-    print("🔥 Kaori está online! Pronta para comandar!")
+    print("🔥 Kaori está online! Pronto para comandar!")
     print(f"✨ TODOS os {len(synced) if 'synced' in locals() else 'Muitos'} slash commands disponíveis!")
     print("📋 Use / no Discord para ver TODOS os comandos disponíveis!")
     print("🎯 Sistema dual: Use / ou RX - Ambos funcionam!")
@@ -10127,7 +9893,7 @@ async def on_member_join(member):
 
             f"🌟 **Olá {member.mention}! Seja muito bem-vindo(a)!**\n\n"
             f"🎨 Pronto para uma experiência incrível?\n"
-            f"🤖 Converse comigo mencionando @Kaori\n"
+            f"🤖 Converse comigo mencionando @RXbot\n"
             f"🏆 Participe dos rankings e ganhe reputação!\n\n"
             f"*Agradecemos por escolher o {member.guild.name}!*",
 
@@ -13232,7 +12998,7 @@ async def member_count(ctx):
 
     await ctx.send(embed=embed)
 
-@bot.command(name='roles', aliases=['cargos'])
+@bot.command(name='roles')
 async def list_roles(ctx):
     """Lista todos os cargos do servidor"""
     global_stats['commands_used'] += 1
@@ -13290,7 +13056,7 @@ async def bot_version(ctx):
     global_stats['commands_used'] += 1
 
     embed = create_embed(
-        "🤖 Kaori - Informações de Versão",
+        "🤖 RXbot - Informações de Versão",
         f"""**🔖 Versão:** 2.1.0 (Estável Otimizada)
 **📅 Última atualização:** Janeiro 2025
 **🐍 Python:** {platform.python_version()}
@@ -13455,7 +13221,7 @@ async def diagnostico_completo(ctx):
 
     # 6. Teste Arquivos Críticos
     import os
-    arquivos_criticos = ['kaori.db', 'main.py']
+    arquivos_criticos = ['rxbot.db', 'main.py']
     arquivos_ok = 0
     for arquivo in arquivos_criticos:
         if os.path.exists(arquivo):
@@ -13672,7 +13438,7 @@ async def help_command(ctx, categoria=None):
     """Sistema de ajuda completo"""
     if not categoria:
         embed = create_embed(
-            "📚 Central de Ajuda - Kaori",
+            "📚 Central de Ajuda - RXbot",
             """**🎮 Diversão:**
 `RXajuda diversao` - Jogos, piadas, entretenimento
 
@@ -15150,7 +14916,7 @@ async def rank_list(ctx):
     global_stats['commands_used'] += 1
 
     embed = create_embed(
-        "🏆 Sistema de Ranks da Kaori",
+        "🏆 Sistema de Ranks do RXbot",
         "Ganhe XP enviando mensagens e suba de rank!",
         color=0xffd700
     )
@@ -18194,7 +17960,7 @@ async def piada(ctx):
     ]
 
     piada = random.choice(piadas)
-    embed = create_embed("😂 Piada da Kaori", piada, color=0xffaa00)
+    embed = create_embed("😂 Piada do RXbot", piada, color=0xffaa00)
     await ctx.send(embed=embed)
 
 @bot.command(name='enquete', aliases=['poll'])
@@ -18277,7 +18043,7 @@ async def sistema_status(ctx):
     uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
 
     embed = create_embed(
-        "🔧 Status da Kaori",
+        "🔧 Status do Sistema RXbot",
         f"""**⚡ Sistema Principal:**
 • Status: 🟢 Online e Estável
 • Uptime: {format_time(uptime_seconds)}
@@ -18311,7 +18077,7 @@ async def uptime(ctx):
     uptime_seconds = int((datetime.datetime.now() - global_stats['uptime_start']).total_seconds())
 
     embed = create_embed(
-        "⏱️ Uptime da Kaori",
+        "⏱️ Uptime do RXbot",
         f"""**⏰ Tempo online:** {format_time(uptime_seconds)}
 **🚀 Iniciado em:** <t:{int(global_stats['uptime_start'].timestamp())}:F>
 **💬 Status:** 🟢 Online e estável
@@ -18338,7 +18104,7 @@ async def bot_stats(ctx):
     unique_users = len(set(bot.get_all_members()))
 
     embed = create_embed(
-        f"📊 Estatísticas da Kaori",
+        f"📊 Estatísticas do RXbot",
         f"""**🤖 Bot Info:**
 • **Nome:** {bot.user.name}#{bot.user.discriminator}
 • **ID:** {bot.user.id}
@@ -18587,7 +18353,7 @@ async def randownplayers(ctx, quantidade: int = 5):
 
 # Configuração Flask
 app = Flask(__name__, template_folder='dashboard/templates', static_folder='dashboard/static')
-app.secret_key = os.environ.get('SECRET_KEY', 'kaori-dashboard-secret-key')
+app.secret_key = os.environ.get('SECRET_KEY', 'rxbot-dashboard-secret-key')
 
 # Importar template functions
 from flask import render_template
@@ -19029,7 +18795,7 @@ async def start_bot():
         return
 
     try:
-        logger.info("🚀 Iniciando Kaori...")
+        logger.info("🚀 Iniciando RXbot...")
         await bot.start(token)
     except Exception as e:
         logger.error(f"❌ Erro ao iniciar bot: {e}")
@@ -19059,23 +18825,8 @@ if __name__ == "__main__":
         try:
             init_database()
             logger.info("✅ Database initialized successfully!")
-            
-            # Verificar se as tabelas essenciais existem
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name")
-            tables = [row[0] for row in cursor.fetchall()]
-            if len(tables) >= 3:  # Pelo menos users, guilds, copinhas
-                logger.info(f"✅ Database tables verified: {len(tables)} tables exist")
-            else:
-                logger.error(f"❌ Database incomplete: only {len(tables)} tables found")
-            cursor.close()
-            conn.close()
-            
         except Exception as db_error:
-            logger.error(f"❌ CRITICAL: Database initialization failed: {db_error}")
-            # Log critical error - bot will handle DM notifications when ready
-            logger.error(f"💡 Database error will be reported to privileged user when bot connects")
+            logger.warning(f"⚠️ Erro no database: {db_error}")
             
         # Sempre iniciar Flask primeiro (Railway precisa de resposta rápida)
         print("🌐 Iniciando servidor Flask...")
