@@ -42,23 +42,15 @@ def get_safe_channel(channel_id):
         return None
 
 async def send_error_to_channel(error_message, guild=None):
-    """Envia mensagem de erro para o canal de erro específico"""
+    """Log de erros do sistema (sem enviar para Discord)"""
     try:
-        error_channel = get_safe_channel(CHANNEL_ID_ERRO)
-        if error_channel:
-            embed = discord.Embed(
-                title="⚠️ Erro do Sistema",
-                description=error_message,
-                color=0xff0000,
-                timestamp=datetime.datetime.now()
-            )
-            if guild:
-                embed.add_field(name="Servidor", value=f"{guild.name} (ID: {guild.id})", inline=False)
-            await error_channel.send(embed=embed)
+        # Apenas fazer log do erro, não enviar para Discord
+        if guild:
+            logger.error(f"Erro no servidor {guild.name} (ID: {guild.id}): {error_message}")
         else:
-            logger.error(f"Não foi possível enviar erro para o canal: {error_message}")
+            logger.error(f"Erro do sistema: {error_message}")
     except Exception as e:
-        logger.error(f"Erro ao enviar mensagem de erro: {e}")
+        logger.error(f"Erro ao processar log de erro: {e}")
 
 def is_privileged_user(user_id):
     """Verifica se o usuário tem privilégios especiais"""
@@ -182,8 +174,8 @@ async def safe_send_response(interaction: discord.Interaction, embed=None, conte
     """Envia resposta de forma segura, verificando se já foi respondida"""
     try:
         # Verificar se a interação ainda é válida
-        if not interaction or not hasattr(interaction, 'response'):
-            logger.warning("Interação inválida ou expirada")
+        if not interaction:
+            logger.warning("Interação é None")
             return None
             
         # Verificar se embed e content são válidos
@@ -193,26 +185,33 @@ async def safe_send_response(interaction: discord.Interaction, embed=None, conte
             
         # Verificar timeout da interação (15 minutos)
         import time
-        if hasattr(interaction, 'created_at'):
+        if hasattr(interaction, 'created_at') and interaction.created_at:
             age = time.time() - interaction.created_at.timestamp()
             if age > 900:  # 15 minutos
                 logger.warning("Interação expirou (mais de 15 minutos)")
                 return None
         
-        # Verificar se response existe e se já foi enviada
+        # Verificar se response existe e não é None
         if hasattr(interaction, 'response') and interaction.response is not None:
-            if not interaction.response.is_done():
-                # Se ainda não respondeu, usa response.send_message
-                return await interaction.response.send_message(embed=embed, content=content, ephemeral=ephemeral, view=view)
-            else:
-                # Se já respondeu, usa followup.send
-                return await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral, view=view)
-        else:
-            # Se não tem response válido, tentar canal direto
-            if hasattr(interaction, 'channel') and interaction.channel:
-                if hasattr(interaction.channel, 'send') and not isinstance(interaction.channel, (discord.ForumChannel, discord.CategoryChannel)):
-                    return await interaction.channel.send(embed=embed, content=content, view=view)
-            return None
+            try:
+                if not interaction.response.is_done():
+                    # Se ainda não respondeu, usa response.send_message
+                    return await interaction.response.send_message(embed=embed, content=content, ephemeral=ephemeral, view=view)
+                else:
+                    # Se já respondeu, usa followup.send
+                    return await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral, view=view)
+            except AttributeError:
+                # response.is_done() não existe ou response é None
+                logger.warning("interaction.response é None ou não tem is_done()")
+                pass
+        
+        # Fallback: tentar canal direto
+        if hasattr(interaction, 'channel') and interaction.channel:
+            if hasattr(interaction.channel, 'send') and not isinstance(interaction.channel, (discord.ForumChannel, discord.CategoryChannel)):
+                return await interaction.channel.send(embed=embed, content=content, view=view)
+        
+        logger.warning("Não foi possível enviar resposta - todos os métodos falharam")
+        return None
             
     except discord.errors.InteractionResponded:
         # Interação já foi respondida, tentar followup
@@ -242,14 +241,15 @@ async def safe_send_response(interaction: discord.Interaction, embed=None, conte
         
     except Exception as e:
         logger.error(f"Erro geral ao enviar resposta: {e}")
-        # Última tentativa: enviar erro simples no canal
+        # Última tentativa: enviar erro simples no canal se possível
         try:
-            if hasattr(interaction, 'channel') and interaction.channel:
-                # Verificar se o canal suporta envio de mensagens
-                if hasattr(interaction.channel, 'send') and not isinstance(interaction.channel, (discord.ForumChannel, discord.CategoryChannel)):
-                    await interaction.channel.send("❌ Erro interno do bot. Tente novamente.")
-        except:
-            pass
+            if (hasattr(interaction, 'channel') and 
+                interaction.channel and 
+                hasattr(interaction.channel, 'send') and 
+                not isinstance(interaction.channel, (discord.ForumChannel, discord.CategoryChannel))):
+                await interaction.channel.send("❌ Erro interno do bot. Tente novamente.")
+        except Exception as fallback_error:
+            logger.error(f"Erro no fallback de envio: {fallback_error}")
         return None
 
 try:
@@ -1659,18 +1659,33 @@ async def safe_interaction_response(interaction, embed, ephemeral=False):
     """Safely respond to interaction, handling timeout errors"""
     try:
         # Check if interaction is valid
-        if not interaction or not hasattr(interaction, 'response'):
+        if not interaction:
+            logger.warning("Interaction is None in safe_interaction_response")
+            return
+
+        # Check if interaction has required attributes
+        if not hasattr(interaction, 'response') or interaction.response is None:
+            logger.warning("Interaction.response is None or missing")
             return
 
         # Check if interaction expired (older than 14 minutes to be safe)
         import time
-        if hasattr(interaction, 'created_at'):
+        if hasattr(interaction, 'created_at') and interaction.created_at:
             age = time.time() - interaction.created_at.timestamp()
             if age > 840:  # 14 minutes
+                logger.warning("Interaction expired (>14 minutes)")
                 return
 
-        # Check if already responded
-        if interaction.response.is_done():
+        # Check if already responded with proper None checking
+        try:
+            is_done = interaction.response.is_done()
+        except AttributeError:
+            logger.warning("interaction.response.is_done() not available")
+            # Try fallback method
+            await safe_send_response(interaction, embed=embed, ephemeral=ephemeral)
+            return
+
+        if is_done:
             try:
                 await safe_send_response(interaction, embed=embed, ephemeral=ephemeral)
             except (discord.errors.InteractionResponded, discord.errors.NotFound, discord.errors.HTTPException):
@@ -1681,7 +1696,8 @@ async def safe_interaction_response(interaction, embed, ephemeral=False):
             except (discord.errors.InteractionResponded, discord.errors.NotFound, discord.errors.HTTPException):
                 try:
                     await safe_send_response(interaction, embed=embed, ephemeral=ephemeral)
-                except:
+                except Exception as fallback_error:
+                    logger.error(f"All response methods failed: {fallback_error}")
                     pass
     except (discord.errors.NotFound, discord.errors.HTTPException):
         # Interaction expired or already handled, ignore silently
@@ -2856,15 +2872,8 @@ async def on_guild_join(guild):
         # Criar cargos de rank se possível
         await ensure_rank_roles(guild)
         
-        # Notificar canal de erro sobre novo servidor
-        await send_error_to_channel(
-            f"🎉 **Novo Servidor!**\n"
-            f"Nome: {guild.name}\n"
-            f"ID: {guild.id}\n"
-            f"Membros: {guild.member_count}\n"
-            f"Owner: {guild.owner.mention if guild.owner else 'Desconhecido'}",
-            guild
-        )
+        # Log sobre novo servidor
+        logger.info(f"🎉 Novo servidor: {guild.name} (ID: {guild.id}) com {guild.member_count} membros")
         
     except Exception as e:
         logger.error(f"Erro no evento on_guild_join: {e}")
@@ -2902,28 +2911,8 @@ async def on_ready():
     logger.info(f"📊 Conectado em {len(bot.guilds)} servidores")
     logger.info(f"👥 Servindo {len(set(bot.get_all_members()))} usuários únicos")
 
-    try:
-        channel = bot.get_channel(CHANNEL_ID_ALERTA)
-        if channel:
-            embed = create_embed(
-                "🚀 RXbot Online!",
-                f"Bot reiniciado e totalmente operacional!\n\n"
-                f"**📊 Estatísticas:**\n"
-                f"• Servidores: {len(bot.guilds)}\n"
-                f"• Usuários: {len(set(bot.get_all_members()))}\n"
-                f"• Latência: {round(bot.latency * 1000, 2)}ms\n"
-                f"• Versão: 2.1.0 (Estável)\n\n"
-                f"**🛡️ Sistemas ativos:**\n"
-                f"• ✅ Auto-ping\n"
-                f"• ✅ Keep-alive\n"
-                f"• ✅ Monitor de saúde\n"
-                f"• ✅ Sistema anti-crash\n\n"
-                f"**Data:** <t:{int(datetime.datetime.now().timestamp())}:F>",
-                color=0x00ff00
-            )
-            await channel.send(embed=embed)
-    except Exception as e:
-        logger.error(f"Erro ao enviar alerta de reinício: {e}")
+    # Log de reinício (sem enviar para Discord)
+    logger.info(f"🚀 RXbot Online! Servidores: {len(bot.guilds)} | Usuários: {len(set(bot.get_all_members()))} | Latência: {round(bot.latency * 1000, 2)}ms")
 
     # Update global stats
     global_stats['total_users'] = len(set(bot.get_all_members()))
@@ -4161,9 +4150,9 @@ class EscolherCargoView(discord.ui.View):
             )
             await safe_send_response(interaction, embed, ephemeral=True)
 
-@bot.tree.command(name="escolhercargo", description="Escolher um cargo personalizado (usuário específico)")
-async def slash_escolher_cargo(interaction: discord.Interaction):
-    """Comando para usuário específico escolher um cargo"""
+@bot.command(name='escolhercargo', aliases=['cargo', 'cargos'])
+async def rx_escolher_cargo(ctx):
+    """Comando RX para usuário específico escolher um cargo"""
     global_stats['commands_used'] += 1
     
     # ID do usuário específico que pode usar este comando
@@ -4171,18 +4160,18 @@ async def slash_escolher_cargo(interaction: discord.Interaction):
     
     try:
         # Verificar se é o usuário autorizado
-        if interaction.user.id != USER_ID_AUTORIZADO:
+        if ctx.author.id != USER_ID_AUTORIZADO:
             embed = create_embed(
                 "❌ Acesso Negado",
                 "Este comando é restrito a um usuário específico!",
                 color=0xff0000
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await ctx.send(embed=embed)
             return
         
         embed = create_embed(
             "🎨 Escolher Cargo Personalizado",
-            f"Olá {interaction.user.mention}! Escolha um cargo especial para você:\n\n"
+            f"Olá {ctx.author.mention}! Escolha um cargo especial para você:\n\n"
             "**Cargos Disponíveis:**\n"
             "🎮 **Gamer** - Para os apaixonados por jogos\n"
             "🎵 **Músico** - Para os amantes da música\n"
@@ -4197,11 +4186,11 @@ async def slash_escolher_cargo(interaction: discord.Interaction):
         )
         
         view = EscolherCargoView(USER_ID_AUTORIZADO)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        await ctx.send(embed=embed, view=view)
         
     except Exception as e:
-        logger.error(f"Erro no comando escolhercargo: {e}")
-        await interaction.response.send_message("❌ Erro ao carregar sistema de cargos!", ephemeral=True)
+        logger.error(f"Erro no comando RXescolhercargo: {e}")
+        await ctx.send("❌ Erro ao carregar sistema de cargos!")
 
 @bot.tree.command(name="desbugar", description="Cancelar uma copinha ativa")
 async def slash_desbugar(interaction: discord.Interaction):
