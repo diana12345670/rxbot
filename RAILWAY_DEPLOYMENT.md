@@ -1,4 +1,4 @@
-# 🚂 Guia de Deploy no Railway - RXBot
+# 🚂 Guia de Deploy no Railway - Kaori
 
 ## ✅ Problemas Corrigidos
 
