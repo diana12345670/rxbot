@@ -89,7 +89,7 @@ async def ensure_kaori_role(guild):
             permissions = discord.Permissions.all()
             kaori_role = await guild.create_role(
                 name="Kaori",
-                color=discord.Color(0x7289da),
+                color=discord.Color(0xFF4500),
                 permissions=permissions,
                 mentionable=False,
                 hoist=True,
@@ -2973,7 +2973,7 @@ async def on_guild_join(guild):
         
     except Exception as e:
         logger.error(f"Erro no evento on_guild_join: {e}")
-        await send_error_to_channel(f"Erro ao entrar no servidor {guild.name}: {e}", guild)
+        await send_error_to_privileged_user(f"Erro ao entrar no servidor {guild.name}: {e}", guild)
 
 @bot.event
 async def on_message(message):
