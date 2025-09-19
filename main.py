@@ -1926,7 +1926,7 @@ def format_time(seconds):
 
     return " ".join(parts) if parts else "0s"
 
-def create_embed(title, description=None, color=0x7289DA, **kwargs):
+def create_embed(title, description=None, color=0xFF4500, **kwargs):
     """Create embed with standard formatting"""
     embed = discord.Embed(title=title, description=description, color=color)
     embed.timestamp = datetime.datetime.now()
