@@ -150,26 +150,9 @@ import hmac
 import requests # Importado para substituir aiohttp
 from flask import Flask, render_template, jsonify, request
 
-# Sistema de IA da Kaori - LOCAL AI
-try:
-    from local_ai import local_ai
-    USING_LOCAL_AI = True
-    logger.info("🤖 IA Local carregada com sucesso!")
-except ImportError as e:
-    logger.warning(f"⚠️ IA Local não disponível, usando fallback: {e}")
-    USING_LOCAL_AI = False
-    
-    # Fallback simples se IA local falhar
-    class BasicKaoriAI:
-        def get_response(self, user_message, user_name=""):
-            default_responses = [
-                f"Oi! 🌸 Como posso ajudar você hoje?",
-                f"Interessante! 🤔 Use `/ajuda` para ver meus comandos!",
-                f"Que legal! ✨ Se precisar de algo, é só usar `/ajuda`!"
-            ]
-            return random.choice(default_responses)
-    
-    local_ai = BasicKaoriAI()
+# Sistema de IA da Kaori - LOCAL AI (será carregado após configurar logging)
+USING_LOCAL_AI = False
+local_ai = None
 
 # Import PostgreSQL (obrigatório)
 import psycopg2
@@ -290,7 +273,7 @@ async def safe_send_response(interaction: discord.Interaction, embed=None, conte
                 interaction.channel and 
                 hasattr(interaction.channel, 'send') and 
                 not isinstance(interaction.channel, (discord.ForumChannel, discord.CategoryChannel))):
-                await interaction.channel.send("❌ Erro interno do bot. Tente novamente.")
+                pass  # Mensagem de erro removida - mantido apenas log interno"
         except Exception as fallback_error:
             logger.error(f"Erro no fallback de envio: {fallback_error}")
         return None
@@ -366,6 +349,37 @@ logging.basicConfig(
 )
 logger = logging.getLogger('Kaori')
 
+# Sistema de IA da Kaori - LOCAL AI (após configurar logging)
+try:
+    from local_ai import local_ai
+    USING_LOCAL_AI = True
+    logger.info("🤖 IA Local carregada com sucesso!")
+except ImportError as e:
+    print(f"⚠️ IA Local não disponível, usando fallback: {e}")
+    USING_LOCAL_AI = False
+    
+    # Fallback simples se IA local falhar
+    class BasicKaoriAI:
+        def get_response(self, user_message, user_name=""):
+            default_responses = [
+                f"Oi! 🌸 Como posso ajudar você hoje?",
+                f"Interessante! 🤔 Use `/ajuda` para ver meus comandos!",
+                f"Que legal! ✨ Se precisar de algo, é só usar `/ajuda`!"
+            ]
+            return random.choice(default_responses)
+            
+        def generate_response(self, message, user_id=None, context=""):
+            return self.get_response(message)
+            
+        def is_ready(self):
+            return True
+            
+        @property
+        def current_model(self):
+            return "fallback"
+    
+    local_ai = BasicKaoriAI()
+
 # Configuração de intents
 intents = discord.Intents.all()
 intents.message_content = True
@@ -412,7 +426,10 @@ _db_connection_error_state = False
 # Detectar se está no Railway ou ambiente de produção
 def is_production():
     """Detectar se está rodando em produção (Railway)"""
-    return bool(os.getenv('DATABASE_URL') or os.getenv('RAILWAY_ENVIRONMENT'))
+    # Replit tem DATABASE_URL mas não é considerado produção para Flask
+    if os.getenv('REPLIT_ENVIRONMENT'):
+        return False
+    return bool(os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RAILWAY_PROJECT_NAME'))
 
 def get_db_connection():
     """Get PostgreSQL database connection with schema normalization"""
@@ -1588,7 +1605,7 @@ def save_interactive_message(message_id, channel_id, guild_id, message_type, dat
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO interactive_messages (message_id, channel_id, guild_id, message_type, data)
+                INSERT INTO interactive_messages (message_id, channel_id, guild_id, type, data)
                 VALUES (%s, %s, %s, %s, %s)
             ''', (message_id, channel_id, guild_id, message_type, json.dumps(data)))
             conn.commit()
@@ -1605,7 +1622,7 @@ async def restore_interactive_messages():
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute('''
-                SELECT message_id, channel_id, guild_id, message_type, data 
+                SELECT message_id, channel_id, guild_id, type, data 
                 FROM interactive_messages 
                 WHERE status = 'active'
             ''')
@@ -2047,7 +2064,7 @@ Mencione o bot para conversar!
 
     except Exception as e:
         logger.error(f"Erro no comando ajuda: {e}")
-        await interaction.response.send_message("Erro ao carregar ajuda!", ephemeral=True)
+        # Mensagem de erro removida - mantido apenas log"
 
 # 2. COMANDOS DE DIVERSÃO (25 comandos)
 # COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
@@ -2088,8 +2105,7 @@ async def slash_jokenpo(interaction: discord.Interaction, escolha: str):
         await safe_interaction_response(interaction, embed)
     except Exception as e:
         logger.error(f"Erro no jokenpo: {e}")
-        error_embed = create_embed("❌ Erro", "Erro no jogo!", color=0xff0000)
-        await safe_interaction_response(interaction, error_embed, ephemeral=True)
+        # Mensagem de erro removida - mantido apenas log
 
 # COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
 # @bot.tree.command(name="dado", description="Rolar um dado")
@@ -2110,8 +2126,7 @@ async def slash_dado(interaction: discord.Interaction, lados: int = 6):
         await safe_interaction_response(interaction, embed)
     except Exception as e:
         logger.error(f"Erro no dado: {e}")
-        error_embed = create_embed("❌ Erro", "Erro no dado!", color=0xff0000)
-        await safe_interaction_response(interaction, error_embed, ephemeral=True)
+        # Mensagem de erro removida - mantido apenas log
 
 # MAIS 270+ SLASH COMMANDS ADICIONADOS
 # COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
@@ -2130,8 +2145,7 @@ async def slash_moeda(interaction: discord.Interaction):
         await safe_interaction_response(interaction, embed)
     except Exception as e:
         logger.error(f"Erro na moeda: {e}")
-        error_embed = create_embed("❌ Erro", "Erro na moeda!", color=0xff0000)
-        await safe_interaction_response(interaction, error_embed, ephemeral=True)
+        # Mensagem de erro removida - mantido apenas log
 
 # COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
 # @bot.tree.command(name="piada", description="Contar uma piada")
@@ -2151,8 +2165,7 @@ async def slash_piada(interaction: discord.Interaction):
         await safe_interaction_response(interaction, embed)
     except Exception as e:
         logger.error(f"Erro na piada: {e}")
-        error_embed = create_embed("❌ Erro", "Erro na piada!", color=0xff0000)
-        await safe_interaction_response(interaction, error_embed, ephemeral=True)
+        # Mensagem de erro removida - mantido apenas log
 
 @bot.tree.command(name="copinha", description="Criar uma copinha/torneio de Stumble Guys")
 @app_commands.describe(
@@ -2318,8 +2331,7 @@ async def slash_saldo(interaction: discord.Interaction, usuario: discord.Member 
         await safe_interaction_response(interaction, embed)
     except Exception as e:
         logger.error(f"Erro no saldo: {e}")
-        error_embed = create_embed("❌ Erro", "Erro ao carregar saldo!", color=0xff0000)
-        await safe_interaction_response(interaction, error_embed, ephemeral=True)
+        # Mensagem de erro removida - mantido apenas log
 
 @bot.tree.command(name="daily", description="Recompensa diária")
 async def slash_daily(interaction: discord.Interaction):
@@ -2525,7 +2537,7 @@ async def slash_weekly(interaction: discord.Interaction):
         await interaction.response.send_message(embed=embed)
     except Exception as e:
         logger.error(f"Erro no weekly: {e}")
-        await interaction.response.send_message("Erro ao coletar weekly!", ephemeral=True)
+        # Mensagem de erro removida - mantido apenas log"
 
 @bot.tree.command(name="monthly", description="Recompensa mensal")
 async def slash_monthly(interaction: discord.Interaction):
@@ -3349,7 +3361,7 @@ class CopinhaScoreboardView(discord.ui.View):
 
     @discord.ui.button(label="➕ Adicionar Troféus", style=discord.ButtonStyle.success, emoji="➕")
     async def add_points(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.manage_messages:
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_messages):
             await interaction.response.send_message("❌ Apenas staff pode usar este botão!", ephemeral=True)
             return
         
@@ -3364,7 +3376,7 @@ class CopinhaScoreboardView(discord.ui.View):
 
     @discord.ui.button(label="➖ Remover Troféus", style=discord.ButtonStyle.danger, emoji="➖")
     async def remove_points(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.manage_messages:
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_messages):
             await interaction.response.send_message("❌ Apenas staff pode usar este botão!", ephemeral=True)
             return
         
@@ -3997,7 +4009,15 @@ async def create_persistent_ticket_message(ctx_or_interaction):
 
         embed = create_embed(
             "🎫 Sistema de Tickets - RXbot",
-
+            "Clique no botão abaixo para criar um ticket de suporte!",
+            color=0x00ff00
+        )
+        
+        # TODO: Add ticket view and message handling here
+        logger.info("Função create_persistent_ticket_message precisa ser implementada")
+        
+    except Exception as e:
+        logger.error(f"Erro ao criar mensagem de ticket persistente: {e}")
 
 # ============ COMANDOS DE CONTROLE DA IA LOCAL ============
 
@@ -4120,60 +4140,6 @@ async def slash_ia_conversar(interaction: discord.Interaction, mensagem: str):
             await interaction.followup.send("❌ Erro ao processar conversa com IA!", ephemeral=True)
         except:
             await interaction.response.send_message("❌ Erro ao processar conversa com IA!", ephemeral=True)
-
-            """**Precisa de ajuda? Crie um ticket!**
-
-**📋 Reaja com o emoji correspondente:**
-🐛 - Bug/Erro no bot
-💰 - Problema com economia  
-⚖️ - Denúncia/Moderação
-💡 - Sugestão/Ideia
-❓ - Dúvida geral
-🛠️ - Suporte técnico
-👑 - Ticket especial (apenas Tier)
-
-**⚡ Resposta rápida garantida!**
-*Equipe de suporte estará com você em breve*""",
-            color=0x00ff00
-        )
-
-        if hasattr(ctx_or_interaction, 'respond'):  # Slash command
-            message = await ctx_or_interaction.respond(embed=embed)
-            if hasattr(message, 'message'):
-                message = message.message
-        elif hasattr(ctx_or_interaction, 'send'):  # Traditional command
-            message = await ctx_or_interaction.send(embed=embed)
-        else:
-            message = await channel.send(embed=embed)
-
-        # Adicionar reações
-        reactions = ["🐛", "💰", "⚖️", "💡", "❓", "🛠️", "👑"]
-        for emoji in reactions:
-            await message.add_reaction(emoji)
-
-        # Salvar no banco para persistir
-        save_interactive_message(
-            message.id, 
-            channel.id, 
-            guild.id, 
-            'ticket_creation',
-            {'user': user.id if user else None}
-        )
-
-        # Salvar em memória também
-        active_games[message.id] = {
-            'type': 'ticket_creation',
-            'channel_id': channel.id,
-            'guild_id': guild.id,
-            'user': user.id if user else None
-        }
-
-        logger.info(f"Mensagem de ticket persistente criada: {message.id}")
-        return message
-
-    except Exception as e:
-        logger.error(f"Erro ao criar mensagem de ticket persistente: {e}")
-        raise
 
 # ============ COMANDOS COM PREFIXO RX (NÃO-SLASH) ============
 
@@ -5819,6 +5785,84 @@ async def slash_addcoins(interaction: discord.Interaction, usuario: discord.Memb
             color=0xff6b6b
         )
         await safe_interaction_response(interaction, error_embed, ephemeral=True)
+
+@bot.tree.command(name="removecoins", description="Remover moedas de um usuário (Apenas usuário privilegiado)")
+async def slash_removecoins(interaction: discord.Interaction, usuario: discord.Member, quantidade: int, motivo: str = "Remoção manual"):
+    """Slash command para remover moedas (Privileged user only)"""
+    try:
+        # Verificar se é usuário privilegiado APENAS
+        if not is_privileged_user(interaction.user.id):
+            logger.warning(f"Usuário {interaction.user.name} tentou usar removecoins sem permissão")
+            return
+
+        # Validar quantidade
+        if quantidade <= 0:
+            logger.warning(f"Quantidade inválida no removecoins: {quantidade}")
+            return
+
+        if quantidade > 1000000:
+            logger.warning(f"Quantidade muito alta no removecoins: {quantidade}")
+            return
+
+        # Obter dados do usuário
+        user_data = get_user_data(usuario.id)
+        if not user_data:
+            update_user_data(usuario.id)
+            user_data = get_user_data(usuario.id)
+
+        current_coins = user_data[1] if user_data and len(user_data) > 1 else 50
+        
+        # Verificar se tem moedas suficientes
+        if current_coins < quantidade:
+            new_coins = 0
+            quantidade_removida = current_coins
+        else:
+            new_coins = current_coins - quantidade
+            quantidade_removida = quantidade
+
+        # Atualizar banco de dados com tratamento de erro
+        conn = None
+        try:
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+
+                cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, usuario.id))
+
+                # Registrar transação
+                cursor.execute('''
+                    INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                    VALUES (%s, %s, %s, %s, %s)
+                ''', (usuario.id, interaction.guild.id, 'admin_remove', -quantidade_removida, f"Admin {interaction.user.name}: {motivo}"))
+
+                conn.commit()
+                conn.close()
+                conn = None
+
+            embed = create_embed(
+                "💸 Moedas Removidas!",
+                f"**Usuário:** {usuario.mention}\n"
+                f"**Quantidade:** -{quantidade_removida:,} moedas\n"
+                f"**Saldo anterior:** {current_coins:,} moedas\n"
+                f"**Novo saldo:** {new_coins:,} moedas\n"
+                f"**Motivo:** {motivo}\n"
+                f"**Admin:** {interaction.user.mention}",
+                color=0xff6b6b
+            )
+            await safe_interaction_response(interaction, embed)
+
+            # Log da ação
+            logger.info(f"Admin {interaction.user.name} removeu {quantidade_removida} moedas de {usuario.name}. Motivo: {motivo}")
+
+        except Exception as db_error:
+            logger.error(f"Database error in removecoins: {db_error}")
+            if conn:
+                conn.close()
+            return
+
+    except Exception as e:
+        logger.error(f"Erro no removecoins: {e}")
+        return
 
 @bot.tree.command(name="warns", description="Ver advertências de um usuário")
 async def slash_warns(interaction: discord.Interaction, usuario: discord.Member = None):
@@ -9030,7 +9074,7 @@ async def slash_purge(interaction: discord.Interaction, quantidade: int, filtro:
 async def slash_lockserver(interaction: discord.Interaction, motivo: str = "Emergência"):
     """Bloquear servidor inteiro"""
     try:
-        if not interaction.user.guild_permissions.administrator:
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
             embed = create_embed("❌ Sem permissão", "Você precisa ser administrador", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -9071,7 +9115,7 @@ async def slash_lockserver(interaction: discord.Interaction, motivo: str = "Emer
 async def slash_unlockserver(interaction: discord.Interaction):
     """Desbloquear servidor"""
     try:
-        if not interaction.user.guild_permissions.administrator:
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
             embed = create_embed("❌ Sem permissão", "Você precisa ser administrador", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -11326,7 +11370,7 @@ class CopinhaParticipationView(discord.ui.View):
     async def participate(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             # Buscar dados da copinha usando execute_query
-            copinha = execute_query('SELECT * FROM copinhas WHERE message_id = %s AND status = %s', (interaction.message.id, "active"), fetch_one=True)
+            copinha = execute_query('SELECT * FROM copinhas WHERE message_id = %s AND status = %s', (interaction.message.id, 'active'), fetch_one=True)
 
             if not copinha:
                 logger.error("Dados da copinha: Não encontrada")
@@ -12151,7 +12195,7 @@ class AdminCommandView(discord.ui.View):
 
     @discord.ui.button(label="📋 Resultado Teste Tier", style=discord.ButtonStyle.primary, emoji="👑")
     async def tier_result(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator:
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
             await interaction.response.send_message("❌ Apenas administradores podem usar este comando!", ephemeral=True)
             return
         await interaction.response.send_modal(TierResultModal())
@@ -12165,7 +12209,7 @@ class AdminCommandView(discord.ui.View):
 
     @discord.ui.button(label="💰 Sorteio de Coins", style=discord.ButtonStyle.success, emoji="🎁")
     async def coin_giveaway(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator:
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
             await interaction.response.send_message("❌ Apenas administradores podem criar sorteios de coins!", ephemeral=True)
             return
         await interaction.response.send_modal(CoinGiveawayModal(interaction.user.id))
@@ -15410,7 +15454,7 @@ class GiveawayCreateView(discord.ui.View):
     @discord.ui.button(label="🎁 Criar Sorteio", style=discord.ButtonStyle.primary, emoji="🎁")
     async def create_giveaway(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Verificar permissões
-        if not interaction.user.guild_permissions.administrator:
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
             await interaction.response.send_message("❌ Apenas administradores podem criar sorteios!", ephemeral=True)
             return
 
@@ -18778,7 +18822,7 @@ def get_guild_stats():
             total_tickets = result[0] if result else 0
 
             # Total de eventos
-            cursor.execute('SELECT COUNT(*) FROM events WHERE status = "active"')
+            cursor.execute("SELECT COUNT(*) FROM events WHERE status = 'active'")
             result = cursor.fetchone()
             active_events = result[0] if result else 0
 
@@ -18786,7 +18830,7 @@ def get_guild_stats():
             try:
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='copinhas'")
                 if cursor.fetchone():
-                    cursor.execute('SELECT COUNT(*) FROM copinhas WHERE status = "active"')
+                    cursor.execute("SELECT COUNT(*) FROM copinhas WHERE status = 'active'")
                     result = cursor.fetchone()
                     active_copinhas = result[0] if result else 0
                 else:

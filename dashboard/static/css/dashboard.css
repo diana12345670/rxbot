@@ -1,14 +1,14 @@
 /* Dashboard CSS - RXbot */
 
 :root {
-    --primary-color: #0d6efd;
+    --primary-color: #dc3545;
     --success-color: #198754;
     --warning-color: #ffc107;
-    --info-color: #0dcaf0;
+    --info-color: #dc3545;
     --danger-color: #dc3545;
     --dark-color: #212529;
     --light-color: #f8f9fa;
-    --gradient-primary: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);
+    --gradient-primary: linear-gradient(135deg, #dc3545 0%, #e74c3c 100%);
     --gradient-success: linear-gradient(135deg, #198754 0%, #20c997 100%);
     --gradient-warning: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
     --shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
@@ -197,7 +197,7 @@ body {
 }
 
 .accordion-button:not(.collapsed) {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #6610f2 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, #e74c3c 100%);
     color: white;
 }
 
@@ -315,7 +315,7 @@ body {
 
 .alert-primary {
     border-left-color: var(--primary-color);
-    background: linear-gradient(135deg, #cfe2ff 0%, #e7f3ff 100%);
+    background: linear-gradient(135deg, #ffeaea 0%, #fff5f5 100%);
 }
 
 .alert-success {
@@ -342,6 +342,29 @@ footer a {
 
 footer a:hover {
     color: #fff;
+}
+
+/* Footer overrides for light footer - stronger specificity */
+footer[style*="background-color: #f8f9fa"] * {
+    color: #212529 !important;
+}
+
+footer[style*="background-color: #f8f9fa"] a {
+    color: #212529 !important;
+    text-decoration: none !important;
+}
+
+footer[style*="background-color: #f8f9fa"] a:hover {
+    color: #dc3545 !important;
+    text-decoration: none !important;
+}
+
+footer[style*="background-color: #f8f9fa"] p {
+    color: #212529 !important;
+}
+
+footer[style*="background-color: #f8f9fa"] h5 {
+    color: #212529 !important;
 }
 
 /* Responsive Design */
@@ -406,12 +429,12 @@ footer a:hover {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #6610f2 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, #e74c3c 100%);
     border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #0b5ed7 0%, #5a0fc8 100%);
+    background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
 }
 
 /* Smooth Transitions */

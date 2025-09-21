@@ -25,7 +25,7 @@ class LocalAI:
             'microsoft/DialoGPT-medium': 'microsoft/DialoGPT-medium',  # Especializado em diálogo
         }
         
-        self.current_model = 'distilgpt2'  # Começar com o mais leve
+        self.current_model = 'gpt2-medium'  # Modelo padrão para Railway
         
         # Personalidade da Kaori
         self.personality_context = """Você é Kaori, uma assistente virtual carinhosa e útil de um bot Discord. 

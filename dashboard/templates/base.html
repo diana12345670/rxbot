@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}RXbot Dashboard{% endblock %}</title>
+    <title>{% block title %}Kaori Dashboard{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/dashboard.css') }}" rel="stylesheet">
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background: var(--gradient-primary);">
         <div class="container">
             <a class="navbar-brand d-flex align-items-center" href="/">
-                <i class="fas fa-robot me-2"></i>
-                <strong>RXbot Dashboard</strong>
+                <i class="fas fa-cat me-2"></i>
+                <strong>Kaori Dashboard</strong>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -54,24 +54,24 @@
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="bg-dark text-light py-4 mt-5">
+    <footer class="py-4 mt-5" style="background-color: #f8f9fa;">
         <div class="container text-center">
             <div class="row">
                 <div class="col-md-6">
-                    <h5><i class="fas fa-robot me-2"></i>RXbot</h5>
-                    <p>Bot Discord completo com sistema de copinhas do Stumble Guys</p>
+                    <h5 style="color: #212529 !important;"><i class="fas fa-cat me-2"></i>Kaori</h5>
+                    <p style="color: #212529 !important;">Bot Discord completo com sistema de copinhas do Stumble Guys</p>
                 </div>
                 <div class="col-md-6">
-                    <h5>Links Úteis</h5>
+                    <h5 style="color: #212529 !important;">Links Úteis</h5>
                     <div class="d-flex justify-content-center gap-3">
-                        <a href="/commands" class="text-light"><i class="fas fa-terminal"></i> Comandos</a>
-                        <a href="/faq" class="text-light"><i class="fas fa-question"></i> FAQ</a>
-                        <a href="/support" class="text-light"><i class="fas fa-headset"></i> Suporte</a>
+                        <a href="/commands" style="color: #212529 !important; text-decoration: none;"><i class="fas fa-terminal"></i> Comandos</a>
+                        <a href="/faq" style="color: #212529 !important; text-decoration: none;"><i class="fas fa-question"></i> FAQ</a>
+                        <a href="/support" style="color: #212529 !important; text-decoration: none;"><i class="fas fa-headset"></i> Suporte</a>
                     </div>
                 </div>
             </div>
-            <hr class="my-3">
-            <p class="mb-0">&copy; 2025 RXbot Dashboard. Sistema de torneios Stumble Guys.</p>
+            <hr class="my-3" style="border-color: #212529;">
+            <p class="mb-0" style="color: #212529 !important;">&copy; 2025 Kaori Dashboard. Sistema de torneios Stumble Guys.</p>
         </div>
     </footer>
 

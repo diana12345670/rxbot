@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}RXbot Dashboard - Tutoriais{% endblock %}
+{% block title %}Kaori Dashboard - Tutoriais{% endblock %}
 
 {% block content %}
 <div class="row mb-4">
@@ -9,7 +9,7 @@
             <i class="fas fa-graduation-cap me-3"></i>Tutoriais e Guias
         </h1>
         <p class="lead text-center text-muted">
-            Aprenda a usar todas as funcionalidades do RXbot com nossos guias passo a passo
+            Aprenda a usar todas as funcionalidades da Kaori com nossos guias passo a passo
         </p>
     </div>
 </div>
@@ -18,8 +18,8 @@
 <div class="row mb-4">
     <div class="col-12">
         <div class="card tutorial-card">
-            <div class="card-header bg-primary text-white d-flex align-items-center">
-                <div class="tutorial-number bg-light text-primary rounded-circle me-3">
+            <div class="card-header text-white d-flex align-items-center" style="background: var(--gradient-primary);">
+                <div class="tutorial-number bg-light rounded-circle me-3" style="color: var(--primary-color);">
                     {{ loop.index }}
                 </div>
                 <div>
@@ -45,7 +45,7 @@
                     </div>
                     <div class="col-lg-4">
                         <div class="tutorial-info bg-light p-3 rounded">
-                            <h6><i class="fas fa-clock me-2 text-primary"></i>Tempo Estimado</h6>
+                            <h6><i class="fas fa-clock me-2" style="color: var(--primary-color);"></i>Tempo Estimado</h6>
                             <p class="mb-3 text-muted">
                                 {% if tutorial.title == 'Como Criar sua Primeira Copinha' %}
                                     2-3 minutos
@@ -56,7 +56,7 @@
                                 {% endif %}
                             </p>
 
-                            <h6><i class="fas fa-user me-2 text-info"></i>Dificuldade</h6>
+                            <h6><i class="fas fa-user me-2" style="color: var(--primary-color);"></i>Dificuldade</h6>
                             <p class="mb-3">
                                 {% if tutorial.title == 'Como Criar sua Primeira Copinha' %}
                                     <span class="badge bg-success">Fácil</span>
@@ -70,7 +70,7 @@
                             <h6><i class="fas fa-tags me-2 text-warning"></i>Categoria</h6>
                             <p class="mb-0">
                                 {% if tutorial.title == 'Como Criar sua Primeira Copinha' %}
-                                    <span class="badge bg-primary">Torneios</span>
+                                    <span class="badge" style="background-color: var(--primary-color);">Torneios</span>
                                 {% elif tutorial.title == 'Sistema de Economia do Bot' %}
                                     <span class="badge bg-success">Economia</span>
                                 {% else %}
@@ -88,10 +88,10 @@
                         Siga os passos na ordem para melhores resultados
                     </small>
                     <div>
-                        <a href="/faq" class="btn btn-sm btn-outline-primary me-2">
+                        <a href="/faq" class="btn btn-sm me-2" style="border: 1px solid var(--primary-color); color: var(--primary-color);">
                             <i class="fas fa-question me-1"></i>FAQ
                         </a>
-                        <a href="/support" class="btn btn-sm btn-primary">
+                        <a href="/support" class="btn btn-sm" style="background: var(--gradient-primary); color: white; border: none;">
                             <i class="fas fa-headset me-1"></i>Suporte
                         </a>
                     </div>
@@ -113,8 +113,8 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6">
-                        <div class="tip-box p-3 border-start border-primary border-3 mb-3">
-                            <h6 class="text-primary">
+                        <div class="tip-box p-3 border-start border-3 mb-3" style="border-color: var(--primary-color) !important;">
+                            <h6 style="color: var(--primary-color);">
                                 <i class="fas fa-shield-alt me-2"></i>Permissões
                             </h6>
                             <p class="mb-0 small">
@@ -133,8 +133,8 @@
                     </div>
 
                     <div class="col-md-6">
-                        <div class="tip-box p-3 border-start border-info border-3 mb-3">
-                            <h6 class="text-info">
+                        <div class="tip-box p-3 border-start border-3 mb-3" style="border-color: var(--primary-color) !important;">
+                            <h6 style="color: var(--primary-color);">
                                 <i class="fas fa-clock me-2"></i>Cooldowns
                             </h6>
                             <p class="mb-0 small">
