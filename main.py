@@ -150,71 +150,26 @@ import hmac
 import requests # Importado para substituir aiohttp
 from flask import Flask, render_template, jsonify, request
 
-# Sistema de IA da Kaori
-class KaoriAI:
-    def __init__(self):
-        self.personality = {
-            "name": "Kaori",
-            "traits": [
-                "Carinhosa e atenciosa",
-                "Inteligente e útil", 
-                "Divertida e brincalhona",
-                "Sempre disposta a ajudar",
-                "Gosta de conversar sobre anime e tecnologia"
-            ],
-            "greeting_responses": [
-                "Oi! 🌸 Como posso ajudar você hoje?",
-                "Olá! ✨ Em que posso ser útil?",
-                "Oi querido! 💕 O que você gostaria de saber?",
-                "Olá! 🌟 Como está seu dia? Posso ajudar com algo?"
-            ],
-            "help_responses": [
-                "Claro! 💫 Posso ajudar com comandos, jogos, economia e muito mais!",
-                "Estou aqui para ajudar! ✨ Use `/ajuda` para ver todos os meus comandos!",
-                "Com certeza! 🌸 Sou especialista em diversão e utilidades!"
-            ],
-            "thanks_responses": [
-                "De nada! 💕 Fico feliz em ajudar!",
-                "Por nada! ✨ Sempre às ordens!",
-                "É um prazer! 🌸 Estou sempre aqui para você!"
-            ]
-        }
+# Sistema de IA da Kaori - LOCAL AI
+try:
+    from local_ai import local_ai
+    USING_LOCAL_AI = True
+    logger.info("🤖 IA Local carregada com sucesso!")
+except ImportError as e:
+    logger.warning(f"⚠️ IA Local não disponível, usando fallback: {e}")
+    USING_LOCAL_AI = False
     
-    def get_response(self, user_message, user_name=""):
-        """Gera resposta da Kaori baseada na mensagem do usuário"""
-        message_lower = user_message.lower()
-        
-        # Respostas para saudações
-        if any(word in message_lower for word in ["oi", "olá", "hello", "hi", "ola", "oii"]):
-            response = random.choice(self.personality["greeting_responses"])
-            if user_name:
-                response = response.replace("você", user_name)
-            return response
-        
-        # Respostas para pedidos de ajuda
-        elif any(word in message_lower for word in ["ajuda", "help", "como", "o que", "que você faz"]):
-            return random.choice(self.personality["help_responses"])
-        
-        # Respostas para agradecimentos
-        elif any(word in message_lower for word in ["obrigado", "obrigada", "thanks", "valeu", "brigado"]):
-            return random.choice(self.personality["thanks_responses"])
-        
-        # Respostas sobre si mesma
-        elif any(word in message_lower for word in ["quem é você", "quem você é", "seu nome", "como se chama"]):
-            return f"Eu sou a Kaori! 🌸 Sou sua assistente virtual carinhosa e estou aqui para tornar este servidor mais divertido! ✨"
-        
-        # Resposta padrão
-        else:
+    # Fallback simples se IA local falhar
+    class BasicKaoriAI:
+        def get_response(self, user_message, user_name=""):
             default_responses = [
-                f"Interessante! 🤔 Me conte mais sobre isso, ou use `/ajuda` para ver o que posso fazer!",
-                f"Hmm! 💭 Que tal tentarmos alguns comandos? Digite `/ajuda` para ver todas as opções!",
-                f"Oi! 🌸 Não entendi muito bem, mas posso ajudar com jogos, economia e muito mais! Use `/ajuda`!",
-                f"Que legal! ✨ Se precisar de alguma coisa específica, é só usar `/ajuda` para ver meus comandos!"
+                f"Oi! 🌸 Como posso ajudar você hoje?",
+                f"Interessante! 🤔 Use `/ajuda` para ver meus comandos!",
+                f"Que legal! ✨ Se precisar de algo, é só usar `/ajuda`!"
             ]
             return random.choice(default_responses)
-
-# Instanciar a IA da Kaori
-kaori_ai = KaoriAI()
+    
+    local_ai = BasicKaoriAI()
 
 # Import PostgreSQL (obrigatório)
 import psycopg2
@@ -2955,15 +2910,26 @@ async def on_message(message):
     except Exception as e:
         logger.error(f"Erro no sistema XP: {e}")
 
-    # Sistema de IA (responder quando mencionado)
+    # Sistema de IA Local (responder quando mencionado)
     if bot.user.mentioned_in(message) and not message.mention_everyone:
         try:
             content = message.content.replace(f'<@{bot.user.id}>', '').strip()
             if content:
-                response = ai_system.generate_response(content)
+                if USING_LOCAL_AI and local_ai.is_ready():
+                    # Usar IA local avançada
+                    response = local_ai.generate_response(
+                        content, 
+                        user_id=message.author.id,
+                        context=f"Canal: {message.channel.name}, Servidor: {message.guild.name}"
+                    )
+                else:
+                    # Usar fallback básico
+                    response = local_ai.get_response(content, message.author.display_name)
+                
                 await message.reply(response)
         except Exception as e:
             logger.error(f"Erro no sistema IA: {e}")
+            await message.reply("Ops! Tive um probleminha técnico. 🔧 Tente novamente!")
 
     # Processar comandos
     await bot.process_commands(message)
@@ -4031,6 +3997,130 @@ async def create_persistent_ticket_message(ctx_or_interaction):
 
         embed = create_embed(
             "🎫 Sistema de Tickets - RXbot",
+
+
+# ============ COMANDOS DE CONTROLE DA IA LOCAL ============
+
+@bot.tree.command(name="ia_status", description="Ver status da IA local")
+async def slash_ia_status(interaction: discord.Interaction):
+    """Status da IA local"""
+    try:
+        if not USING_LOCAL_AI:
+            embed = create_embed(
+                "🤖 IA Local - Status",
+                "❌ **IA Local não disponível**\n\n"
+                "Usando sistema básico de fallback.\n"
+                "Para ativar IA local, instale as dependências necessárias.",
+                color=0xff6b6b
+            )
+        elif local_ai.is_ready():
+            info = local_ai.get_model_info()
+            embed = create_embed(
+                "🤖 IA Local - Status",
+                f"✅ **IA Local ATIVA**\n\n"
+                f"**📋 Modelo atual:** {info['current_model']}\n"
+                f"**🚀 Status:** {'Carregado' if info['loaded'] else 'Carregando...'}\n"
+                f"**💾 Conversas na memória:** {info['memory_conversations']}\n"
+                f"**🔧 Modelos disponíveis:** {', '.join(info['available_models'])}\n\n"
+                f"**💡 Use `/ia_trocar_modelo` para mudar o modelo!**",
+                color=0x00ff00
+            )
+        else:
+            embed = create_embed(
+                "🤖 IA Local - Status", 
+                "🔄 **Carregando IA Local...**\n\n"
+                "O modelo está sendo carregado em background.\n"
+                "Isso pode levar alguns minutos na primeira vez.",
+                color=0xffa500
+            )
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        logger.error(f"Erro no comando ia_status: {e}")
+        await interaction.response.send_message("❌ Erro ao verificar status da IA!", ephemeral=True)
+
+@bot.tree.command(name="ia_trocar_modelo", description="Trocar modelo de IA (Admin)")
+@app_commands.describe(modelo="Nome do modelo: gpt2-medium, distilgpt2, ou microsoft/DialoGPT-medium")
+@app_commands.choices(modelo=[
+    app_commands.Choice(name="GPT-2 Medium (355M) - Melhor qualidade", value="gpt2-medium"),
+    app_commands.Choice(name="DistilGPT-2 (82M) - Mais rápido", value="distilgpt2"),
+    app_commands.Choice(name="DialoGPT Medium - Especializado em diálogo", value="microsoft/DialoGPT-medium")
+])
+async def slash_ia_trocar_modelo(interaction: discord.Interaction, modelo: str):
+    """Trocar modelo de IA local"""
+    try:
+        # Verificar permissões (admin ou usuário privilegiado)
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
+            embed = create_embed("❌ Sem permissão", "Apenas administradores podem trocar o modelo de IA!", color=0xff0000)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        if not USING_LOCAL_AI:
+            embed = create_embed("❌ IA Local indisponível", "IA Local não está configurada neste bot.", color=0xff0000)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        # Trocar modelo
+        result = local_ai.switch_model(modelo)
+        
+        embed = create_embed(
+            "🔄 Trocando Modelo de IA",
+            f"{result}\n\n"
+            f"**📋 Novo modelo:** {modelo}\n"
+            f"**⏱️ Tempo estimado:** 1-3 minutos\n"
+            f"**👤 Solicitado por:** {interaction.user.mention}\n\n"
+            f"*A IA ficará temporariamente indisponível durante o carregamento.*",
+            color=0xffa500
+        )
+        
+        await interaction.response.send_message(embed=embed)
+        
+        # Log da ação
+        logger.info(f"Admin {interaction.user.name} trocou modelo de IA para: {modelo}")
+        
+    except Exception as e:
+        logger.error(f"Erro ao trocar modelo: {e}")
+        await interaction.response.send_message("❌ Erro ao trocar modelo de IA!", ephemeral=True)
+
+@bot.tree.command(name="ia_conversar", description="Conversar diretamente com a IA")
+@app_commands.describe(mensagem="Sua mensagem para a IA")
+async def slash_ia_conversar(interaction: discord.Interaction, mensagem: str):
+    """Conversar diretamente com IA local"""
+    try:
+        if not USING_LOCAL_AI:
+            embed = create_embed("❌ IA Local indisponível", "Use menções @bot para conversar.", color=0xff0000)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        # Defer para dar tempo de processar
+        await interaction.response.defer()
+        
+        if local_ai.is_ready():
+            response = local_ai.generate_response(
+                mensagem,
+                user_id=interaction.user.id,
+                context=f"Comando direto - Canal: {interaction.channel.name}"
+            )
+        else:
+            response = "🔄 Ainda estou carregando meu cérebro! Tente novamente em alguns instantes. ✨"
+        
+        embed = create_embed(
+            "🤖 Kaori AI Local",
+            f"**💬 Você:** {mensagem}\n\n**🌸 Kaori:** {response}",
+            color=0x7289da
+        )
+        embed.set_footer(text=f"IA Local • Modelo: {local_ai.current_model if USING_LOCAL_AI else 'Básico'}")
+        
+        await interaction.followup.send(embed=embed)
+        
+    except Exception as e:
+        logger.error(f"Erro na conversa com IA: {e}")
+        try:
+            await interaction.followup.send("❌ Erro ao processar conversa com IA!", ephemeral=True)
+        except:
+            await interaction.response.send_message("❌ Erro ao processar conversa com IA!", ephemeral=True)
+
             """**Precisa de ajuda? Crie um ticket!**
 
 **📋 Reaja com o emoji correspondente:**

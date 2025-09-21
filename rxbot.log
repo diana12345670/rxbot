@@ -1187,3 +1187,43 @@ LINE 3:                 FROM interactive_messages
 2025-09-19 19:03:33,287 - Kaori - INFO - ✅ Database initialized successfully!
 2025-09-19 19:03:33,287 - Kaori - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
 2025-09-19 19:03:33,287 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-19 20:37:28,426 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-19 20:37:28,444 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-19 20:37:28,445 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-19 20:37:29,663 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-19 20:37:29,986 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 0 in public schema
+2025-09-19 20:37:29,988 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-19 20:37:29,988 - Kaori - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-19 20:37:29,990 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-19 20:39:46,300 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-19 20:39:46,323 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-19 20:39:46,323 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-19 20:39:46,337 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-19 20:39:46,536 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 0 in public schema
+2025-09-19 20:39:46,537 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-19 20:39:46,537 - Kaori - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-19 20:39:46,537 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-20 16:51:07,389 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-20 16:51:07,438 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-20 16:51:07,439 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-20 16:51:09,397 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-20 16:51:09,897 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 0 in public schema
+2025-09-20 16:51:09,899 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-20 16:51:09,900 - Kaori - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-20 16:51:09,900 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-20 17:03:20,752 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-20 17:03:20,858 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-20 17:03:20,864 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-20 17:03:20,879 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-20 17:03:21,286 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 0 in public schema
+2025-09-20 17:03:21,287 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-20 17:03:21,287 - Kaori - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-20 17:03:21,287 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-20 17:03:33,683 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-20 17:03:33,771 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-20 17:03:33,772 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-20 17:03:33,798 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-20 17:03:34,107 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 0 in public schema
+2025-09-20 17:03:34,107 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-20 17:03:34,108 - Kaori - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
+2025-09-20 17:03:34,108 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
