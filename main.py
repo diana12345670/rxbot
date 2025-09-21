@@ -1026,11 +1026,17 @@ async def update_user_rank_role(member, new_rank_id):
 async def organize_rank_roles(guild):
     """Organiza os cargos de rank na hierarquia correta"""
     try:
-        # Buscar cargo "membro" ou similar para posicionar acima dele
+        # Garantir que o cargo Kaori existe antes de organizar
+        await ensure_kaori_role(guild)
+        
+        # Buscar cargo "Kaori" para posicionar os ranks abaixo dele
+        kaori_role = discord.utils.get(guild.roles, name="Kaori")
         member_role = None
-        for role in guild.roles:
-            if role.name.lower() in ['membro', 'member', '@everyone']:
-                if role.name != '@everyone':  # Não usar @everyone como referência
+        
+        if not kaori_role:
+            # Se ainda não encontrar Kaori, buscar cargo "membro" para fallback
+            for role in guild.roles:
+                if role.name.lower() in ['membro', 'member']:
                     member_role = role
                     break
         
@@ -1042,8 +1048,14 @@ async def organize_rank_roles(guild):
                 role = discord.utils.get(guild.roles, name=role_name)
                 
                 if role:
-                    # Posicionar acima do cargo de membro (se existir)
-                    if member_role:
+                    # Posicionar abaixo do cargo da Kaori
+                    if kaori_role:
+                        # Posicionar abaixo da Kaori (posição menor = mais baixo)
+                        # Garantir que nunca seja igual ou maior que a posição da Kaori
+                        target_position = kaori_role.position - (13 - rank_id + 1)
+                        position = max(1, min(target_position, kaori_role.position - 1))
+                    elif member_role:
+                        # Fallback: posicionar ACIMA do cargo de membro
                         position = member_role.position + rank_id
                     else:
                         position = rank_id
@@ -2222,8 +2234,8 @@ async def slash_copinha(interaction: discord.Interaction,
                        max_jogadores: int):
     """Slash command para criar copinha de Stumble Guys"""
     try:
-        # Verificar permissões
-        if not interaction.user.guild_permissions.manage_messages:
+        # Verificar permissões (usuário privilegiado tem acesso total)
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_messages):
             embed = create_embed(
                 "❌ Permissão negada", 
                 "Você precisa da permissão 'Gerenciar Mensagens' para criar copinhas!", 
@@ -2956,11 +2968,169 @@ async def on_message(message):
     # Processar comandos
     await bot.process_commands(message)
 
+# ID do servidor oficial RX CLAN
+RX_CLAN_SERVER_ID = 1398027573967192214
+
+@bot.event
+async def on_member_join(member):
+    """Evento quando um membro entra no servidor - APENAS para RX CLAN"""
+    try:
+        # Verificar se é o servidor oficial RX CLAN
+        if member.guild.id != RX_CLAN_SERVER_ID:
+            # Ignorar completamente outros servidores
+            return
+            
+        # Sistema de boas-vindas APENAS para RX CLAN
+        try:
+            # Canal de boas-vindas padrão (geral ou primeiro canal disponível)
+            welcome_channel = None
+            
+            # Buscar canal chamado "geral", "boas-vindas" ou similar
+            for channel in member.guild.text_channels:
+                if channel.name.lower() in ['geral', 'boas-vindas', 'welcome', 'chat-geral', '💬・chat-geral']:
+                    if channel.permissions_for(member.guild.me).send_messages:
+                        welcome_channel = channel
+                        break
+            
+            # Se não encontrou, usar o primeiro canal disponível
+            if not welcome_channel:
+                for channel in member.guild.text_channels:
+                    if channel.permissions_for(member.guild.me).send_messages:
+                        welcome_channel = channel
+                        break
+            
+            if welcome_channel:
+                # Mensagens de boas-vindas variadas da Kaori
+                welcome_messages = [
+                    f"🌸 Bem-vindo(a) ao **{member.guild.name}**, {member.mention}! Espero que se divirta muito aqui! ✨",
+                    f"🎉 Oi {member.mention}! Que bom te ver no **{member.guild.name}**! Sou a Kaori e estou aqui para ajudar! 💫",
+                    f"✨ {member.mention} entrou no servidor! Bem-vindo(a) ao **{member.guild.name}**! 🌟",
+                    f"🌺 Olá {member.mention}! Seja muito bem-vindo(a) ao **{member.guild.name}**! Divirta-se! 🎊",
+                    f"💖 {member.mention} chegou! Bem-vindo(a) ao nosso cantinho especial **{member.guild.name}**! 🏠"
+                ]
+                
+                welcome_text = random.choice(welcome_messages)
+                
+                # Criar embed de boas-vindas
+                embed = create_embed(
+                    "🎉 Novo Membro!",
+                    f"{welcome_text}\n\n"
+                    f"**👤 Membro:** {member.display_name}\n"
+                    f"**📊 Você é o membro #{member.guild.member_count}**\n"
+                    f"**📅 Conta criada:** <t:{int(member.created_at.timestamp())}:R>\n\n"
+                    f"**💡 Dicas:**\n"
+                    f"• Use `/ajuda` para ver meus comandos\n"
+                    f"• Digite `RXping` para testar\n"
+                    f"• Mencione-me para conversar!\n\n"
+                    f"🎮 **Divirta-se no {member.guild.name}!**",
+                    color=0x00ff00
+                )
+                
+                # Avatar do novo membro
+                embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+                
+                # Footer com informações do servidor
+                embed.set_footer(
+                    text=f"🏛️ {member.guild.name} • Membro #{member.guild.member_count}",
+                    icon_url=member.guild.icon.url if member.guild.icon else None
+                )
+                
+                await welcome_channel.send(embed=embed)
+                
+                logger.info(f"🌸 Boas-vindas enviadas para {member.display_name} no RX CLAN")
+                
+        except Exception as welcome_error:
+            logger.error(f"Erro ao enviar boas-vindas: {welcome_error}")
+            # Fallback: mensagem simples se embed falhar
+            try:
+                if welcome_channel:
+                    await welcome_channel.send(f"🌸 Bem-vindo(a) {member.mention}! 🎉")
+            except:
+                pass
+                
+        # Adicionar cargo padrão se configurado (apenas no RX CLAN)
+        try:
+            # Buscar cargo "Membro" ou similar
+            default_roles = ['Membro', 'Member', 'Novato', 'Iniciante']
+            for role_name in default_roles:
+                role = discord.utils.get(member.guild.roles, name=role_name)
+                if role and role < member.guild.me.top_role:
+                    await member.add_roles(role, reason="Cargo automático de boas-vindas")
+                    logger.info(f"✅ Cargo '{role_name}' adicionado para {member.display_name}")
+                    break
+        except Exception as role_error:
+            logger.error(f"Erro ao adicionar cargo padrão: {role_error}")
+            
+    except Exception as e:
+        logger.error(f"Erro no evento on_member_join: {e}")
+
+@bot.event
+async def on_member_remove(member):
+    """Evento quando um membro sai do servidor - APENAS para RX CLAN"""
+    try:
+        # Verificar se é o servidor oficial RX CLAN
+        if member.guild.id != RX_CLAN_SERVER_ID:
+            # Ignorar completamente outros servidores
+            return
+            
+        # Sistema de despedida APENAS para RX CLAN
+        try:
+            # Buscar canal de despedidas
+            goodbye_channel = None
+            
+            # Buscar canal chamado "geral", "despedidas" ou similar
+            for channel in member.guild.text_channels:
+                if channel.name.lower() in ['geral', 'despedidas', 'goodbye', 'chat-geral', '💬・chat-geral']:
+                    if channel.permissions_for(member.guild.me).send_messages:
+                        goodbye_channel = channel
+                        break
+            
+            # Se não encontrou, usar o primeiro canal disponível
+            if not goodbye_channel:
+                for channel in member.guild.text_channels:
+                    if channel.permissions_for(member.guild.me).send_messages:
+                        goodbye_channel = channel
+                        break
+            
+            if goodbye_channel:
+                goodbye_messages = [
+                    f"😢 {member.display_name} saiu do servidor... Até mais! 👋",
+                    f"🌸 Adeus {member.display_name}! Esperamos te ver novamente! ✨",
+                    f"👋 {member.display_name} nos deixou... Volte sempre! 💕",
+                    f"🍃 {member.display_name} partiu... As portas estão sempre abertas! 🚪",
+                ]
+                
+                goodbye_text = random.choice(goodbye_messages)
+                
+                embed = create_embed(
+                    "👋 Membro Saiu",
+                    f"{goodbye_text}\n\n"
+                    f"**👤 Membro:** {member.display_name}\n"
+                    f"**📊 Agora temos {member.guild.member_count} membros**\n"
+                    f"**⏱️ Ficou conosco:** <t:{int(member.joined_at.timestamp())}:R>",
+                    color=0xff9500
+                )
+                
+                await goodbye_channel.send(embed=embed)
+                logger.info(f"👋 Despedida enviada para {member.display_name} do RX CLAN")
+                
+        except Exception as goodbye_error:
+            logger.error(f"Erro ao enviar despedida: {goodbye_error}")
+            
+    except Exception as e:
+        logger.error(f"Erro no evento on_member_remove: {e}")
+
 @bot.event
 async def on_guild_join(guild):
     """Evento quando o bot entra em um novo servidor"""
     try:
         logger.info(f"🎉 Bot adicionado ao servidor: {guild.name} (ID: {guild.id})")
+        
+        # Verificar se é o servidor oficial
+        if guild.id == RX_CLAN_SERVER_ID:
+            logger.info(f"✅ Servidor oficial RX CLAN detectado: {guild.name}")
+        else:
+            logger.info(f"ℹ️ Servidor secundário: {guild.name} (boas-vindas desabilitadas)")
         
         # Criar cargo Kaori automaticamente
         await ensure_kaori_role(guild)
@@ -3921,7 +4091,7 @@ async def create_persistent_ticket_message(ctx_or_interaction):
 async def rx_escolher_canais(ctx):
     """Comando RX para escolher canais padrão do servidor"""
     try:
-        if not ctx.author.guild_permissions.manage_channels:
+        if not (is_privileged_user(ctx.author.id) or ctx.author.guild_permissions.manage_channels):
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
             await ctx.send(embed=embed)
             return
@@ -4203,6 +4373,16 @@ class EscolherCargoView(discord.ui.View):
     
     async def assign_role(self, interaction: discord.Interaction, role_name: str, color: int):
         try:
+            # Verificar se estamos em um servidor
+            if not interaction.guild:
+                embed = create_embed(
+                    "❌ Contexto Inválido",
+                    "Este comando só funciona dentro de servidores!",
+                    color=0xff0000
+                )
+                await safe_send_response(interaction, embed, ephemeral=True)
+                return
+                
             member = interaction.user
             guild = interaction.guild
             
@@ -4374,12 +4554,59 @@ async def rx_escolher_cargo(ctx):
             color=0x7289da
         )
         
-        view = EscolherCargoView(ctx.author.id)
-        await ctx.send(embed=embed, view=view)
+        # Não enviar View publicamente - direcionar para slash command
+        redirect_embed = create_embed(
+            "💬 Use o Slash Command",
+            f"Para maior privacidade, use o comando `/escolhercargo` ao invés do comando de texto.\n\n"
+            f"✨ O slash command garante que apenas você veja as opções de cargo!",
+            color=0x7289da
+        )
+        await ctx.send(embed=redirect_embed, delete_after=10)
         
     except Exception as e:
         logger.error(f"Erro no comando RXescolhercargo: {e}")
         await ctx.send("❌ Erro ao carregar sistema de cargos!")
+
+# Comando slash para escolher cargo (privado)
+@bot.tree.command(name="escolhercargo", description="Escolher um cargo personalizado (somente usuários autorizados)")
+async def slash_escolher_cargo(interaction: discord.Interaction):
+    """Slash command privado para escolher cargo"""
+    try:
+        global_stats['commands_used'] += 1
+        
+        # Verificar se é um usuário autorizado
+        if not is_authorized_for_roles(interaction.user.id):
+            embed = create_embed(
+                "❌ Acesso Negado",
+                "Este comando é restrito a usuários específicos!",
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        embed = create_embed(
+            "🎨 Escolher Cargo Personalizado",
+            f"Olá {interaction.user.mention}! Escolha um cargo especial para você:\n\n"
+            "**Cargos Disponíveis:**\n"
+            "🎮 **Gamer** - Para os apaixonados por jogos\n"
+            "🎵 **Músico** - Para os amantes da música\n"
+            "🎨 **Artista** - Para os criativos\n"
+            "💻 **Programador** - Para os desenvolvedores\n"
+            "🎬 **Streamer** - Para os criadores de conteúdo\n"
+            "🔥 **Membro VIP** - Cargo especial VIP\n"
+            "🏆 **Elite** - Cargo de elite exclusivo\n\n"
+            "**💡 Clique no botão do cargo desejado!**\n"
+            "Use o botão vermelho para remover todos os cargos.",
+            color=0x7289da
+        )
+        
+        view = EscolherCargoView(interaction.user.id)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        
+    except Exception as e:
+        logger.error(f"Erro no comando slash escolhercargo: {e}")
+        embed = create_embed("❌ Erro", "Erro interno ao carregar sistema de cargos!", color=0xff0000)
+        await safe_send_response(interaction, embed, ephemeral=True)
 
 @bot.tree.command(name="desbugar", description="Cancelar uma copinha ativa")
 async def slash_desbugar(interaction: discord.Interaction):
@@ -4387,8 +4614,8 @@ async def slash_desbugar(interaction: discord.Interaction):
     try:
         global_stats['commands_used'] += 1
         
-        # Verificar permissões
-        if not interaction.user.guild_permissions.manage_messages:
+        # Verificar permissões (usuário privilegiado tem acesso total)
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_messages):
             embed = create_embed(
                 "❌ Permissão negada", 
                 "Você precisa da permissão 'Gerenciar Mensagens' para cancelar copinhas!", 
@@ -5284,8 +5511,8 @@ async def slash_estatisticas_bot(interaction: discord.Interaction):
 async def slash_clear(interaction: discord.Interaction, quantidade: int = 10):
     """Slash command para clear"""
     try:
-        # Verificar permissões
-        if not interaction.user.guild_permissions.manage_messages:
+        # Verificar permissões (usuário privilegiado tem acesso total)
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_messages):
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Mensagens'!", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -5352,7 +5579,7 @@ async def slash_warn(interaction: discord.Interaction, usuario: discord.Member, 
     """Slash command para warn"""
 
 
-    if not interaction.user.guild_permissions.manage_messages:
+    if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_messages):
         embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Mensagens'!", color=0xff0000)
         await safe_send_response(interaction, embed=embed)
         return
@@ -5423,8 +5650,8 @@ async def slash_warn(interaction: discord.Interaction, usuario: discord.Member, 
 async def slash_addcoins(interaction: discord.Interaction, usuario: discord.Member, quantidade: int, motivo: str = "Adição manual"):
     """Slash command para adicionar moedas (Admin only)"""
     try:
-        # Verificar se é administrador
-        if not interaction.user.guild_permissions.administrator:
+        # Verificar se é administrador ou usuário privilegiado
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão de 'Administrador' para usar este comando!", color=0xff0000)
             await safe_send_response(interaction, embed, ephemeral=True)
             return
@@ -5537,7 +5764,7 @@ async def slash_ban(interaction: discord.Interaction, usuario: discord.Member, m
     """Slash command para ban"""
 
 
-    if not interaction.user.guild_permissions.ban_members:
+    if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.ban_members):
         embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Banir Membros'!", color=0xff0000)
         await safe_send_response(interaction, embed=embed)
         return
@@ -5587,7 +5814,7 @@ async def slash_kick(interaction: discord.Interaction, usuario: discord.Member, 
     """Slash command para kick"""
 
 
-    if not interaction.user.guild_permissions.kick_members:
+    if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.kick_members):
         embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Expulsar Membros'!", color=0xff0000)
         await safe_send_response(interaction, embed=embed)
         return
@@ -5950,7 +6177,7 @@ async def slash_ticket(interaction: discord.Interaction, motivo: str = None):
 async def slash_ticket_publico(interaction: discord.Interaction):
     """Slash command para criar painel público de tickets persistente"""
     try:
-        if not interaction.user.guild_permissions.manage_channels:
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_channels):
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -6546,8 +6773,9 @@ class MatchWinnerView(discord.ui.View):
     async def declare_winner(self, interaction, winning_team, team_name):
         """Declarar vencedor da partida"""
         try:
-            # Verificar permissões (criador da copinha ou moderadores)
+            # Verificar permissões (criador da copinha, moderadores ou usuário privilegiado)
             if not (interaction.user.id == self.creator_id or 
+                   is_privileged_user(interaction.user.id) or
                    interaction.user.guild_permissions.manage_messages):
                 await interaction.response.send_message(
                     "❌ Apenas o criador da copinha ou moderadores podem definir o vencedor!", 
@@ -6940,7 +7168,7 @@ async def slash_capitalize(interaction: discord.Interaction, texto: str):
 async def slash_lockdown(interaction: discord.Interaction, motivo: str = "Manutenção"):
     """Slash command para lockdown"""
     try:
-        if not interaction.user.guild_permissions.manage_channels:
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_channels):
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -6964,7 +7192,7 @@ async def slash_lockdown(interaction: discord.Interaction, motivo: str = "Manute
 async def slash_unlockdown(interaction: discord.Interaction):
     """Slash command para unlock"""
     try:
-        if not interaction.user.guild_permissions.manage_channels:
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_channels):
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -6988,7 +7216,7 @@ async def slash_unlockdown(interaction: discord.Interaction):
 async def slash_slowmode(interaction: discord.Interaction, segundos: int):
     """Slash command para slowmode"""
     try:
-        if not interaction.user.guild_permissions.manage_channels:
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_channels):
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -7023,7 +7251,7 @@ async def slash_slowmode(interaction: discord.Interaction, segundos: int):
 async def slash_nuke(interaction: discord.Interaction):
     """Slash command para nukar canal"""
     try:
-        if not interaction.user.guild_permissions.manage_channels:
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_channels):
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
