@@ -385,4 +385,13 @@ def health_db():
         }), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)
+    # Detect if running on Replit
+    is_replit = bool(os.getenv('REPLIT_ENVIRONMENT') or os.getenv('REPL_SLUG'))
+    debug_mode = not is_replit  # Only debug in local development
+    
+    app.run(
+        host='0.0.0.0', 
+        port=int(os.getenv('PORT', 5000)), 
+        debug=debug_mode,
+        threaded=True
+    )

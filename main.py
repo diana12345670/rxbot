@@ -2924,11 +2924,14 @@ async def on_message(message):
 
     # Sistema de IA Local (responder quando mencionado)
     if bot.user.mentioned_in(message) and not message.mention_everyone:
+        logger.info(f"🎯 Kaori foi mencionada por {message.author.display_name} em {message.guild.name}#{message.channel.name}")
         try:
             content = message.content.replace(f'<@{bot.user.id}>', '').strip()
+            logger.info(f"💬 Conteúdo da mensagem: '{content}'")
             if content:
                 if USING_LOCAL_AI and local_ai.is_ready():
                     # Usar IA local avançada
+                    logger.info("🤖 Usando IA local avançada")
                     response = local_ai.generate_response(
                         content, 
                         user_id=message.author.id,
@@ -2936,11 +2939,17 @@ async def on_message(message):
                     )
                 else:
                     # Usar fallback básico
+                    logger.info("🔄 Usando sistema de fallback")
                     response = local_ai.generate_response(content, user_id=message.author.id)
                 
+                logger.info(f"✅ Resposta gerada: '{response}'")
                 await message.reply(response)
+                logger.info("📤 Resposta enviada com sucesso!")
+            else:
+                logger.warning("⚠️ Mensagem vazia após remover menção")
         except Exception as e:
             logger.error(f"Erro no sistema IA: {e}")
+            logger.error(f"Traceback: {str(e)}")
             await message.reply("Ops! Tive um probleminha técnico. 🔧 Tente novamente!")
 
     # Processar comandos
