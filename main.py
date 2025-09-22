@@ -2936,7 +2936,7 @@ async def on_message(message):
                     )
                 else:
                     # Usar fallback básico
-                    response = local_ai.get_response(content, message.author.display_name)
+                    response = local_ai.generate_response(content, user_id=message.author.id)
                 
                 await message.reply(response)
         except Exception as e:
