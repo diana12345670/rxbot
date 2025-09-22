@@ -2961,9 +2961,13 @@ async def on_message(message):
         except Exception as e:
             logger.error(f"Erro no sistema XP: {e}")
 
-        # Sistema de IA - Verificar se bot foi mencionado
-        if bot.user in message.mentions:
-            logger.info(f"🎯 Kaori mencionada por {message.author.display_name} em {message.guild.name if message.guild else 'DM'}")
+        # Sistema de IA - Verificar se bot foi mencionado OU se tem "kaori" no texto
+        mentioned_directly = bot.user in message.mentions
+        has_kaori_in_text = any(word in message.content.lower() for word in ['kaori', 'bot', 'ia'])
+        
+        if mentioned_directly or has_kaori_in_text:
+            mention_type = "menção direta" if mentioned_directly else "kaori no texto"
+            logger.info(f"🎯 Kaori detectada ({mention_type}) por {message.author.display_name} em {message.guild.name if message.guild else 'DM'}")
             
             try:
                 # Remover menções do bot da mensagem
@@ -4189,6 +4193,185 @@ async def slash_ia_conversar(interaction: discord.Interaction, mensagem: str):
             await interaction.followup.send("❌ Erro ao processar conversa com IA!", ephemeral=True)
         except:
             await interaction.response.send_message("❌ Erro ao processar conversa com IA!", ephemeral=True)
+
+@bot.tree.command(name="ia_aprender", description="Controlar sistema de aprendizado contínuo da IA (Admin)")
+@app_commands.describe(acao="Ativar, desativar ou ver status do aprendizado")
+@app_commands.choices(acao=[
+    app_commands.Choice(name="📚 Ativar aprendizado", value="ativar"),
+    app_commands.Choice(name="🚫 Desativar aprendizado", value="desativar"),
+    app_commands.Choice(name="📊 Ver estatísticas", value="status"),
+    app_commands.Choice(name="🏋️ Treinar agora", value="treinar"),
+    app_commands.Choice(name="🗑️ Limpar dados", value="limpar")
+])
+async def slash_ia_aprender(interaction: discord.Interaction, acao: str):
+    """Controlar sistema de aprendizado da IA"""
+    try:
+        # Verificar permissões (admin ou usuário privilegiado)
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
+            embed = create_embed("❌ Sem permissão", "Apenas administradores podem controlar o aprendizado da IA!", color=0xff0000)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        if not USING_LOCAL_AI:
+            embed = create_embed("❌ IA Local indisponível", "IA Local não está configurada neste bot.", color=0xff0000)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        if acao == "ativar":
+            local_ai.learning_enabled = True
+            embed = create_embed(
+                "✅ Aprendizado Ativado",
+                "🧠 **Sistema de aprendizado contínuo ATIVADO**\n\n"
+                "A IA agora aprende automaticamente com as conversas!\n\n"
+                "**Como funciona:**\n"
+                "• Analisa padrões de conversa\n"
+                "• Detecta sentimentos com Hugging Face\n"
+                "• Melhora respostas baseadas no feedback\n"
+                "• Salva conhecimento automaticamente\n\n"
+                "**Privacidade:** Apenas padrões são salvos, não dados pessoais.",
+                color=0x00ff00
+            )
+        
+        elif acao == "desativar":
+            local_ai.learning_enabled = False
+            embed = create_embed(
+                "🚫 Aprendizado Desativado",
+                "Sistema de aprendizado foi **DESATIVADO**.\n\n"
+                "A IA funcionará apenas com conhecimento base.",
+                color=0xff6600
+            )
+        
+        elif acao == "limpar":
+            local_ai.learning_data.clear()
+            local_ai.learning_patterns.clear()
+            local_ai._save_learning_data()
+            embed = create_embed(
+                "🗑️ Dados Limpos",
+                "Todos os dados de aprendizado foram limpos!\n\n"
+                "A IA voltará ao estado inicial de conhecimento.",
+                color=0x7289da
+            )
+        
+        elif acao == "treinar":
+            await interaction.response.defer()
+            result = local_ai.train_with_huggingface()
+            embed = create_embed(
+                "🏋️ Treinamento Executado",
+                f"{result}\n\n"
+                f"**Status:** {'Concluído' if '✅' in result else 'Erro'}\n"
+                f"**Executado por:** {interaction.user.mention}",
+                color=0x00ff00 if '✅' in result else 0xff0000
+            )
+            await interaction.followup.send(embed=embed)
+            return
+        
+        else:  # status
+            info = local_ai.get_model_info()
+            embed = create_embed(
+                "📊 Estatísticas de Aprendizado",
+                f"**🧠 Aprendizado:** {'🟢 Ativo' if info['learning_enabled'] else '🔴 Inativo'}\n"
+                f"**💬 Conversas aprendidas:** {info['learned_conversations']}\n"
+                f"**🎯 Padrões reconhecidos:** {info['learned_patterns']}\n"
+                f"**🤗 Hugging Face:** {'🟢 Disponível' if info['huggingface_available'] else '🔴 Indisponível'}\n"
+                f"**😊 Análise de sentimento:** {'🟢 Ativo' if info['sentiment_analysis'] else '🔴 Inativo'}\n\n"
+                f"**📋 Funcionalidades ativas:**\n"
+                f"• Detecção automática de 'kaori' no texto\n"
+                f"• Aprendizado com feedback positivo/negativo\n"
+                f"• Padrões de resposta personalizados\n"
+                f"• Análise de sentimento em tempo real",
+                color=0x00ff00 if info['learning_enabled'] else 0xff0000
+            )
+        
+        await interaction.response.send_message(embed=embed)
+        
+        # Log da ação
+        logger.info(f"Admin {interaction.user.name} {acao} sistema de aprendizado da IA")
+        
+    except Exception as e:
+        logger.error(f"Erro ao controlar aprendizado: {e}")
+        await interaction.response.send_message("❌ Erro ao controlar sistema de aprendizado!", ephemeral=True)
+
+@bot.tree.command(name="ia_pesquisa", description="Controlar sistema de pesquisa na internet da IA (Admin)")
+@app_commands.describe(acao="Ativar ou desativar pesquisa na internet")
+@app_commands.choices(acao=[
+    app_commands.Choice(name="🔍 Ativar pesquisa", value="ativar"),
+    app_commands.Choice(name="🚫 Desativar pesquisa", value="desativar"),
+    app_commands.Choice(name="📊 Ver status", value="status"),
+    app_commands.Choice(name="🗑️ Limpar cache", value="limpar_cache")
+])
+async def slash_ia_pesquisa(interaction: discord.Interaction, acao: str):
+    """Controlar sistema de pesquisa na internet"""
+    try:
+        # Verificar permissões (admin ou usuário privilegiado)
+        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
+            embed = create_embed("❌ Sem permissão", "Apenas administradores podem controlar a pesquisa da IA!", color=0xff0000)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        if not USING_LOCAL_AI:
+            embed = create_embed("❌ IA Local indisponível", "IA Local não está configurada neste bot.", color=0xff0000)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        if acao == "ativar":
+            local_ai.search_enabled = True
+            embed = create_embed(
+                "✅ Pesquisa Ativada",
+                "🔍 **Sistema de pesquisa na internet ATIVADO**\n\n"
+                "A IA agora pode pesquisar informações na internet quando não souber algo específico!\n\n"
+                "**Fontes utilizadas:**\n"
+                "• DuckDuckGo Instant Answer API\n"
+                "• Wikipedia (backup)\n\n"
+                "**Limitações:**\n"
+                "• Máximo 10 pesquisas por minuto\n"
+                "• Cache automático para evitar repetições",
+                color=0x00ff00
+            )
+        
+        elif acao == "desativar":
+            local_ai.search_enabled = False
+            embed = create_embed(
+                "🚫 Pesquisa Desativada",
+                "Sistema de pesquisa na internet foi **DESATIVADO**.\n\n"
+                "A IA funcionará apenas com o conhecimento local (DistilGPT2).",
+                color=0xff6600
+            )
+        
+        elif acao == "limpar_cache":
+            cache_size = len(local_ai.search_cache)
+            local_ai.search_cache.clear()
+            embed = create_embed(
+                "🗑️ Cache Limpo",
+                f"Cache de pesquisas foi limpo!\n\n"
+                f"**Entradas removidas:** {cache_size}\n"
+                f"**Status:** {'Ativo' if local_ai.search_enabled else 'Inativo'}",
+                color=0x7289da
+            )
+        
+        else:  # status
+            info = local_ai.get_model_info()
+            embed = create_embed(
+                "📊 Status da Pesquisa na Internet",
+                f"**🔍 Sistema:** {'🟢 Ativo' if info['search_enabled'] else '🔴 Inativo'}\n"
+                f"**💾 Cache:** {info['search_cache_size']} entradas salvas\n"
+                f"**🌐 Fontes:** DuckDuckGo, Wikipedia\n"
+                f"**⏱️ Limite:** 10 pesquisas/minuto\n\n"
+                f"**📋 Como funciona:**\n"
+                f"• IA detecta quando não sabe algo específico\n"
+                f"• Pesquisa automaticamente na internet\n"
+                f"• Combina conhecimento local + informações atuais\n"
+                f"• Cache inteligente evita pesquisas repetidas",
+                color=0x00ff00 if info['search_enabled'] else 0xff0000
+            )
+        
+        await interaction.response.send_message(embed=embed)
+        
+        # Log da ação
+        logger.info(f"Admin {interaction.user.name} {acao} sistema de pesquisa da IA")
+        
+    except Exception as e:
+        logger.error(f"Erro ao controlar pesquisa: {e}")
+        await interaction.response.send_message("❌ Erro ao controlar sistema de pesquisa!", ephemeral=True)
 
 # ============ COMANDOS COM PREFIXO RX (NÃO-SLASH) ============
 

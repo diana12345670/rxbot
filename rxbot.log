@@ -2745,3 +2745,890 @@ LINE 4:                 WHERE status = 'active'
 2025-09-22 21:04:33,948 - Kaori - INFO - Usuário 1334167648480530472 criado com dados padrão
 2025-09-22 21:04:45,874 - Kaori - INFO - Usuário 1376969623303356457 criado com dados padrão
 2025-09-22 21:05:00,045 - Kaori - INFO - Usuário 1210657767203930192 criado com dados padrão
+2025-09-22 21:12:33,199 - Kaori - INFO - 💓 Heartbeat restaurado
+2025-09-22 21:22:58,430 - Kaori - INFO - Usuário 1339336477661724674 criado com dados padrão
+2025-09-22 21:23:27,902 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:23:27,902 - Kaori - INFO - 💬 Processando: 'dboa?'
+2025-09-22 21:23:27,902 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:23:27,903 - Kaori - INFO - ✅ Resposta: 'Pergunta muito boa! 🌟 Posso compartilhar algumas ideias sobre isso. Para funções do bot, confira `/ajuda`! ✨'
+2025-09-22 21:23:28,131 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:23:56,969 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:23:56,970 - Kaori - INFO - 💬 Processando: 'como você ta? Me conta algo'
+2025-09-22 21:23:56,970 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:23:56,971 - Kaori - INFO - ✅ Resposta: 'Claro! 💫 Posso ajudar com comandos, jogos, economia e muito mais!'
+2025-09-22 21:23:57,477 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:24:13,241 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:24:13,241 - Kaori - INFO - 💬 Processando: 'Fala de economia'
+2025-09-22 21:24:13,241 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:24:13,241 - Kaori - INFO - ✅ Resposta: 'Show! 🚀 Sobre isso, tem várias perspectivas que podem ser interessantes de explorar juntos! ✨'
+2025-09-22 21:24:13,557 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:24:20,078 - Kaori - INFO - Usuário 1170017934949748856 criado com dados padrão
+2025-09-22 21:24:24,431 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:24:24,431 - Kaori - INFO - 💬 Processando: 'Tipo?'
+2025-09-22 21:24:24,431 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:24:24,431 - Kaori - INFO - ✅ Resposta: 'Que pergunta legal! 💡 Deixe-me pensar... Isso envolve vários aspectos que posso abordar. Para comandos, use `/ajuda`! ✨'
+2025-09-22 21:24:24,712 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:26:18,751 - LocalAI - INFO - 🤖 Inicializando DistilGPT2 local...
+2025-09-22 21:26:18,751 - LocalAI - INFO - ✅ DistilGPT2 carregado com sucesso (implementação otimizada)!
+2025-09-22 21:26:18,752 - Kaori - INFO - 🤖 IA Local carregada com sucesso!
+2025-09-22 21:26:18,752 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-22 21:26:18,816 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-22 21:26:18,816 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:26:18,829 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-22 21:26:19,036 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:26:19,037 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-22 21:26:19,037 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-22 21:26:19,050 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.95.130:5000
+2025-09-22 21:26:19,051 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-22 21:26:22,040 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 21:26:22] "GET /healthz HTTP/1.1" 200 -
+2025-09-22 21:26:22,042 - Kaori - INFO - ✅ Flask está respondendo
+2025-09-22 21:26:22,043 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-22 21:26:22,043 - discord.client - INFO - logging in using static token
+2025-09-22 21:26:22,726 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: e15663792c6472124724edf1ea7cb45f).
+2025-09-22 21:26:24,768 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:26:24,768 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-22 21:26:24,768 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-22 21:26:24,881 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:26:24,892 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-22 21:26:24,893 - Kaori - INFO - ✅ Database inicializado
+2025-09-22 21:26:24,893 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-22 21:26:24,893 - Kaori - INFO - 📊 Conectado em 3 servidores
+2025-09-22 21:26:24,893 - Kaori - INFO - 👥 Servindo 449 usuários únicos
+2025-09-22 21:26:24,894 - Kaori - INFO - 🚀 Kaori Online! Servidores: 3 | Usuários: 449 | Latência: 34.39ms
+2025-09-22 21:26:24,894 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-22 21:26:24,896 - Kaori - INFO - ⏭️ Backup desnecessário - PostgreSQL tem backup automático
+2025-09-22 21:26:26,172 - Kaori - WARNING - ❌ 2FA obrigatório impediu criação de cargos em ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆
+2025-09-22 21:26:26,173 - Kaori - INFO - 💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente
+2025-09-22 21:26:26,305 - Kaori - WARNING - ⚠️ Não foi possível criar cargo Kaori no servidor ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆 - sem permissões
+2025-09-22 21:26:26,603 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:26:30,012 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:26:33,839 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:26:33,840 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-22 21:26:33,856 - Kaori - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-22 21:26:34,119 - Kaori - INFO - ✅ 93 slash commands sincronizados
+2025-09-22 21:26:34,120 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-22 21:26:34,120 - Kaori - INFO - 🚀 Total de comandos slash: 93
+2025-09-22 21:26:34,120 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-22 21:26:34,120 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-22 21:26:34,120 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-22 21:26:34,120 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-22 21:26:34,120 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-22 21:26:34,120 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-22 21:26:34,120 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-22 21:26:34,120 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-22 21:26:34,120 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-22 21:26:34,120 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-22 21:26:34,121 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-22 21:26:34,121 - Kaori - INFO -    /ia_status - Ver status da IA local
+2025-09-22 21:26:34,121 - Kaori - INFO -    /ia_trocar_modelo - Trocar modelo de IA (Admin)
+2025-09-22 21:26:34,121 - Kaori - INFO -    /ia_conversar - Conversar diretamente com a IA
+2025-09-22 21:26:34,121 - Kaori - INFO -    /cuptop10 - Ver top 10 do ranking das copinhas
+2025-09-22 21:26:34,121 - Kaori - INFO -    ... e mais 78 comandos!
+2025-09-22 21:26:34,121 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-22 21:26:41,653 - Kaori - INFO - Usuário 1418298612357660712 criado com dados padrão
+2025-09-22 21:26:56,424 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:26:56,424 - Kaori - INFO - 💬 Processando: 'Ata blz ent'
+2025-09-22 21:26:56,424 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:26:56,425 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta! Com meu DistilGPT2, posso processar diversos tipos de consultas e fornecer respostas contextuais. ✨'
+2025-09-22 21:26:56,724 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:27:06,521 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:27:06,521 - Kaori - INFO - 💬 Processando: 'aqui'
+2025-09-22 21:27:06,521 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:27:06,522 - Kaori - INFO - ✅ Resposta: 'Ótima questão! Como uma IA avançada, posso discutir sobre tecnologia, jogos, comandos do bot, ou qualquer assunto que interesse você. Vamos continuar nossa conversa! ✨'
+2025-09-22 21:27:06,732 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:27:26,182 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:27:26,182 - Kaori - INFO - 💬 Processando: 'Conta de 1 a 10'
+2025-09-22 21:27:26,182 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:27:26,183 - Kaori - INFO - ✅ Resposta: 'Ótima questão! Como uma IA avançada, posso discutir sobre tecnologia, jogos, comandos do bot, ou qualquer assunto que interesse você. Vamos continuar nossa conversa! ✨'
+2025-09-22 21:27:26,449 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:27:45,781 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:27:45,781 - Kaori - INFO - 💬 Processando: 'Voce nao ta falando direito'
+2025-09-22 21:27:45,781 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:27:45,781 - Kaori - INFO - ✅ Resposta: 'Ótima questão! Como uma IA avançada, posso discutir sobre tecnologia, jogos, comandos do bot, ou qualquer assunto que interesse você. Vamos continuar nossa conversa! ✨'
+2025-09-22 21:27:46,010 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:30:10,802 - LocalAI - INFO - 🤖 Inicializando DistilGPT2 local...
+2025-09-22 21:30:10,803 - LocalAI - INFO - ✅ DistilGPT2 carregado com sucesso (implementação otimizada)!
+2025-09-22 21:30:10,803 - Kaori - INFO - 🤖 IA Local carregada com sucesso!
+2025-09-22 21:30:10,803 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-22 21:30:10,830 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-22 21:30:10,831 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:30:10,841 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-22 21:30:10,990 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:30:10,990 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-22 21:30:10,991 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-22 21:30:11,005 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.95.130:5000
+2025-09-22 21:30:11,006 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-22 21:30:13,076 - werkzeug - INFO - 172.31.95.130 - - [22/Sep/2025 21:30:13] "GET / HTTP/1.1" 200 -
+2025-09-22 21:30:13,996 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 21:30:13] "GET /healthz HTTP/1.1" 200 -
+2025-09-22 21:30:13,997 - Kaori - INFO - ✅ Flask está respondendo
+2025-09-22 21:30:13,997 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-22 21:30:13,998 - discord.client - INFO - logging in using static token
+2025-09-22 21:30:14,632 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: d7f93b0647d39ae71871ac399e257da1).
+2025-09-22 21:30:16,677 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:30:16,678 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-22 21:30:16,678 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-22 21:30:16,832 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:30:16,841 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-22 21:30:16,842 - Kaori - INFO - ✅ Database inicializado
+2025-09-22 21:30:16,842 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-22 21:30:16,842 - Kaori - INFO - 📊 Conectado em 3 servidores
+2025-09-22 21:30:16,842 - Kaori - INFO - 👥 Servindo 449 usuários únicos
+2025-09-22 21:30:16,842 - Kaori - INFO - 🚀 Kaori Online! Servidores: 3 | Usuários: 449 | Latência: 26.71ms
+2025-09-22 21:30:16,843 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-22 21:30:16,845 - Kaori - INFO - ⏭️ Backup desnecessário - PostgreSQL tem backup automático
+2025-09-22 21:30:18,140 - Kaori - WARNING - ❌ 2FA obrigatório impediu criação de cargos em ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆
+2025-09-22 21:30:18,140 - Kaori - INFO - 💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente
+2025-09-22 21:30:18,822 - Kaori - WARNING - ⚠️ Não foi possível criar cargo Kaori no servidor ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆 - sem permissões
+2025-09-22 21:30:19,111 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:30:24,540 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:30:28,632 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:30:28,632 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-22 21:30:28,644 - Kaori - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-22 21:30:28,958 - Kaori - INFO - ✅ 93 slash commands sincronizados
+2025-09-22 21:30:28,958 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-22 21:30:28,958 - Kaori - INFO - 🚀 Total de comandos slash: 93
+2025-09-22 21:30:28,958 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-22 21:30:28,958 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-22 21:30:28,959 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-22 21:30:28,959 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-22 21:30:28,959 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-22 21:30:28,959 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-22 21:30:28,959 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-22 21:30:28,959 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-22 21:30:28,959 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-22 21:30:28,959 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-22 21:30:28,960 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-22 21:30:28,960 - Kaori - INFO -    /ia_status - Ver status da IA local
+2025-09-22 21:30:28,960 - Kaori - INFO -    /ia_trocar_modelo - Trocar modelo de IA (Admin)
+2025-09-22 21:30:28,960 - Kaori - INFO -    /ia_conversar - Conversar diretamente com a IA
+2025-09-22 21:30:28,960 - Kaori - INFO -    /cuptop10 - Ver top 10 do ranking das copinhas
+2025-09-22 21:30:28,960 - Kaori - INFO -    ... e mais 78 comandos!
+2025-09-22 21:30:28,961 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-22 21:30:47,412 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:30:47,413 - Kaori - INFO - 💬 Processando: 'conta de 1 a 15 rapidin'
+2025-09-22 21:30:47,413 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:30:47,413 - Kaori - INFO - ✅ Resposta: 'Aqui está a contagem de 1 a 15: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 ✨'
+2025-09-22 21:30:47,790 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:30:54,194 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:30:54,195 - Kaori - INFO - 💬 Processando: 'Gere muleke'
+2025-09-22 21:30:54,195 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:30:54,196 - Kaori - INFO - ✅ Resposta: 'Sobre 'Gere muleke' - que assunto legal! Posso elaborar mais se você quiser. O que especificamente te interessa? ✨'
+2025-09-22 21:30:54,618 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:31:04,705 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:31:04,705 - Kaori - INFO - 💬 Processando: 'Foi o corretor kkk'
+2025-09-22 21:31:04,705 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:31:04,706 - Kaori - INFO - ✅ Resposta: 'Hey! 💫 Como posso ajudar você?'
+2025-09-22 21:31:05,398 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:31:11,322 - Kaori - INFO - 🚫 Despedida ignorada - servidor não é RX CLAN: ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆 (ID: 1389394621640998953)
+2025-09-22 21:31:13,923 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:31:13,924 - Kaori - INFO - 💬 Processando: 'Q?'
+2025-09-22 21:31:13,925 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:31:13,925 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Q?...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:31:14,206 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:31:34,324 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:31:34,325 - Kaori - INFO - 💬 Processando: 'Dona da vc mete Oi querido! 💕 O que você gostaria de saber?'
+2025-09-22 21:31:34,325 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:31:34,325 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Dona da vc mete Oi querido! 💕 ...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:31:34,616 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:32:23,713 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:32:23,714 - Kaori - INFO - 💬 Processando: 'Vc nao ta entendedo'
+2025-09-22 21:32:23,714 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:32:23,714 - Kaori - INFO - ✅ Resposta: 'Você tem razão! 😔 Desculpe se não estou respondendo adequadamente. Vou tentar melhorar! Pode me dar mais detalhes sobre o que você gostaria que eu fizesse? 🌸'
+2025-09-22 21:32:23,988 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:32:40,139 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:32:40,140 - Kaori - INFO - 💬 Processando: 'Receita de feijao'
+2025-09-22 21:32:40,140 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:32:40,141 - Kaori - INFO - ✅ Resposta: 'Sobre 'Receita de feijao' - que assunto legal! Posso elaborar mais se você quiser. O que especificamente te interessa? ✨'
+2025-09-22 21:32:40,375 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:32:53,424 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:32:53,425 - Kaori - INFO - 💬 Processando: 'Crie uma receita de feijão ae'
+2025-09-22 21:32:53,426 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:32:53,426 - Kaori - INFO - ✅ Resposta: 'Hmm, 'Crie uma receita de feijão ae'... Isso me faz pensar! Como IA avançada, posso discutir esse tema com você. Quer que eu desenvolva mais? ✨'
+2025-09-22 21:32:53,677 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:33:30,245 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:33:30,246 - Kaori - INFO - 💬 Processando: 'Fale de um jeito como uma apresentação'
+2025-09-22 21:33:30,246 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:33:30,246 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Fale de um jeito como uma apre...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:33:32,009 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:33:50,682 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:33:50,682 - Kaori - INFO - 💬 Processando: 'Quero um unicórnio oque vc acha?'
+2025-09-22 21:33:50,682 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:33:50,682 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Quero um unicórnio oque vc ach...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:33:50,954 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:34:01,868 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:34:01,870 - Kaori - INFO - 💬 Processando: 'Um peludo'
+2025-09-22 21:34:01,871 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:34:01,875 - Kaori - INFO - ✅ Resposta: 'Sobre 'Um peludo' - que assunto legal! Posso elaborar mais se você quiser. O que especificamente te interessa? ✨'
+2025-09-22 21:34:02,121 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:35:21,493 - werkzeug - INFO - 172.31.95.130 - - [22/Sep/2025 21:35:21] "GET / HTTP/1.1" 200 -
+2025-09-22 21:35:53,645 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:35:53,646 - Kaori - INFO - 💬 Processando: 'Quero um unicórnio preto'
+2025-09-22 21:35:53,646 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:35:53,646 - Kaori - INFO - ✅ Resposta: 'Interessante o que você disse: 'Quero um unicórnio preto'! Vou pensar sobre isso... Como uma IA, posso conversar sobre vários tópicos. Me conte mais! ✨'
+2025-09-22 21:35:53,910 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:36:16,963 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:36:16,963 - Kaori - INFO - 💬 Processando: 'Oque acha de um unicórnio para mim?'
+2025-09-22 21:36:16,963 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:36:16,964 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Oque acha de um unicórnio para...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:36:19,796 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:36:35,852 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:36:35,853 - Kaori - INFO - 💬 Processando: 'Voce sempre fala e mesma coisa?'
+2025-09-22 21:36:35,853 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:36:35,853 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Voce sempre fala e mesma coisa...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:36:36,197 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:36:46,669 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:36:46,669 - Kaori - INFO - 💬 Processando: 'Mds..'
+2025-09-22 21:36:46,669 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:36:46,669 - Kaori - INFO - ✅ Resposta: 'Sobre 'Mds..' - que assunto legal! Posso elaborar mais se você quiser. O que especificamente te interessa? ✨'
+2025-09-22 21:36:46,875 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:37:01,736 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:37:01,736 - Kaori - INFO - 💬 Processando: 'Voce nao entende'
+2025-09-22 21:37:01,736 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:37:01,737 - Kaori - INFO - ✅ Resposta: 'Interessante o que você disse: 'Voce nao entende'! Vou pensar sobre isso... Como uma IA, posso conversar sobre vários tópicos. Me conte mais! ✨'
+2025-09-22 21:37:01,932 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:37:55,839 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:37:55,840 - Kaori - INFO - 💬 Processando: 'Para de falar sempre a mesma coisa (Interessante o que você disse: 'Voce nao entende'! Vou pensar sobre isso... Como uma IA, posso conversar sobre vários tópicos. Me conte mais! ✨)'
+2025-09-22 21:37:55,841 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:37:55,843 - Kaori - INFO - ✅ Resposta: 'Estou muito bem, obrigada por perguntar! 🌸 Meu DistilGPT2 está funcionando perfeitamente. Como posso ajudar você hoje?'
+2025-09-22 21:37:56,310 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:38:14,640 - LocalAI - INFO - 🤖 Inicializando DistilGPT2 local...
+2025-09-22 21:38:14,640 - LocalAI - INFO - ✅ DistilGPT2 carregado com sucesso (implementação otimizada)!
+2025-09-22 21:38:14,641 - Kaori - INFO - 🤖 IA Local carregada com sucesso!
+2025-09-22 21:38:14,642 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-22 21:38:14,667 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-22 21:38:14,667 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:38:14,716 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-22 21:38:14,859 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:38:14,860 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-22 21:38:14,865 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-22 21:38:15,728 - Kaori - INFO - Usuário 959860300042096722 criado com dados padrão
+2025-09-22 21:38:16,112 - werkzeug - INFO - 172.31.95.130 - - [22/Sep/2025 21:38:16] "GET / HTTP/1.1" 200 -
+2025-09-22 21:38:17,870 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 21:38:17] "GET /healthz HTTP/1.1" 200 -
+2025-09-22 21:38:17,871 - Kaori - INFO - ✅ Flask está respondendo
+2025-09-22 21:38:17,872 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-22 21:38:17,872 - discord.client - INFO - logging in using static token
+2025-09-22 21:38:18,465 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: 89e4b01aa9bea15cba6739209c3fe341).
+2025-09-22 21:38:18,791 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:38:18,791 - Kaori - INFO - 💬 Processando: 'Entende agr?'
+2025-09-22 21:38:18,791 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:38:18,791 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Entende agr?...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:38:19,794 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:38:20,515 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:38:20,516 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-22 21:38:20,517 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-22 21:38:20,666 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:38:20,680 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-22 21:38:20,681 - Kaori - INFO - ✅ Database inicializado
+2025-09-22 21:38:20,682 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-22 21:38:20,682 - Kaori - INFO - 📊 Conectado em 3 servidores
+2025-09-22 21:38:20,683 - Kaori - INFO - 👥 Servindo 448 usuários únicos
+2025-09-22 21:38:20,685 - Kaori - INFO - 🚀 Kaori Online! Servidores: 3 | Usuários: 448 | Latência: 25.13ms
+2025-09-22 21:38:20,689 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-22 21:38:20,693 - Kaori - INFO - ⏭️ Backup desnecessário - PostgreSQL tem backup automático
+2025-09-22 21:38:21,977 - Kaori - WARNING - ❌ 2FA obrigatório impediu criação de cargos em ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆
+2025-09-22 21:38:21,978 - Kaori - INFO - 💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente
+2025-09-22 21:38:22,114 - Kaori - WARNING - ⚠️ Não foi possível criar cargo Kaori no servidor ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆 - sem permissões
+2025-09-22 21:38:24,268 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:38:28,134 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:38:31,196 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:38:31,196 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-22 21:38:31,205 - Kaori - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-22 21:38:31,452 - Kaori - INFO - ✅ 93 slash commands sincronizados
+2025-09-22 21:38:31,452 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-22 21:38:31,452 - Kaori - INFO - 🚀 Total de comandos slash: 93
+2025-09-22 21:38:31,452 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-22 21:38:31,453 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-22 21:38:31,453 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-22 21:38:31,453 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-22 21:38:31,453 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-22 21:38:31,453 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-22 21:38:31,453 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-22 21:38:31,453 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-22 21:38:31,454 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-22 21:38:31,454 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-22 21:38:31,454 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-22 21:38:31,454 - Kaori - INFO -    /ia_status - Ver status da IA local
+2025-09-22 21:38:31,454 - Kaori - INFO -    /ia_trocar_modelo - Trocar modelo de IA (Admin)
+2025-09-22 21:38:31,454 - Kaori - INFO -    /ia_conversar - Conversar diretamente com a IA
+2025-09-22 21:38:31,454 - Kaori - INFO -    /cuptop10 - Ver top 10 do ranking das copinhas
+2025-09-22 21:38:31,454 - Kaori - INFO -    ... e mais 78 comandos!
+2025-09-22 21:38:31,455 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-22 21:38:48,724 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:38:48,724 - Kaori - INFO - 💬 Processando: 'Denovo a mesma coisa (Interessante pergunta sobre 'Entende agr?...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨)'
+2025-09-22 21:38:48,725 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:38:48,726 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Denovo a mesma coisa (Interess...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:38:48,729 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:38:48,729 - Kaori - INFO - 💬 Processando: 'Denovo a mesma coisa (Interessante pergunta sobre 'Entende agr?...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨)'
+2025-09-22 21:38:48,729 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:38:48,729 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Denovo a mesma coisa (Interess...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:38:49,020 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:38:49,049 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:39:15,838 - LocalAI - INFO - 🤖 Inicializando DistilGPT2 local...
+2025-09-22 21:39:15,838 - LocalAI - INFO - ✅ DistilGPT2 carregado com sucesso (implementação otimizada)!
+2025-09-22 21:39:15,838 - Kaori - INFO - 🤖 IA Local carregada com sucesso!
+2025-09-22 21:39:15,839 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-22 21:39:15,857 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-22 21:39:15,858 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:39:15,868 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-22 21:39:16,014 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:39:16,014 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-22 21:39:16,015 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-22 21:39:16,024 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.95.130:5000
+2025-09-22 21:39:16,024 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-22 21:39:17,946 - werkzeug - INFO - 172.31.95.130 - - [22/Sep/2025 21:39:17] "GET / HTTP/1.1" 200 -
+2025-09-22 21:39:19,018 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 21:39:19] "GET /healthz HTTP/1.1" 200 -
+2025-09-22 21:39:19,019 - Kaori - INFO - ✅ Flask está respondendo
+2025-09-22 21:39:19,019 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-22 21:39:19,020 - discord.client - INFO - logging in using static token
+2025-09-22 21:39:19,774 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: 19346218d0cebe8b3cd51a3dcdf29560).
+2025-09-22 21:39:22,492 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:39:22,493 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-22 21:39:22,493 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-22 21:39:22,623 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:39:22,635 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-22 21:39:22,636 - Kaori - INFO - ✅ Database inicializado
+2025-09-22 21:39:22,637 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-22 21:39:22,637 - Kaori - INFO - 📊 Conectado em 3 servidores
+2025-09-22 21:39:22,638 - Kaori - INFO - 👥 Servindo 448 usuários únicos
+2025-09-22 21:39:22,638 - Kaori - INFO - 🚀 Kaori Online! Servidores: 3 | Usuários: 448 | Latência: 28.15ms
+2025-09-22 21:39:22,639 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-22 21:39:22,642 - Kaori - INFO - ⏭️ Backup desnecessário - PostgreSQL tem backup automático
+2025-09-22 21:39:23,934 - Kaori - WARNING - ❌ 2FA obrigatório impediu criação de cargos em ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆
+2025-09-22 21:39:23,934 - Kaori - INFO - 💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente
+2025-09-22 21:39:24,044 - Kaori - WARNING - ⚠️ Não foi possível criar cargo Kaori no servidor ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆 - sem permissões
+2025-09-22 21:39:24,588 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:39:29,653 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:39:34,253 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:39:34,253 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-22 21:39:34,266 - Kaori - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-22 21:39:34,558 - Kaori - INFO - ✅ 94 slash commands sincronizados
+2025-09-22 21:39:34,559 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-22 21:39:34,559 - Kaori - INFO - 🚀 Total de comandos slash: 94
+2025-09-22 21:39:34,559 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-22 21:39:34,560 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-22 21:39:34,560 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-22 21:39:34,561 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-22 21:39:34,564 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-22 21:39:34,564 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-22 21:39:34,564 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-22 21:39:34,564 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-22 21:39:34,564 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-22 21:39:34,564 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-22 21:39:34,564 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-22 21:39:34,565 - Kaori - INFO -    /ia_status - Ver status da IA local
+2025-09-22 21:39:34,565 - Kaori - INFO -    /ia_trocar_modelo - Trocar modelo de IA (Admin)
+2025-09-22 21:39:34,565 - Kaori - INFO -    /ia_conversar - Conversar diretamente com a IA
+2025-09-22 21:39:34,565 - Kaori - INFO -    /ia_pesquisa - Controlar sistema de pesquisa na internet da IA (Admin)
+2025-09-22 21:39:34,565 - Kaori - INFO -    ... e mais 79 comandos!
+2025-09-22 21:39:34,566 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-22 21:40:03,157 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:40:03,158 - Kaori - INFO - 💬 Processando: 'Dboa na lagoa como c ta minha fia?'
+2025-09-22 21:40:03,158 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:40:03,158 - LocalAI - INFO - 🔍 Pesquisando na internet: 'Dboa na lagoa como c ta minha fia?'
+2025-09-22 21:40:03,837 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Dboa na lagoa como c ta minha ...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:40:04,181 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:42:31,970 - LocalAI - INFO - 🤖 Inicializando DistilGPT2 local...
+2025-09-22 21:42:31,970 - LocalAI - INFO - ✅ DistilGPT2 carregado com sucesso (implementação otimizada)!
+2025-09-22 21:42:31,970 - Kaori - INFO - 🤖 IA Local carregada com sucesso!
+2025-09-22 21:42:31,971 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-22 21:42:31,991 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-22 21:42:31,991 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:42:32,002 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-22 21:42:32,134 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:42:32,134 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-22 21:42:32,134 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-22 21:42:32,154 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.95.130:5000
+2025-09-22 21:42:32,154 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-22 21:42:35,148 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 21:42:35] "GET /healthz HTTP/1.1" 200 -
+2025-09-22 21:42:35,149 - Kaori - INFO - ✅ Flask está respondendo
+2025-09-22 21:42:35,149 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-22 21:42:35,150 - discord.client - INFO - logging in using static token
+2025-09-22 21:42:35,797 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: 0469ef2f746db728100840ec3d372220).
+2025-09-22 21:42:36,220 - werkzeug - INFO - 172.31.95.130 - - [22/Sep/2025 21:42:36] "GET / HTTP/1.1" 200 -
+2025-09-22 21:42:37,881 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:42:37,881 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-22 21:42:37,881 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-22 21:42:37,996 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:42:38,012 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-22 21:42:38,014 - Kaori - INFO - ✅ Database inicializado
+2025-09-22 21:42:38,015 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-22 21:42:38,016 - Kaori - INFO - 📊 Conectado em 3 servidores
+2025-09-22 21:42:38,017 - Kaori - INFO - 👥 Servindo 448 usuários únicos
+2025-09-22 21:42:38,018 - Kaori - INFO - 🚀 Kaori Online! Servidores: 3 | Usuários: 448 | Latência: 26.54ms
+2025-09-22 21:42:38,019 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-22 21:42:38,024 - Kaori - INFO - ⏭️ Backup desnecessário - PostgreSQL tem backup automático
+2025-09-22 21:42:39,305 - Kaori - WARNING - ❌ 2FA obrigatório impediu criação de cargos em ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆
+2025-09-22 21:42:39,305 - Kaori - INFO - 💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente
+2025-09-22 21:42:39,483 - Kaori - WARNING - ⚠️ Não foi possível criar cargo Kaori no servidor ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆 - sem permissões
+2025-09-22 21:42:39,742 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:42:45,208 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:42:48,780 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:42:48,781 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-22 21:42:48,797 - Kaori - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-22 21:42:49,081 - Kaori - INFO - ✅ 94 slash commands sincronizados
+2025-09-22 21:42:49,085 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-22 21:42:49,086 - Kaori - INFO - 🚀 Total de comandos slash: 94
+2025-09-22 21:42:49,086 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-22 21:42:49,087 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-22 21:42:49,087 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-22 21:42:49,090 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-22 21:42:49,094 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-22 21:42:49,095 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-22 21:42:49,096 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-22 21:42:49,097 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-22 21:42:49,098 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-22 21:42:49,098 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-22 21:42:49,098 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-22 21:42:49,098 - Kaori - INFO -    /ia_status - Ver status da IA local
+2025-09-22 21:42:49,098 - Kaori - INFO -    /ia_trocar_modelo - Trocar modelo de IA (Admin)
+2025-09-22 21:42:49,098 - Kaori - INFO -    /ia_conversar - Conversar diretamente com a IA
+2025-09-22 21:42:49,098 - Kaori - INFO -    /ia_pesquisa - Controlar sistema de pesquisa na internet da IA (Admin)
+2025-09-22 21:42:49,098 - Kaori - INFO -    ... e mais 79 comandos!
+2025-09-22 21:42:49,099 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-22 21:46:26,095 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:46:26,096 - Kaori - INFO - 💬 Processando: 'Ta entendendo agira?'
+2025-09-22 21:46:26,096 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:46:26,097 - LocalAI - INFO - 🔍 Pesquisando na internet: 'Ta entendendo agira?'
+2025-09-22 21:46:27,777 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Ta entendendo agira?...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:46:28,103 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:46:50,238 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:46:50,238 - Kaori - INFO - 💬 Processando: 'Continua falando a mensagem generica Interessante pergunta sobre 'Ta entendendo agira?...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:46:50,239 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:46:50,241 - Kaori - INFO - ✅ Resposta: 'Ah! 💡 Você quer que eu detalhe mais sobre isso? Perfeito! Vou explicar melhor: me diga exatamente qual parte te interessa mais - posso falar sobre comandos específicos, como usar alguma função, ou esclarecer qualquer dúvida que tenha! ✨'
+2025-09-22 21:46:50,458 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:47:01,618 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:47:01,619 - Kaori - INFO - 💬 Processando: 'Dboa?'
+2025-09-22 21:47:01,619 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:47:01,619 - LocalAI - INFO - 🔍 Pesquisando na internet: 'Dboa?'
+2025-09-22 21:47:02,064 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Dboa?...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:47:02,357 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:49:13,351 - Kaori - INFO - Usuário 1362199803097907501 criado com dados padrão
+2025-09-22 21:49:57,960 - LocalAI - INFO - 🤖 Inicializando DistilGPT2 local...
+2025-09-22 21:49:57,960 - LocalAI - INFO - ✅ DistilGPT2 carregado com sucesso (implementação otimizada)!
+2025-09-22 21:49:57,960 - Kaori - INFO - 🤖 IA Local carregada com sucesso!
+2025-09-22 21:49:57,961 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-22 21:49:57,979 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-22 21:49:57,980 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:49:57,989 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-22 21:49:58,141 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:49:58,141 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-22 21:49:58,141 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-22 21:49:58,164 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.95.130:5000
+2025-09-22 21:49:58,164 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-22 21:50:01,147 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 21:50:01] "GET /healthz HTTP/1.1" 200 -
+2025-09-22 21:50:01,147 - Kaori - INFO - ✅ Flask está respondendo
+2025-09-22 21:50:01,148 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-22 21:50:01,148 - discord.client - INFO - logging in using static token
+2025-09-22 21:50:01,862 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: c14c02450e5f397a4168f96198b610dc).
+2025-09-22 21:50:03,892 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:50:03,892 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-22 21:50:03,892 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-22 21:50:04,005 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:50:04,014 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-22 21:50:04,014 - Kaori - INFO - ✅ Database inicializado
+2025-09-22 21:50:04,015 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-22 21:50:04,015 - Kaori - INFO - 📊 Conectado em 3 servidores
+2025-09-22 21:50:04,015 - Kaori - INFO - 👥 Servindo 448 usuários únicos
+2025-09-22 21:50:04,015 - Kaori - INFO - 🚀 Kaori Online! Servidores: 3 | Usuários: 448 | Latência: 23.86ms
+2025-09-22 21:50:04,016 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-22 21:50:04,018 - Kaori - INFO - ⏭️ Backup desnecessário - PostgreSQL tem backup automático
+2025-09-22 21:50:05,298 - Kaori - WARNING - ❌ 2FA obrigatório impediu criação de cargos em ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆
+2025-09-22 21:50:05,298 - Kaori - INFO - 💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente
+2025-09-22 21:50:05,464 - Kaori - WARNING - ⚠️ Não foi possível criar cargo Kaori no servidor ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆 - sem permissões
+2025-09-22 21:50:05,736 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:50:11,021 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:50:16,213 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:50:16,213 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-22 21:50:16,237 - Kaori - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-22 21:50:16,490 - Kaori - INFO - ✅ 94 slash commands sincronizados
+2025-09-22 21:50:16,491 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-22 21:50:16,491 - Kaori - INFO - 🚀 Total de comandos slash: 94
+2025-09-22 21:50:16,491 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-22 21:50:16,491 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-22 21:50:16,491 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-22 21:50:16,491 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-22 21:50:16,491 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-22 21:50:16,491 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-22 21:50:16,492 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-22 21:50:16,492 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-22 21:50:16,492 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-22 21:50:16,492 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-22 21:50:16,492 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-22 21:50:16,492 - Kaori - INFO -    /ia_status - Ver status da IA local
+2025-09-22 21:50:16,492 - Kaori - INFO -    /ia_trocar_modelo - Trocar modelo de IA (Admin)
+2025-09-22 21:50:16,492 - Kaori - INFO -    /ia_conversar - Conversar diretamente com a IA
+2025-09-22 21:50:16,492 - Kaori - INFO -    /ia_pesquisa - Controlar sistema de pesquisa na internet da IA (Admin)
+2025-09-22 21:50:16,493 - Kaori - INFO -    ... e mais 79 comandos!
+2025-09-22 21:50:16,493 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-22 21:50:23,575 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:50:23,575 - Kaori - INFO - 💬 Processando: 'Ta entendendo agira?'
+2025-09-22 21:50:23,575 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:50:23,575 - Kaori - INFO - ✅ Resposta: 'Agora sim! 😄 Tô entendendo melhor! Você tava falando sobre algo específico? Me atualiza aí! ✨'
+2025-09-22 21:50:24,418 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:50:36,379 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:50:36,380 - Kaori - INFO - 💬 Processando: 'Quero uma receita de feijao'
+2025-09-22 21:50:36,380 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:50:36,381 - LocalAI - INFO - 🔍 Pesquisando na internet: 'Quero uma receita de feijao'
+2025-09-22 21:50:38,581 - Kaori - INFO - ✅ Resposta: 'Entendi! 😊 Você mencionou 'Quero uma receita de feijao...' - é um tópico interessante! Para te ajudar melhor, pode ser mais específico sobre o que você quer saber? Posso falar sobre comandos, sistemas do bot, ou conversar sobre outros assuntos!'
+2025-09-22 21:50:39,966 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:51:02,499 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:51:02,500 - Kaori - INFO - 💬 Processando: 'Ajuda'
+2025-09-22 21:51:02,501 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:51:02,502 - Kaori - INFO - ✅ Resposta: 'Tenho muitos comandos disponíveis! Use `/ajuda` para ver todas as categorias, ou digite `/` no Discord para explorar os slash commands. Posso ajudar com economia, jogos, informações e muito mais! 🚀 ✨'
+2025-09-22 21:51:02,902 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:51:10,408 - Kaori - INFO - 🎯 Kaori mencionada por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:51:10,409 - Kaori - INFO - 💬 Processando: 'Oque mais?'
+2025-09-22 21:51:10,409 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:51:10,409 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Oque mais?...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:51:10,701 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:58:29,246 - LocalAI - INFO - ⚠️ Transformers não disponível - usando sistema básico
+2025-09-22 21:58:29,247 - LocalAI - INFO - 🤖 Inicializando DistilGPT2 local...
+2025-09-22 21:58:29,247 - LocalAI - INFO - ✅ DistilGPT2 carregado com sucesso (implementação otimizada)!
+2025-09-22 21:58:29,247 - Kaori - INFO - 🤖 IA Local carregada com sucesso!
+2025-09-22 21:58:29,247 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-22 21:58:29,266 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-22 21:58:29,266 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:58:29,277 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-22 21:58:29,404 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:58:29,405 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-22 21:58:29,405 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-22 21:58:29,415 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.95.130:5000
+2025-09-22 21:58:29,416 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-22 21:58:32,413 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 21:58:32] "GET /healthz HTTP/1.1" 200 -
+2025-09-22 21:58:32,414 - Kaori - INFO - ✅ Flask está respondendo
+2025-09-22 21:58:32,415 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-22 21:58:32,416 - discord.client - INFO - logging in using static token
+2025-09-22 21:58:33,157 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: 2814595e5999f0c329c4696a86533b98).
+2025-09-22 21:58:35,210 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 21:58:35,211 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-22 21:58:35,212 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-22 21:58:35,421 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 21:58:35,439 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-22 21:58:35,439 - Kaori - INFO - ✅ Database inicializado
+2025-09-22 21:58:35,439 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-22 21:58:35,439 - Kaori - INFO - 📊 Conectado em 3 servidores
+2025-09-22 21:58:35,439 - Kaori - INFO - 👥 Servindo 448 usuários únicos
+2025-09-22 21:58:35,440 - Kaori - INFO - 🚀 Kaori Online! Servidores: 3 | Usuários: 448 | Latência: 26.15ms
+2025-09-22 21:58:35,440 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-22 21:58:35,443 - Kaori - INFO - ⏭️ Backup desnecessário - PostgreSQL tem backup automático
+2025-09-22 21:58:36,751 - Kaori - WARNING - ❌ 2FA obrigatório impediu criação de cargos em ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆
+2025-09-22 21:58:36,751 - Kaori - INFO - 💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente
+2025-09-22 21:58:36,852 - Kaori - WARNING - ⚠️ Não foi possível criar cargo Kaori no servidor ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆 - sem permissões
+2025-09-22 21:58:37,166 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:58:40,226 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:58:43,435 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 21:58:43,435 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-22 21:58:43,448 - Kaori - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-22 21:58:43,831 - Kaori - INFO - ✅ 95 slash commands sincronizados
+2025-09-22 21:58:43,832 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-22 21:58:43,833 - Kaori - INFO - 🚀 Total de comandos slash: 95
+2025-09-22 21:58:43,833 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-22 21:58:43,833 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-22 21:58:43,834 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-22 21:58:43,834 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-22 21:58:43,834 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-22 21:58:43,834 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-22 21:58:43,834 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-22 21:58:43,835 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-22 21:58:43,835 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-22 21:58:43,835 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-22 21:58:43,835 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-22 21:58:43,835 - Kaori - INFO -    /ia_status - Ver status da IA local
+2025-09-22 21:58:43,835 - Kaori - INFO -    /ia_trocar_modelo - Trocar modelo de IA (Admin)
+2025-09-22 21:58:43,835 - Kaori - INFO -    /ia_conversar - Conversar diretamente com a IA
+2025-09-22 21:58:43,835 - Kaori - INFO -    /ia_aprender - Controlar sistema de aprendizado contínuo da IA (Admin)
+2025-09-22 21:58:43,835 - Kaori - INFO -    ... e mais 80 comandos!
+2025-09-22 21:58:43,836 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-22 21:58:54,589 - Kaori - INFO - 🎯 Kaori detectada (kaori no texto) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:58:54,590 - Kaori - INFO - 💬 Processando: 'Ela kaori ta dboa?'
+2025-09-22 21:58:54,591 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:58:54,591 - LocalAI - INFO - 🎯 Kaori detectada no texto: 'Ela kaori ta dboa?'
+2025-09-22 21:58:54,591 - Kaori - INFO - ✅ Resposta: 'Dboa! 👍 Tranquilo por aqui! E você, como tá? Precisa de alguma coisa ou só veio trocar uma ideia? ✨'
+2025-09-22 21:58:54,977 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:59:10,842 - Kaori - INFO - 🎯 Kaori detectada (kaori no texto) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:59:10,843 - Kaori - INFO - 💬 Processando: 'Kaori qq vc ta fazendo hoje?'
+2025-09-22 21:59:10,843 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:59:10,843 - LocalAI - INFO - 🎯 Kaori detectada no texto: 'Kaori qq vc ta fazendo hoje?'
+2025-09-22 21:59:10,844 - Kaori - INFO - ✅ Resposta: 'Interessante pergunta sobre 'Kaori qq vc ta fazendo hoje?...'! Como uma IA avançada, posso te ajudar com isso. Me dê mais detalhes e vou elaborar uma resposta! 🤔✨'
+2025-09-22 21:59:11,107 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:59:20,332 - Kaori - INFO - 🎯 Kaori detectada (menção direta) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:59:20,333 - Kaori - INFO - 💬 Processando: 'Mesma coisa'
+2025-09-22 21:59:20,335 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:59:20,336 - Kaori - INFO - ✅ Resposta: 'Opa, pegou no flagra! 😅 Tava repetindo igual papagaio mesmo. Vou parar com isso! Me fala aí, o que você quer saber de verdade? Sem firula dessa vez! ✨'
+2025-09-22 21:59:20,613 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 21:59:50,925 - Kaori - INFO - 🎯 Kaori detectada (menção direta) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 21:59:50,929 - Kaori - INFO - 💬 Processando: 'Ah so to te testando mesmo'
+2025-09-22 21:59:50,930 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 21:59:50,931 - Kaori - INFO - ✅ Resposta: 'Entendi! 😊 Você mencionou 'Ah so to te testando mesmo...' - é um tópico interessante! Para te ajudar melhor, pode ser mais específico sobre o que você quer saber? Posso falar sobre comandos, sistemas do bot, ou conversar sobre outros assuntos!'
+2025-09-22 21:59:51,365 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 22:00:04,334 - Kaori - INFO - 🎯 Kaori detectada (menção direta) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 22:00:04,335 - Kaori - INFO - 💬 Processando: 'Mesma coisa denovo'
+2025-09-22 22:00:04,335 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 22:00:04,335 - Kaori - INFO - ✅ Resposta: 'Opa, pegou no flagra! 😅 Tava repetindo igual papagaio mesmo. Vou parar com isso! Me fala aí, o que você quer saber de verdade? Sem firula dessa vez! ✨'
+2025-09-22 22:00:04,592 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 22:00:18,009 - Kaori - INFO - 🎯 Kaori detectada (menção direta) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 22:00:18,011 - Kaori - INFO - 💬 Processando: 'To te testando'
+2025-09-22 22:00:18,011 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 22:00:18,011 - Kaori - INFO - ✅ Resposta: 'Entendi! 😊 Você mencionou 'To te testando...' - é um tópico interessante! Para te ajudar melhor, pode ser mais específico sobre o que você quer saber? Posso falar sobre comandos, sistemas do bot, ou conversar sobre outros assuntos!'
+2025-09-22 22:00:18,337 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 22:01:25,125 - Kaori - INFO - 🎯 Kaori detectada (menção direta) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 22:01:25,125 - Kaori - INFO - 💬 Processando: 'Tendi'
+2025-09-22 22:01:25,125 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 22:01:25,125 - Kaori - INFO - ✅ Resposta: 'Entendi! 😊 Você mencionou 'Tendi...' - é um tópico interessante! Para te ajudar melhor, pode ser mais específico sobre o que você quer saber? Posso falar sobre comandos, sistemas do bot, ou conversar sobre outros assuntos!'
+2025-09-22 22:01:25,306 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 22:02:20,967 - Kaori - ERROR - Erro ao controlar aprendizado: 404 Not Found (error code: 10062): Unknown interaction
+2025-09-22 22:02:21,036 - Kaori - ERROR - Erro em slash command ia_aprender: Command 'ia_aprender' raised an exception: NotFound: 404 Not Found (error code: 10062): Unknown interaction
+2025-09-22 22:02:33,928 - Kaori - ERROR - Erro na conversa com IA: 404 Not Found (error code: 10062): Unknown interaction
+2025-09-22 22:02:41,278 - discord.gateway - WARNING - Can't keep up, shard ID None websocket is 42.0s behind.
+2025-09-22 22:02:50,921 - LocalAI - INFO - ⚠️ Transformers não disponível - usando sistema básico
+2025-09-22 22:02:50,921 - LocalAI - INFO - 🤖 Inicializando DistilGPT2 local...
+2025-09-22 22:02:50,921 - LocalAI - INFO - ✅ DistilGPT2 carregado com sucesso (implementação otimizada)!
+2025-09-22 22:02:50,921 - Kaori - INFO - 🤖 IA Local carregada com sucesso!
+2025-09-22 22:02:50,922 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-22 22:02:50,944 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-22 22:02:50,945 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 22:02:50,962 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-22 22:02:51,099 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 22:02:51,100 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-22 22:02:51,100 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-22 22:02:51,108 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.95.130:5000
+2025-09-22 22:02:51,109 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-22 22:02:54,104 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 22:02:54] "GET /healthz HTTP/1.1" 200 -
+2025-09-22 22:02:54,105 - Kaori - INFO - ✅ Flask está respondendo
+2025-09-22 22:02:54,106 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-22 22:02:54,106 - discord.client - INFO - logging in using static token
+2025-09-22 22:02:54,825 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: ba3e154fba6a97bcdad7813d6bcc3520).
+2025-09-22 22:02:56,877 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 22:02:56,878 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-22 22:02:56,879 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-22 22:02:57,019 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 22:02:57,037 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-22 22:02:57,038 - Kaori - INFO - ✅ Database inicializado
+2025-09-22 22:02:57,038 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-22 22:02:57,039 - Kaori - INFO - 📊 Conectado em 3 servidores
+2025-09-22 22:02:57,041 - Kaori - INFO - 👥 Servindo 448 usuários únicos
+2025-09-22 22:02:57,042 - Kaori - INFO - 🚀 Kaori Online! Servidores: 3 | Usuários: 448 | Latência: 28.88ms
+2025-09-22 22:02:57,043 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-22 22:02:57,046 - Kaori - INFO - ⏭️ Backup desnecessário - PostgreSQL tem backup automático
+2025-09-22 22:02:58,338 - Kaori - WARNING - ❌ 2FA obrigatório impediu criação de cargos em ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆
+2025-09-22 22:02:58,339 - Kaori - INFO - 💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente
+2025-09-22 22:02:58,472 - Kaori - WARNING - ⚠️ Não foi possível criar cargo Kaori no servidor ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆 - sem permissões
+2025-09-22 22:02:58,811 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 22:03:02,692 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 22:03:04,514 - Kaori - ERROR - Erro ao trocar modelo: 404 Not Found (error code: 10062): Unknown interaction
+2025-09-22 22:03:04,581 - Kaori - ERROR - Erro em slash command ia_trocar_modelo: Command 'ia_trocar_modelo' raised an exception: NotFound: 404 Not Found (error code: 10062): Unknown interaction
+2025-09-22 22:03:06,369 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 22:03:06,370 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-22 22:03:06,384 - Kaori - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-22 22:03:06,708 - Kaori - INFO - ✅ 95 slash commands sincronizados
+2025-09-22 22:03:06,711 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-22 22:03:06,713 - Kaori - INFO - 🚀 Total de comandos slash: 95
+2025-09-22 22:03:06,714 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-22 22:03:06,717 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-22 22:03:06,720 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-22 22:03:06,721 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-22 22:03:06,722 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-22 22:03:06,730 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-22 22:03:06,732 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-22 22:03:06,735 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-22 22:03:06,736 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-22 22:03:06,743 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-22 22:03:06,747 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-22 22:03:06,748 - Kaori - INFO -    /ia_status - Ver status da IA local
+2025-09-22 22:03:06,750 - Kaori - INFO -    /ia_trocar_modelo - Trocar modelo de IA (Admin)
+2025-09-22 22:03:06,751 - Kaori - INFO -    /ia_conversar - Conversar diretamente com a IA
+2025-09-22 22:03:06,752 - Kaori - INFO -    /ia_aprender - Controlar sistema de aprendizado contínuo da IA (Admin)
+2025-09-22 22:03:06,754 - Kaori - INFO -    ... e mais 80 comandos!
+2025-09-22 22:03:06,756 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-22 22:03:41,039 - Kaori - INFO - 🎯 Kaori detectada (kaori no texto) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 22:03:41,039 - Kaori - INFO - 💬 Processando: 'E então como esta agora kaori?'
+2025-09-22 22:03:41,039 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 22:03:41,040 - LocalAI - INFO - 🎯 Kaori detectada no texto: 'E então como esta agora kaori?'
+2025-09-22 22:03:41,040 - Kaori - INFO - ✅ Resposta: 'Agora sim! 😊 Tô mais esperta! O que você queria mesmo? Pode falar sem medo!'
+2025-09-22 22:03:41,411 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 22:03:51,751 - Kaori - INFO - 🎯 Kaori detectada (menção direta) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 22:03:51,752 - Kaori - INFO - 💬 Processando: 'Sobre unicornios'
+2025-09-22 22:03:51,752 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 22:03:51,753 - LocalAI - INFO - 🔍 Pesquisando na internet: 'Sobre unicornios'
+2025-09-22 22:03:52,403 - Kaori - INFO - ✅ Resposta: 'Legal! 😊 Sobre o que você gostaria de conversar? Posso ajudar com várias coisas!'
+2025-09-22 22:03:52,763 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 22:04:00,518 - Kaori - INFO - 🎯 Kaori detectada (menção direta) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 22:04:00,518 - Kaori - INFO - 💬 Processando: 'Unicornios'
+2025-09-22 22:04:00,518 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 22:04:00,518 - Kaori - INFO - ✅ Resposta: 'Show! 🎉 Como posso te ajudar hoje? Pode me explicar melhor? ✨'
+2025-09-22 22:04:00,707 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 22:04:14,377 - Kaori - INFO - 🎯 Kaori detectada (menção direta) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 22:04:14,377 - Kaori - INFO - 💬 Processando: 'Mesma coisa'
+2025-09-22 22:04:14,377 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 22:04:14,377 - Kaori - INFO - ✅ Resposta: 'Opa, pegou no flagra! 😅 Tava repetindo igual papagaio mesmo. Vou parar com isso! Me fala aí, o que você quer saber de verdade? Sem firula dessa vez! ✨'
+2025-09-22 22:04:14,595 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 22:04:22,774 - Kaori - INFO - 🎯 Kaori detectada (menção direta) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 22:04:22,774 - Kaori - INFO - 💬 Processando: 'Sobre unicornios'
+2025-09-22 22:04:22,774 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 22:04:22,775 - LocalAI - INFO - 🔍 Pesquisando na internet: 'Sobre unicornios'
+2025-09-22 22:04:22,979 - Kaori - INFO - ✅ Resposta: 'Legal! 😊 Sobre o que você gostaria de conversar? Posso ajudar com várias coisas!'
+2025-09-22 22:04:23,162 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 22:05:06,543 - Kaori - INFO - 🎯 Kaori detectada (kaori no texto) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 22:05:06,543 - Kaori - INFO - 💬 Processando: 'Kaori conta ate 50'
+2025-09-22 22:05:06,543 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 22:05:06,543 - LocalAI - INFO - 🎯 Kaori detectada no texto: 'Kaori conta ate 50'
+2025-09-22 22:05:06,544 - Kaori - INFO - ✅ Resposta: 'Interessante! 💡 Sobre bot posso te contar várias coisas! Sou a Kaori, IA avançada com DistilGPT2, converso naturalmente, ajudo com comandos e tenho personalidade própria! Quer que eu detalhe algum aspecto específico? ✨'
+2025-09-22 22:05:06,840 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 22:05:25,294 - Kaori - INFO - 🎯 Kaori detectada (kaori no texto) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 22:05:25,295 - Kaori - INFO - 💬 Processando: 'Kaori acho q vc nao ta entendendo'
+2025-09-22 22:05:25,295 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 22:05:25,295 - LocalAI - INFO - 🎯 Kaori detectada no texto: 'Kaori acho q vc nao ta entendendo'
+2025-09-22 22:05:25,296 - Kaori - INFO - ✅ Resposta: 'Agora sim! 😄 Tô entendendo melhor! Você tava falando sobre algo específico? Me atualiza aí! ✨'
+2025-09-22 22:05:25,584 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 22:05:42,943 - Kaori - INFO - 🎯 Kaori detectada (kaori no texto) por [𝑹𝑿 • 𝑺𝑼𝑩] 𝑺𝑲𝒑𝒍𝒂𝒚 em RX | Clã - #100
+2025-09-22 22:05:42,943 - Kaori - INFO - 💬 Processando: 'Kaori que modelo vc é?'
+2025-09-22 22:05:42,943 - Kaori - INFO - 🤖 Usando IA local avançada
+2025-09-22 22:05:42,943 - LocalAI - INFO - 🎯 Kaori detectada no texto: 'Kaori que modelo vc é?'
+2025-09-22 22:05:42,944 - Kaori - INFO - ✅ Resposta: 'Ótima pergunta! 🤔 Vou pesquisar informações atualizadas para te dar uma resposta completa! ✨'
+2025-09-22 22:05:43,253 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-22 22:08:47,518 - LocalAI - INFO - ⚠️ Transformers não disponível - usando sistema básico
+2025-09-22 22:08:47,518 - LocalAI - INFO - 🤖 Inicializando DistilGPT2 local...
+2025-09-22 22:08:47,519 - LocalAI - INFO - ✅ DistilGPT2 carregado com sucesso (implementação otimizada)!
+2025-09-22 22:08:47,519 - Kaori - INFO - 🤖 IA Local carregada com sucesso!
+2025-09-22 22:08:47,519 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-22 22:08:47,543 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-22 22:08:47,543 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 22:08:47,554 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-22 22:08:47,748 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 22:08:47,749 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-22 22:08:47,749 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-22 22:08:47,758 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.95.130:5000
+2025-09-22 22:08:47,759 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-22 22:08:50,753 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 22:08:50] "GET /healthz HTTP/1.1" 200 -
+2025-09-22 22:08:50,754 - Kaori - INFO - ✅ Flask está respondendo
+2025-09-22 22:08:50,755 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-22 22:08:50,755 - discord.client - INFO - logging in using static token
+2025-09-22 22:08:51,563 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: f570e9737ce8a7cf3c28d7a218a9ff66).
+2025-09-22 22:08:53,602 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 22:08:53,602 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-22 22:08:53,602 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-22 22:08:53,719 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 22:08:53,729 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-22 22:08:53,729 - Kaori - INFO - ✅ Database inicializado
+2025-09-22 22:08:53,729 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-22 22:08:53,729 - Kaori - INFO - 📊 Conectado em 3 servidores
+2025-09-22 22:08:53,730 - Kaori - INFO - 👥 Servindo 448 usuários únicos
+2025-09-22 22:08:53,730 - Kaori - INFO - 🚀 Kaori Online! Servidores: 3 | Usuários: 448 | Latência: 23.0ms
+2025-09-22 22:08:53,730 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-22 22:08:53,733 - Kaori - INFO - ⏭️ Backup desnecessário - PostgreSQL tem backup automático
+2025-09-22 22:08:55,019 - Kaori - WARNING - ❌ 2FA obrigatório impediu criação de cargos em ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆
+2025-09-22 22:08:55,020 - Kaori - INFO - 💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente
+2025-09-22 22:08:55,128 - Kaori - WARNING - ⚠️ Não foi possível criar cargo Kaori no servidor ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆 - sem permissões
+2025-09-22 22:08:55,658 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 22:08:58,952 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 22:09:02,554 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 22:09:02,555 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-22 22:09:02,572 - Kaori - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-22 22:09:02,887 - Kaori - INFO - ✅ 95 slash commands sincronizados
+2025-09-22 22:09:02,888 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-22 22:09:02,889 - Kaori - INFO - 🚀 Total de comandos slash: 95
+2025-09-22 22:09:02,890 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-22 22:09:02,891 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-22 22:09:02,893 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-22 22:09:02,894 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-22 22:09:02,896 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-22 22:09:02,901 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-22 22:09:02,903 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-22 22:09:02,904 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-22 22:09:02,906 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-22 22:09:02,907 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-22 22:09:02,908 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-22 22:09:02,908 - Kaori - INFO -    /ia_status - Ver status da IA local
+2025-09-22 22:09:02,908 - Kaori - INFO -    /ia_trocar_modelo - Trocar modelo de IA (Admin)
+2025-09-22 22:09:02,909 - Kaori - INFO -    /ia_conversar - Conversar diretamente com a IA
+2025-09-22 22:09:02,909 - Kaori - INFO -    /ia_aprender - Controlar sistema de aprendizado contínuo da IA (Admin)
+2025-09-22 22:09:02,909 - Kaori - INFO -    ... e mais 80 comandos!
+2025-09-22 22:09:02,909 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-22 22:12:56,814 - LocalAI - INFO - ⚠️ Transformers não disponível - usando sistema básico
+2025-09-22 22:12:56,817 - LocalAI - INFO - ✅ 5 exemplos de treinamento iniciais carregados!
+2025-09-22 22:12:56,817 - LocalAI - INFO - 🤖 Inicializando DistilGPT2 local...
+2025-09-22 22:12:56,817 - LocalAI - INFO - ✅ DistilGPT2 carregado com sucesso (implementação otimizada)!
+2025-09-22 22:12:56,817 - Kaori - INFO - 🤖 IA Local carregada com sucesso!
+2025-09-22 22:12:56,818 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-22 22:12:56,846 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-22 22:12:56,847 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 22:12:56,865 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-22 22:12:57,043 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 22:12:57,044 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-22 22:12:57,045 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-22 22:12:57,058 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.95.130:5000
+2025-09-22 22:12:57,060 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-22 22:13:00,049 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 22:13:00] "GET /healthz HTTP/1.1" 200 -
+2025-09-22 22:13:00,051 - Kaori - INFO - ✅ Flask está respondendo
+2025-09-22 22:13:00,051 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-22 22:13:00,051 - discord.client - INFO - logging in using static token
+2025-09-22 22:13:00,760 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: 85122820174e330ade84f2556e3df901).
+2025-09-22 22:13:02,808 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 22:13:02,808 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-22 22:13:02,808 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-22 22:13:02,930 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 22:13:02,949 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-22 22:13:02,949 - Kaori - INFO - ✅ Database inicializado
+2025-09-22 22:13:02,950 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-22 22:13:02,950 - Kaori - INFO - 📊 Conectado em 3 servidores
+2025-09-22 22:13:02,950 - Kaori - INFO - 👥 Servindo 448 usuários únicos
+2025-09-22 22:13:02,951 - Kaori - INFO - 🚀 Kaori Online! Servidores: 3 | Usuários: 448 | Latência: 25.55ms
+2025-09-22 22:13:02,951 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-22 22:13:02,954 - Kaori - INFO - ⏭️ Backup desnecessário - PostgreSQL tem backup automático
+2025-09-22 22:13:04,247 - Kaori - WARNING - ❌ 2FA obrigatório impediu criação de cargos em ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆
+2025-09-22 22:13:04,250 - Kaori - INFO - 💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente
+2025-09-22 22:13:04,402 - Kaori - WARNING - ⚠️ Não foi possível criar cargo Kaori no servidor ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆 - sem permissões
+2025-09-22 22:13:04,681 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 22:13:08,387 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 22:13:12,138 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 22:13:12,140 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-22 22:13:12,167 - Kaori - INFO - ℹ️ Nenhuma mensagem interativa para restaurar
+2025-09-22 22:13:12,331 - werkzeug - INFO - 172.31.95.130 - - [22/Sep/2025 22:13:12] "GET / HTTP/1.1" 200 -
+2025-09-22 22:13:12,471 - Kaori - INFO - ✅ 95 slash commands sincronizados
+2025-09-22 22:13:12,472 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-22 22:13:12,472 - Kaori - INFO - 🚀 Total de comandos slash: 95
+2025-09-22 22:13:12,472 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-22 22:13:12,472 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-22 22:13:12,472 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-22 22:13:12,472 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-22 22:13:12,473 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-22 22:13:12,473 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-22 22:13:12,473 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-22 22:13:12,473 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-22 22:13:12,473 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-22 22:13:12,473 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-22 22:13:12,473 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-22 22:13:12,473 - Kaori - INFO -    /ia_status - Ver status da IA local
+2025-09-22 22:13:12,474 - Kaori - INFO -    /ia_trocar_modelo - Trocar modelo de IA (Admin)
+2025-09-22 22:13:12,474 - Kaori - INFO -    /ia_conversar - Conversar diretamente com a IA
+2025-09-22 22:13:12,474 - Kaori - INFO -    /ia_aprender - Controlar sistema de aprendizado contínuo da IA (Admin)
+2025-09-22 22:13:12,474 - Kaori - INFO -    ... e mais 80 comandos!
+2025-09-22 22:13:12,475 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-22 22:16:48,470 - Kaori - INFO - Usuário 1057312798847287428 criado com dados padrão
