@@ -2594,3 +2594,150 @@ LINE 1: SELECT COUNT(*) FROM events WHERE status = "active"
 2025-09-21 20:46:27,126 - werkzeug - INFO - 172.31.102.98 - - [21/Sep/2025 20:46:27] "GET /api/stats HTTP/1.1" 200 -
 2025-09-21 20:46:56,871 - werkzeug - INFO - 172.31.102.98 - - [21/Sep/2025 20:46:56] "GET /api/stats HTTP/1.1" 200 -
 2025-09-21 20:46:57,141 - werkzeug - INFO - 172.31.102.98 - - [21/Sep/2025 20:46:57] "GET /api/stats HTTP/1.1" 200 -
+2025-09-22 20:42:56,920 - Kaori - INFO - ⚠️ IA Local não disponível, usando fallback: No module named 'torch'
+2025-09-22 20:42:56,921 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-22 20:42:56,947 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-22 20:42:56,949 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 20:43:00,095 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-22 20:43:00,264 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 0 in public schema
+2025-09-22 20:43:00,265 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-22 20:43:00,266 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-22 20:43:00,279 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.95.130:5000
+2025-09-22 20:43:00,280 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-22 20:43:03,273 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:43:03] "GET /healthz HTTP/1.1" 200 -
+2025-09-22 20:43:03,275 - Kaori - INFO - ✅ Flask está respondendo
+2025-09-22 20:43:03,275 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-22 20:43:03,276 - discord.client - INFO - logging in using static token
+2025-09-22 20:43:04,102 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: e742df5898ab58e872ce1675c09e5474).
+2025-09-22 20:43:06,145 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 20:43:06,146 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-22 20:43:06,146 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-22 20:43:06,249 - werkzeug - INFO - 172.31.95.130 - - [22/Sep/2025 20:43:06] "GET / HTTP/1.1" 200 -
+2025-09-22 20:43:06,310 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 0 in public schema
+2025-09-22 20:43:06,356 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-22 20:43:06,356 - Kaori - INFO - ✅ Database inicializado
+2025-09-22 20:43:06,356 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-22 20:43:06,356 - Kaori - INFO - 📊 Conectado em 3 servidores
+2025-09-22 20:43:06,357 - Kaori - INFO - 👥 Servindo 449 usuários únicos
+2025-09-22 20:43:06,357 - Kaori - INFO - 🚀 Kaori Online! Servidores: 3 | Usuários: 449 | Latência: 32.54ms
+2025-09-22 20:43:06,358 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-22 20:43:06,359 - Kaori - INFO - ⏭️ Backup desnecessário - PostgreSQL tem backup automático
+2025-09-22 20:43:07,664 - Kaori - ERROR - Erro na limpeza de mensagens: relation "interactive_messages" does not exist
+LINE 2: ...               SELECT message_id, channel_id FROM interactiv...
+                                                             ^
+
+2025-09-22 20:43:07,666 - Kaori - WARNING - ❌ 2FA obrigatório impediu criação de cargos em ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆
+2025-09-22 20:43:07,667 - Kaori - INFO - 💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente
+2025-09-22 20:43:07,785 - Kaori - WARNING - ⚠️ Não foi possível criar cargo Kaori no servidor ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆 - sem permissões
+2025-09-22 20:43:08,173 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 20:43:11,401 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 20:43:15,037 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 20:43:15,037 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-22 20:43:15,056 - Kaori - ERROR - Erro ao restaurar mensagens interativas: relation "interactive_messages" does not exist
+LINE 3:                 FROM interactive_messages 
+                             ^
+
+2025-09-22 20:43:15,355 - Kaori - INFO - ✅ 93 slash commands sincronizados
+2025-09-22 20:43:15,356 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-22 20:43:15,356 - Kaori - INFO - 🚀 Total de comandos slash: 93
+2025-09-22 20:43:15,357 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-22 20:43:15,357 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-22 20:43:15,357 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-22 20:43:15,358 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-22 20:43:15,358 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-22 20:43:15,358 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-22 20:43:15,358 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-22 20:43:15,359 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-22 20:43:15,359 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-22 20:43:15,359 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-22 20:43:15,360 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-22 20:43:15,360 - Kaori - INFO -    /ia_status - Ver status da IA local
+2025-09-22 20:43:15,360 - Kaori - INFO -    /ia_trocar_modelo - Trocar modelo de IA (Admin)
+2025-09-22 20:43:15,361 - Kaori - INFO -    /ia_conversar - Conversar diretamente com a IA
+2025-09-22 20:43:15,361 - Kaori - INFO -    /cuptop10 - Ver top 10 do ranking das copinhas
+2025-09-22 20:43:15,361 - Kaori - INFO -    ... e mais 78 comandos!
+2025-09-22 20:43:15,362 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-22 20:43:36,532 - Kaori - INFO - Usuário 1325097001809084444 criado com dados padrão
+2025-09-22 20:43:44,637 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:43:44] "GET / HTTP/1.1" 200 -
+2025-09-22 20:43:45,563 - Kaori - INFO - Usuário 1229468408173695144 criado com dados padrão
+2025-09-22 20:43:48,968 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:43:48] "GET /static/css/dashboard.css HTTP/1.1" 200 -
+2025-09-22 20:43:48,969 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:43:48] "GET /static/js/dashboard.js HTTP/1.1" 200 -
+2025-09-22 20:43:49,325 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:43:49] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-09-22 20:52:25,059 - LocalAI - INFO - 🤖 Inicializando DistilGPT2 local...
+2025-09-22 20:52:25,060 - LocalAI - INFO - ✅ DistilGPT2 carregado com sucesso (implementação otimizada)!
+2025-09-22 20:52:25,060 - Kaori - INFO - 🤖 IA Local carregada com sucesso!
+2025-09-22 20:52:25,060 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-22 20:52:25,084 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-22 20:52:25,085 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 20:52:25,098 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-22 20:52:25,255 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 20:52:25,256 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-22 20:52:25,256 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-22 20:52:25,268 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.95.130:5000
+2025-09-22 20:52:25,269 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-22 20:52:28,265 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:52:28] "GET /healthz HTTP/1.1" 200 -
+2025-09-22 20:52:28,266 - Kaori - INFO - ✅ Flask está respondendo
+2025-09-22 20:52:28,266 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-22 20:52:28,267 - discord.client - INFO - logging in using static token
+2025-09-22 20:52:28,964 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: 6f0bf58c9d4f20ac68a6cc91906b937c).
+2025-09-22 20:52:30,277 - werkzeug - INFO - 172.31.95.130 - - [22/Sep/2025 20:52:30] "GET / HTTP/1.1" 200 -
+2025-09-22 20:52:31,006 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-22 20:52:31,007 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-22 20:52:31,008 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-22 20:52:31,143 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 3 in public schema
+2025-09-22 20:52:31,153 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-22 20:52:31,153 - Kaori - INFO - ✅ Database inicializado
+2025-09-22 20:52:31,153 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-22 20:52:31,153 - Kaori - INFO - 📊 Conectado em 3 servidores
+2025-09-22 20:52:31,154 - Kaori - INFO - 👥 Servindo 449 usuários únicos
+2025-09-22 20:52:31,154 - Kaori - INFO - 🚀 Kaori Online! Servidores: 3 | Usuários: 449 | Latência: 25.19ms
+2025-09-22 20:52:31,154 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-22 20:52:31,157 - Kaori - INFO - ⏭️ Backup desnecessário - PostgreSQL tem backup automático
+2025-09-22 20:52:32,444 - Kaori - ERROR - Erro na limpeza de mensagens: column "status" does not exist
+LINE 3: ... WHERE created_at < NOW() - INTERVAL '7 days' AND status = '...
+                                                             ^
+
+2025-09-22 20:52:32,445 - Kaori - WARNING - ❌ 2FA obrigatório impediu criação de cargos em ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆
+2025-09-22 20:52:32,446 - Kaori - INFO - 💡 Solução: Admin com 2FA deve desativar 'Exigir 2FA para ações de moderação' ou criar os cargos manualmente
+2025-09-22 20:52:32,665 - Kaori - WARNING - ⚠️ Não foi possível criar cargo Kaori no servidor ᴇʟɪ ᴄᴏᴍᴍᴜɴɪᴛʏ ★ || #500 🏆 - sem permissões
+2025-09-22 20:52:32,891 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 20:52:33,659 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:52:33] "GET / HTTP/1.1" 200 -
+2025-09-22 20:52:33,693 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:52:33] "GET /static/css/dashboard.css HTTP/1.1" 200 -
+2025-09-22 20:52:33,703 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:52:33] "GET /static/js/dashboard.js HTTP/1.1" 200 -
+2025-09-22 20:52:33,932 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:52:33] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-09-22 20:52:36,962 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 20:52:40,409 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-22 20:52:40,409 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-22 20:52:40,419 - Kaori - ERROR - Erro ao restaurar mensagens interativas: column "status" does not exist
+LINE 4:                 WHERE status = 'active'
+                              ^
+
+2025-09-22 20:52:40,769 - Kaori - INFO - ✅ 93 slash commands sincronizados
+2025-09-22 20:52:40,769 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-22 20:52:40,769 - Kaori - INFO - 🚀 Total de comandos slash: 93
+2025-09-22 20:52:40,769 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-22 20:52:40,770 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-22 20:52:40,770 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-22 20:52:40,770 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-22 20:52:40,770 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-22 20:52:40,770 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-22 20:52:40,770 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-22 20:52:40,770 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-22 20:52:40,771 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-22 20:52:40,771 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-22 20:52:40,771 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-22 20:52:40,771 - Kaori - INFO -    /ia_status - Ver status da IA local
+2025-09-22 20:52:40,771 - Kaori - INFO -    /ia_trocar_modelo - Trocar modelo de IA (Admin)
+2025-09-22 20:52:40,771 - Kaori - INFO -    /ia_conversar - Conversar diretamente com a IA
+2025-09-22 20:52:40,771 - Kaori - INFO -    /cuptop10 - Ver top 10 do ranking das copinhas
+2025-09-22 20:52:40,771 - Kaori - INFO -    ... e mais 78 comandos!
+2025-09-22 20:52:40,772 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-22 20:54:22,216 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:54:22] "GET / HTTP/1.1" 200 -
+2025-09-22 20:54:22,427 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:54:22] "[36mGET /static/css/dashboard.css HTTP/1.1[0m" 304 -
+2025-09-22 20:54:22,516 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:54:22] "[36mGET /static/js/dashboard.js HTTP/1.1[0m" 304 -
