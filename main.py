@@ -356,18 +356,49 @@ try:
     logger.info("🤖 IA Local carregada com sucesso!")
 except ImportError as e:
     print(f"⚠️ IA Local não disponível, usando fallback: {e}")
+    logger.info(f"⚠️ IA Local não disponível, usando fallback: {e}")
     USING_LOCAL_AI = False
     
-    # Fallback simples se IA local falhar
+    # Sistema de IA de fallback melhorado
     class BasicKaoriAI:
-        def get_response(self, user_message, user_name=""):
-            default_responses = [
-                f"Oi! 🌸 Como posso ajudar você hoje?",
-                f"Interessante! 🤔 Use `/ajuda` para ver meus comandos!",
-                f"Que legal! ✨ Se precisar de algo, é só usar `/ajuda`!"
-            ]
-            return random.choice(default_responses)
+        def __init__(self):
+            self.responses = {
+                'cumprimento': [
+                    "Oi! 🌸 Como posso ajudar você hoje?",
+                    "Olá! ✨ Em que posso ser útil?", 
+                    "Hey! 💫 Pronto para ajudar!",
+                    "Salve! 🎮 O que precisamos fazer hoje?"
+                ],
+                'ajuda': [
+                    "Claro! Use `/ajuda` para ver todos os meus comandos! 💡",
+                    "Posso ajudar sim! Digite `/ajuda` para ver o que posso fazer! 🚀",
+                    "Com certeza! Use `/ping` para testar ou `/ajuda` para comandos! ⚡"
+                ],
+                'ping': [
+                    "Pong! 🏓 Estou funcionando perfeitamente!",
+                    "Pong! ⚡ Tudo certo por aqui!",
+                    "Pong! 🎯 Use `/ping` para ver minha latência!"
+                ],
+                'default': [
+                    "Interessante! 🤔 Use `/ajuda` para ver meus comandos!",
+                    "Que legal! ✨ Se precisar de algo, é só usar `/ajuda`!",
+                    "Legal! 🎉 Digite `/ping` para testar ou `/ajuda` para comandos!",
+                    "Bacana! 💫 Estou aqui para ajudar! Use `/ajuda` para ver o que posso fazer!"
+                ]
+            }
             
+        def get_response(self, user_message, user_name=""):
+            content_lower = user_message.lower()
+            
+            if any(word in content_lower for word in ['oi', 'olá', 'hello', 'hey', 'salve', 'eae']):
+                return random.choice(self.responses['cumprimento'])
+            elif any(word in content_lower for word in ['como', 'help', 'ajuda', 'comando']):
+                return random.choice(self.responses['ajuda'])  
+            elif any(word in content_lower for word in ['ping', 'test', 'funcionando', 'online']):
+                return random.choice(self.responses['ping'])
+            else:
+                return random.choice(self.responses['default'])
+                
         def generate_response(self, message, user_id=None, context=""):
             return self.get_response(message)
             
@@ -376,7 +407,7 @@ except ImportError as e:
             
         @property
         def current_model(self):
-            return "fallback"
+            return "Kaori AI Básica (Fallback)"
     
     local_ai = BasicKaoriAI()
 
@@ -2884,78 +2915,120 @@ async def on_command_error(ctx, error):
 
 @bot.event
 async def on_message(message):
-    """Processar mensagens para XP, IA e moderação"""
-    if message.author.bot:
+    """Handler principal para mensagens - XP, IA e comandos"""
+    # Ignorar mensagens do próprio bot
+    if message.author.bot or message.author == bot.user:
         return
 
-    global_stats['messages_processed'] += 1
-
-    # Sistema de XP
     try:
-        leveled_up, new_level, rank_up, new_rank_id, old_rank_id = add_xp(message.author.id, XP_PER_MESSAGE)
-        
-        # Atualizar cargo Discord se houve rank up
-        if rank_up and message.guild:
-            try:
-                member = message.guild.get_member(message.author.id)
-                if member:
-                    await update_user_rank_role(member, new_rank_id)
-            except Exception as e:
-                logger.error(f"Erro ao atualizar cargo de rank: {e}")
+        global_stats['messages_processed'] += 1
 
-        if leveled_up:
-            embed = create_embed(
-                f"🎉 Level Up!",
-                f"{message.author.mention} subiu para o **Level {new_level}**!",
-                color=0xffd700
-            )
-            await message.channel.send(embed=embed, delete_after=10)
-
-        if rank_up:
-            rank_data = RANK_SYSTEM[new_rank_id]
-            embed = create_embed(
-                f"⭐ Rank Up!",
-                f"{message.author.mention} alcançou o rank **{rank_data['emoji']} {rank_data['name']}**!",
-                color=rank_data['color']
-            )
-            await message.channel.send(embed=embed, delete_after=15)
-    except Exception as e:
-        logger.error(f"Erro no sistema XP: {e}")
-
-    # Sistema de IA Local (responder quando mencionado)
-    if bot.user.mentioned_in(message) and not message.mention_everyone:
-        logger.info(f"🎯 Kaori foi mencionada por {message.author.display_name} em {message.guild.name}#{message.channel.name}")
+        # Sistema de XP
         try:
-            content = message.content.replace(f'<@{bot.user.id}>', '').strip()
-            logger.info(f"💬 Conteúdo da mensagem: '{content}'")
-            if content:
-                if USING_LOCAL_AI and local_ai.is_ready():
-                    # Usar IA local avançada
+            leveled_up, new_level, rank_up, new_rank_id, old_rank_id = add_xp(message.author.id, XP_PER_MESSAGE)
+            
+            # Atualizar cargo Discord se houve rank up
+            if rank_up and message.guild:
+                try:
+                    member = message.guild.get_member(message.author.id)
+                    if member:
+                        await update_user_rank_role(member, new_rank_id)
+                except Exception as e:
+                    logger.error(f"Erro ao atualizar cargo de rank: {e}")
+
+            if leveled_up:
+                embed = create_embed(
+                    f"🎉 Level Up!",
+                    f"{message.author.mention} subiu para o **Level {new_level}**!",
+                    color=0xffd700
+                )
+                try:
+                    await message.channel.send(embed=embed, delete_after=10)
+                except:
+                    pass
+
+            if rank_up:
+                rank_data = RANK_SYSTEM[new_rank_id]
+                embed = create_embed(
+                    f"⭐ Rank Up!",
+                    f"{message.author.mention} alcançou o rank **{rank_data['emoji']} {rank_data['name']}**!",
+                    color=rank_data['color']
+                )
+                try:
+                    await message.channel.send(embed=embed, delete_after=15)
+                except:
+                    pass
+        except Exception as e:
+            logger.error(f"Erro no sistema XP: {e}")
+
+        # Sistema de IA - Verificar se bot foi mencionado
+        if bot.user in message.mentions:
+            logger.info(f"🎯 Kaori mencionada por {message.author.display_name} em {message.guild.name if message.guild else 'DM'}")
+            
+            try:
+                # Remover menções do bot da mensagem
+                content = message.content
+                for mention_string in [f'<@{bot.user.id}>', f'<@!{bot.user.id}>']:
+                    content = content.replace(mention_string, '').strip()
+                
+                # Se não sobrou conteúdo, usar saudação padrão
+                if not content:
+                    content = "olá"
+                
+                logger.info(f"💬 Processando: '{content}'")
+                
+                # Gerar resposta com sistema de IA
+                if USING_LOCAL_AI and hasattr(local_ai, 'is_ready') and local_ai.is_ready():
                     logger.info("🤖 Usando IA local avançada")
                     response = local_ai.generate_response(
                         content, 
                         user_id=message.author.id,
-                        context=f"Canal: {message.channel.name}, Servidor: {message.guild.name}"
+                        context=f"Servidor: {message.guild.name if message.guild else 'DM'}"
                     )
                 else:
-                    # Usar fallback básico
+                    # Sistema de fallback melhorado
                     logger.info("🔄 Usando sistema de fallback")
-                    response = local_ai.generate_response(content, user_id=message.author.id)
+                    responses = [
+                        f"Oi {message.author.display_name}! 🌸 Como posso ajudar você hoje?",
+                        f"Olá! ✨ Em que posso ser útil?",
+                        f"Hey! 💫 Pronto para ajudar! Use `/ajuda` para ver meus comandos!",
+                        f"Salve! 🎮 O que precisamos fazer hoje?",
+                        f"Interessante! 🤔 Use `/ping` para testar ou `/ajuda` para comandos!",
+                        f"Oi! 😊 Mencione-me sempre que precisar de ajuda!"
+                    ]
+                    
+                    # Personalizar resposta baseada no conteúdo
+                    content_lower = content.lower()
+                    if any(word in content_lower for word in ['oi', 'olá', 'hello', 'hey', 'salve']):
+                        response = f"Olá {message.author.display_name}! 🌸 Como posso ajudar você hoje?"
+                    elif any(word in content_lower for word in ['como', 'help', 'ajuda']):
+                        response = f"Claro! Use `/ajuda` para ver todos os meus comandos! 💡"
+                    elif any(word in content_lower for word in ['ping', 'test', 'funcionando']):
+                        response = f"Pong! 🏓 Estou funcionando perfeitamente! Use `/ping` para ver minha latência!"
+                    else:
+                        response = random.choice(responses)
                 
-                logger.info(f"✅ Resposta gerada: '{response}'")
+                logger.info(f"✅ Resposta: '{response}'")
+                
+                # Enviar resposta
                 await message.reply(response)
                 logger.info("📤 Resposta enviada com sucesso!")
-            else:
-                logger.warning("⚠️ Mensagem vazia após remover menção")
-        except Exception as e:
-            logger.error(f"Erro no sistema IA: {e}")
-            logger.error(f"Traceback: {str(e)}")
-            await message.reply("Ops! Tive um probleminha técnico. 🔧 Tente novamente!")
+                
+            except Exception as e:
+                logger.error(f"Erro no sistema IA: {e}")
+                try:
+                    await message.reply("Ops! 🔧 Tive um probleminha técnico. Tente novamente em alguns instantes!")
+                except:
+                    logger.error("Falha ao enviar resposta de erro")
 
-    # Processar comandos
-    await bot.process_commands(message)
+        # Processar comandos tradicionais
+        await bot.process_commands(message)
+        
+    except Exception as e:
+        logger.error(f"Erro geral no on_message: {e}")
+        # Não falhar completamente - apenas logar
 
-# ID do servidor oficial RX CLAN
+# ID do servidor oficial RX CLAN (RX | Clã - #100)
 RX_CLAN_SERVER_ID = 1398027573967192214
 
 @bot.event
@@ -2964,7 +3037,8 @@ async def on_member_join(member):
     try:
         # Verificar se é o servidor oficial RX CLAN
         if member.guild.id != RX_CLAN_SERVER_ID:
-            # Ignorar completamente outros servidores
+            # Ignorar completamente outros servidores - não enviar boas-vindas
+            logger.info(f"🚫 Boas-vindas ignoradas - servidor não é RX CLAN: {member.guild.name} (ID: {member.guild.id})")
             return
             
         # Sistema de boas-vindas APENAS para RX CLAN
@@ -3024,7 +3098,7 @@ async def on_member_join(member):
                 
                 await welcome_channel.send(embed=embed)
                 
-                logger.info(f"🌸 Boas-vindas enviadas para {member.display_name} no RX CLAN")
+                logger.info(f"🌸 Boas-vindas enviadas para {member.display_name} no RX CLAN (ID: {member.guild.id})")
                 
         except Exception as welcome_error:
             logger.error(f"Erro ao enviar boas-vindas: {welcome_error}")
@@ -3057,7 +3131,8 @@ async def on_member_remove(member):
     try:
         # Verificar se é o servidor oficial RX CLAN
         if member.guild.id != RX_CLAN_SERVER_ID:
-            # Ignorar completamente outros servidores
+            # Ignorar completamente outros servidores - não enviar despedidas
+            logger.info(f"🚫 Despedida ignorada - servidor não é RX CLAN: {member.guild.name} (ID: {member.guild.id})")
             return
             
         # Sistema de despedida APENAS para RX CLAN
@@ -3099,7 +3174,7 @@ async def on_member_remove(member):
                 )
                 
                 await goodbye_channel.send(embed=embed)
-                logger.info(f"👋 Despedida enviada para {member.display_name} do RX CLAN")
+                logger.info(f"👋 Despedida enviada para {member.display_name} do RX CLAN (ID: {member.guild.id})")
                 
         except Exception as goodbye_error:
             logger.error(f"Erro ao enviar despedida: {goodbye_error}")
@@ -3132,42 +3207,7 @@ async def on_guild_join(guild):
         logger.error(f"Erro no evento on_guild_join: {e}")
         await send_error_to_privileged_user(f"Erro ao entrar no servidor {guild.name}: {e}", guild)
 
-@bot.event
-async def on_message(message):
-    """Handler para mensagens - inclui sistema de IA da Kaori"""
-    # Ignorar mensagens do próprio bot
-    if message.author == bot.user:
-        return
-    
-    # Verificar se o bot foi mencionado
-    if bot.user in message.mentions:
-        try:
-            # Remover a menção do bot da mensagem
-            content = message.content
-            for mention in message.mentions:
-                if mention == bot.user:
-                    content = content.replace(f'<@{mention.id}>', '').replace(f'<@!{mention.id}>', '').strip()
-            
-            # Se não sobrou conteúdo, usar saudação padrão
-            if not content:
-                content = "oi"
-            
-            # Gerar resposta da Kaori
-            user_name = message.author.display_name
-            ai_response = kaori_ai.get_response(content, user_name)
-            
-            # Responder na thread se for reply, senão no canal
-            if message.reference:
-                await message.reply(ai_response)
-            else:
-                await message.channel.send(ai_response)
-                
-        except Exception as e:
-            # Log silencioso para evitar spam
-            pass
-    
-    # Processar comandos normalmente
-    await bot.process_commands(message)
+
 
 @bot.event
 async def on_ready():
