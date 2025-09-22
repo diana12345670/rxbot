@@ -2741,3 +2741,7 @@ LINE 4:                 WHERE status = 'active'
 2025-09-22 20:54:22,216 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:54:22] "GET / HTTP/1.1" 200 -
 2025-09-22 20:54:22,427 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:54:22] "[36mGET /static/css/dashboard.css HTTP/1.1[0m" 304 -
 2025-09-22 20:54:22,516 - werkzeug - INFO - 127.0.0.1 - - [22/Sep/2025 20:54:22] "[36mGET /static/js/dashboard.js HTTP/1.1[0m" 304 -
+2025-09-22 21:04:08,731 - Kaori - INFO - Usuário 1198278420216414231 criado com dados padrão
+2025-09-22 21:04:33,948 - Kaori - INFO - Usuário 1334167648480530472 criado com dados padrão
+2025-09-22 21:04:45,874 - Kaori - INFO - Usuário 1376969623303356457 criado com dados padrão
+2025-09-22 21:05:00,045 - Kaori - INFO - Usuário 1210657767203930192 criado com dados padrão
