@@ -1,0 +1,34 @@
+Collecting llama-cpp-python
+  Using cached llama_cpp_python-0.3.16.tar.gz (50.7 MB)
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Installing backend dependencies: started
+  Installing backend dependencies: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Requirement already satisfied: typing-extensions>=4.5.0 in /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages (from llama-cpp-python) (4.15.0)
+Collecting numpy>=1.20.0 (from llama-cpp-python)
+  Using cached numpy-2.3.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+Collecting diskcache>=5.6.1 (from llama-cpp-python)
+  Using cached diskcache-5.6.3-py3-none-any.whl.metadata (20 kB)
+Requirement already satisfied: jinja2>=2.11.3 in /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages (from llama-cpp-python) (3.1.6)
+Requirement already satisfied: MarkupSafe>=2.0 in /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages (from jinja2>=2.11.3->llama-cpp-python) (3.0.2)
+Using cached diskcache-5.6.3-py3-none-any.whl (45 kB)
+Using cached numpy-2.3.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.9 MB)
+Building wheels for collected packages: llama-cpp-python
+  Building wheel for llama-cpp-python (pyproject.toml): started
+  Building wheel for llama-cpp-python (pyproject.toml): still running...
+  Building wheel for llama-cpp-python (pyproject.toml): still running...
+  Building wheel for llama-cpp-python (pyproject.toml): still running...
+  Building wheel for llama-cpp-python (pyproject.toml): still running...
+  Building wheel for llama-cpp-python (pyproject.toml): still running...
+  Building wheel for llama-cpp-python (pyproject.toml): still running...
+  Building wheel for llama-cpp-python (pyproject.toml): still running...
+  Building wheel for llama-cpp-python (pyproject.toml): finished with status 'done'
+  Created wheel for llama-cpp-python: filename=llama_cpp_python-0.3.16-cp311-cp311-linux_x86_64.whl size=4491852 sha256=79f3104fd2d299db84811ee42eb4b03c3dbb6412de5197450c30c5552ee9c9c7
+  Stored in directory: /home/runner/workspace/.cache/pip/wheels/d8/5b/e5/a7d4b5765da347d314e8155197440c9995a962f8e4a5f52b23
+Successfully built llama-cpp-python
+Installing collected packages: numpy, diskcache, llama-cpp-python
+Successfully installed diskcache-5.6.3 llama-cpp-python-0.3.16 numpy-2.3.3
