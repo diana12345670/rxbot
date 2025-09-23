@@ -379,27 +379,16 @@ try:
     from local_ai import local_ai
     USING_LOCAL_AI = True
     
-    # Aguardar inicialização completa com timeout
-    import time
-    timeout = 45  # 45 segundos para inicialização
-    start_time = time.time()
-    
-    while not local_ai.is_ready() and (time.time() - start_time) < timeout:
-        time.sleep(1)
-    
-    if local_ai.is_ready():
-        if hasattr(local_ai, 'using_real_tinyllama') and local_ai.using_real_tinyllama:
-            logger.info("🤖 TinyLLaMA REAL carregado com sucesso!")
-            print("🎯 USANDO TinyLLaMA REAL com Transformers!")
-            print(f"📱 Device: {getattr(local_ai, 'device', 'CPU')}")
-            print(f"🧠 Modelo: TinyLlama-1.1B-Chat-v1.0")
-        else:
-            logger.info("🤖 TinyLLaMA fallback carregado!")
-            print("⚡ Usando TinyLLaMA fallback otimizado")
-            print("✅ Sistema funcionando em modo estável")
+    # Verificar se IA carregou corretamente
+    if hasattr(local_ai, 'using_real_tinyllama') and local_ai.using_real_tinyllama:
+        logger.info("🤖 TinyLLaMA REAL carregado com sucesso!")
+        print("🎯 USANDO TinyLLaMA REAL com Transformers!")
+        print(f"📱 Device: {getattr(local_ai, 'device', 'CPU')}")
+        print(f"🧠 Modelo: TinyLlama-1.1B-Chat-v1.0")
     else:
-        logger.warning("⚠️ TinyLLaMA não ficou pronto no tempo esperado, usando fallback")
-        print("⚡ Sistema funcionando em modo fallback por timeout")
+        logger.info("🤖 TinyLLaMA fallback carregado!")
+        print("⚡ Usando TinyLLaMA fallback otimizado")
+        print("✅ Sistema funcionando em modo estável")
         
 except ImportError as e:
     logger.warning(f"⚠️ TinyLLaMA não disponível: {e}")

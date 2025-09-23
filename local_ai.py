@@ -196,11 +196,11 @@ class TinyLlamaAI:
 
     def is_ready(self):
         """Verificar se o sistema está pronto"""
-        if self._initializing:
+        if hasattr(self, '_initializing') and self._initializing:
             return False
-        if not hasattr(self, 'model_ready'):
-            return False
-        return self.model_ready or hasattr(self, 'fallback_ready')
+        if hasattr(self, 'model_loaded'):
+            return self.model_loaded
+        return True
 
     def generate_response(self, user_input, user_id=None, context=None):
         """Gerar resposta inteligente usando TinyLLaMA avançado"""
