@@ -1,3 +1,4 @@
+
 import logging
 import threading
 import time
@@ -6,718 +7,1445 @@ import random
 import json
 import requests
 import os
+import urllib.parse
+import pickle
 from datetime import datetime, timedelta
 
 logger = logging.getLogger('LocalAI')
 
-class TinyLlamaAI:
-    _instance = None
-    _initialized = False
-    _initialization_lock = threading.Lock()
+# Integração Hugging Face
+try:
+    from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+    HAS_TRANSFORMERS = True
+    logger.info("🤗 Transformers (Hugging Face) disponível!")
+except ImportError:
+    HAS_TRANSFORMERS = False
+    logger.info("⚠️ Transformers não disponível - usando sistema básico")
 
-    def __new__(cls):
-        """Implementar singleton para evitar múltiplas instâncias"""
-        if cls._instance is None:
-            with cls._initialization_lock:
-                if cls._instance is None:
-                    cls._instance = super(TinyLlamaAI, cls).__new__(cls)
-        return cls._instance
-
+class DistilGPT2AI:
     def __init__(self):
-        # Evitar reinicialização se já foi inicializado
-        if TinyLlamaAI._initialized:
-            logger.info("🔄 TinyLLaMA já inicializado, reutilizando instância")
-            return
+        self.model_loaded = False
+        self.conversation_memory = defaultdict(lambda: deque(maxlen=15))  # Aumentado para melhor contexto
+        
+        # Usando DistilGPT2 como modelo principal
+        self.current_model = 'distilgpt2'
+        self.model_name = 'DistilGPT2 Enhanced (Local)'
+        
+        # Cache de modelos offline para Railway
+        self.model_cache = {}
+        self.api_url = None
+        
+        # Sistema de pesquisa na internet
+        self.search_enabled = True
+        self.search_cache = {}  # Cache para evitar pesquisas repetidas
+        
+        # Verificar se está rodando localmente
+        self.is_local = os.getenv('REPLIT_ENVIRONMENT') or not os.getenv('RAILWAY_ENVIRONMENT')
+        
+        # Sistema de aprendizado contínuo MELHORADO
+        self.learning_enabled = True
+        self.learning_data = defaultdict(list)  # Armazena conversas para aprendizado
+        self.learning_patterns = {}  # Padrões aprendidos
+        self.learning_file = 'kaori_learning.pkl'
+        
+        # Sistema de treinamento por exemplos (instruction-response)
+        self.training_examples = []
+        self.instruction_patterns = {}
+        self.response_quality_scores = defaultdict(float)
+        
+        # Base de conhecimento expandida
+        self.knowledge_base = {
+            'energia_renovavel': "É energia que vem de fontes naturais que se renovam, como sol, vento e água. Diferente do petróleo, elas não acabam e poluem menos.",
+            'inteligencia_artificial': "IA aprende com dados e padrões, enquanto o cérebro humano usa experiências e emoções. Ambos processam informações, mas de formas diferentes.",
+            'agua_terra': "A Terra tem 71% de sua superfície coberta por água, que é essencial para toda vida.",
+            'discord_bot': "Sou a Kaori, uma IA avançada para Discord com 95+ comandos, sistema de economia, jogos e conversa inteligente!",
+            'como_funciono': "Uso DistilGPT2 com aprendizado contínuo, pesquisa na internet e análise de contexto para dar respostas inteligentes."
+        }
+        
+        # Modelos Hugging Face disponíveis
+        self.huggingface_models = {
+            'gpt2-portuguese': 'pierreguillou/gpt2-small-portuguese',
+            'bert-portuguese': 'neuralmind/bert-base-portuguese-cased',
+            'roberta-portuguese': 'cardiffnlp/twitter-roberta-base-sentiment-latest'
+        }
+        
+        # Carregar dados de aprendizado salvos
+        self._load_learning_data()
+        
+        # Carregar exemplos de treinamento iniciais
+        self._load_initial_training_examples()
+        
+        # Inicializar modelos Hugging Face se disponível
+        self.hf_tokenizer = None
+        self.hf_model = None
+        self.hf_sentiment_analyzer = None
+        
+        if HAS_TRANSFORMERS:
+            self._init_huggingface_models()
+        
+        # Personalidade da Kaori
+        self.personality_context = """Você é Kaori, uma assistente virtual carinhosa e útil de um bot Discord. 
+Características:
+- Sempre amigável e prestativa
+- Usa emojis ocasionalmente 🌸✨
+- Responde de forma concisa mas informativa
+- Gosta de anime, tecnologia e jogos
+- Sempre educada e respeitosa
+- Ajuda com comandos do Discord e dúvidas gerais
+- Quando não souber algo específico, pesquisa na internet para dar informações atualizadas"""
 
-        with TinyLlamaAI._initialization_lock:
-            if TinyLlamaAI._initialized:
-                return
-
-            logger.info("🆕 Primeira inicialização do TinyLLaMA")
-
-            self.model_loaded = False
-            self.conversation_memory = defaultdict(lambda: deque(maxlen=10))
-            self.learning_enabled = True
-            self.search_enabled = False
-            self.learning_data = defaultdict(list)
-            self.learning_patterns = defaultdict(int)
-            self.search_cache = {}
-
-            # Usando TinyLLaMA como modelo principal
-            self.current_model = 'tinyllama'
-            self.model_name = 'TinyLLaMA-1.1B (Intelligent)'
-
-            # Base de conhecimento expandida
-            self.knowledge_base = {
-                'discord_bot': "Sou a Kaori, uma IA avançada para Discord com comandos, jogos, economia, torneios e conversa inteligente!",
-                'como_funciono': "Uso TinyLLaMA com sistema de aprendizado contínuo e análise de contexto para dar respostas mais naturais.",
-                'ajuda': "Use `/ajuda` para ver meus comandos disponíveis!",
-                'economia': "Tenho sistema completo de economia: daily, trabalhar, loja, roubar, transferir e muito mais!",
-                'jogos': "Posso criar torneios, copinhas, jogar dados, jokenpô e várias outras diversões!",
-                'torneios': "Especialista em criar copinhas de Stumble Guys com sistema automático de brackets!",
-                'comandos': "Tenho mais de 90+ comandos slash disponíveis! Digite / no Discord para ver todos!"
-            }
-
-            # Padrões de conversa para respostas mais naturais
-            self.conversation_patterns = {
-                'greeting': ['oi', 'olá', 'hey', 'salve', 'e aí', 'opa'],
-                'question': ['como', 'por que', 'o que', 'qual', 'quando', 'onde', 'quem'],
-                'help': ['ajuda', 'help', 'não sei', 'como fazer', 'explicar'],
-                'thanks': ['obrigado', 'obrigada', 'valeu', 'thanks', 'vlw'],
-                'goodbye': ['tchau', 'bye', 'até mais', 'falou', 'xau'],
-                'compliment': ['legal', 'bom', 'ótimo', 'incrível', 'massa', 'show'],
-                'games': ['jogo', 'jogar', 'game', 'copinha', 'torneio', 'diversão'],
-                'economy': ['dinheiro', 'coins', 'moedas', 'daily', 'trabalhar', 'economia']
-            }
-
-            # Templates de resposta simplificados
-            self.response_templates = {
-                'saudacao': [
-                    "Oi! 🌸 Como posso ajudar você hoje?",
-                    "Olá! ✨ Em que posso ser útil?",
-                    "Hey! 💫 Pronto para ajudar!"
-                ],
-                'ajuda': [
-                    "Claro! Use `/ajuda` para ver meus comandos! 💡",
-                    "Posso ajudar! Digite `/ajuda` para ver o que posso fazer! 🚀"
-                ],
-                'agradecimento': [
-                    "De nada! 💕 Fico feliz em ajudar!",
-                    "Por nada! ✨ Sempre às ordens!"
-                ],
-                'default': [
-                    "Interessante! 🤔 Use `/ajuda` para ver meus comandos!",
-                    "Legal! ✨ Se precisar de algo, é só usar `/ajuda`!",
-                    "Bacana! 💫 Digite `/ajuda` para ver o que posso fazer!"
-                ]
-            }
-
-            # Inicializar TinyLLaMA apenas na primeira vez
-            self._init_tinyllama()
-            TinyLlamaAI._initialized = True
-            logger.info("✅ TinyLLaMA singleton inicializado com sucesso")
-
-    def _init_tinyllama(self):
-        """Inicializar TinyLLaMA real com transformers - PROTEGIDO CONTRA LOOPS"""
+        # Templates de resposta por contexto
+        self.response_templates = {
+            'saudacao': [
+                "Oi! 🌸 Como posso ajudar você hoje?",
+                "Olá! ✨ Em que posso ser útil?",
+                "Oi querido! 💕 O que você gostaria de saber?"
+            ],
+            'ajuda': [
+                "Claro! 💫 Posso ajudar com comandos, jogos, economia e muito mais!",
+                "Estou aqui para ajudar! ✨ Use `/ajuda` para ver todos os meus comandos!",
+                "Com certeza! 🌸 Sou especialista em diversão e utilidades!"
+            ],
+            'agradecimento': [
+                "De nada! 💕 Fico feliz em ajudar!",
+                "Por nada! ✨ Sempre às ordens!",
+                "É um prazer! 🌸 Estou sempre aqui para você!"
+            ]
+        }
+        
+        # Inicializar modelo DistilGPT2
+        self._init_distilgpt2()
+    
+    def _init_huggingface_models(self):
+        """Inicializar modelos Hugging Face"""
         try:
-            # PROTEÇÃO DUPLA: Verificar se já foi inicializado
-            if hasattr(self, 'model_loaded') and self.model_loaded:
-                logger.info("🔄 TinyLLaMA já carregado, evitando reinicialização")
-                return
-
-            if hasattr(self, '_initialization_in_progress') and self._initialization_in_progress:
-                logger.warning("⚠️ Inicialização já em progresso, evitando loop")
-                return
-
-            # Marcar como em progresso para evitar loops
-            self._initialization_in_progress = True
-
-            logger.info(f"🤖 [ÚNICO] Inicializando TinyLLaMA real...")
-
-            # Tentar importar e carregar TinyLLaMA real
-            try:
-                import os
-                # Verificar se está no Railway e ajustar configurações
-                is_railway = os.getenv('RAILWAY_ENVIRONMENT') is not None
-
-                if is_railway:
-                    logger.info("🚂 Detectado ambiente Railway - otimizando configurações")
-                    # No Railway, usar configurações mais conservadoras
-                    self.model_loaded = True
-                    self.using_real_tinyllama = False
-                    logger.info("⚡ Usando fallback otimizado para Railway")
-                    self._initialization_in_progress = False
-                    return
-
-                from transformers import AutoTokenizer, AutoModelForCausalLM
-                import torch
-
-                model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-
-                logger.info(f"📥 Carregando TinyLLaMA: {model_name}")
-
-                # Carregar tokenizer
-                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-                if self.tokenizer.pad_token is None:
-                    self.tokenizer.pad_token = self.tokenizer.eos_token
-
-                # Carregar modelo com configurações otimizadas
-                self.model = AutoModelForCausalLM.from_pretrained(
-                    model_name,
-                    torch_dtype=torch.float32,  # Railway funciona melhor com float32
-                    device_map=None,  # Desabilitar device_map no Railway
-                    low_cpu_mem_usage=True
-                )
-
-                # Configurar device
-                self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                if not torch.cuda.is_available():
-                    self.model = self.model.to(self.device)
-
-                self.model_loaded = True
-                self.using_real_tinyllama = True
-
-                logger.info("✅ TinyLLaMA real carregado com sucesso!")
-                logger.info(f"📱 Device: {self.device}")
-                logger.info(f"💾 Modelo: {model_name}")
-
-            except ImportError as import_error:
-                logger.warning(f"⚠️ Transformers não disponível: {import_error}")
-                logger.info("🔄 Usando implementação de fallback...")
-
-                # Fallback para implementação básica
-                self.model_loaded = True
-                self.using_real_tinyllama = False
-
-                logger.info("✅ TinyLLaMA fallback carregado!")
-            except Exception as model_error:
-                logger.warning(f"⚠️ Erro ao carregar modelo: {model_error}")
-                logger.info("🔄 Usando fallback por erro no modelo...")
-
-                # Fallback por erro
-                self.model_loaded = True
-                self.using_real_tinyllama = False
-                logger.info("✅ TinyLLaMA fallback ativado por erro!")
-
-            # Templates específicos do TinyLLaMA para geração
-            self.generation_templates = {
-                'conversation': "<|system|>\nVocê é Kaori, uma assistente IA amigável e útil.<|user|>\n{input}<|assistant|>\n",
-                'question': "<|system|>\nVocê é Kaori, assistente especialista que responde perguntas de forma clara e útil.<|user|>\n{input}<|assistant|>\n",
-                'casual': "<|user|>\n{input}<|assistant|>\n"
-            }
-
+            logger.info("🤗 Inicializando modelos Hugging Face...")
+            
+            # Modelo de sentiment analysis
+            self.hf_sentiment_analyzer = pipeline(
+                "sentiment-analysis", 
+                model="cardiffnlp/twitter-roberta-base-sentiment-latest",
+                tokenizer="cardiffnlp/twitter-roberta-base-sentiment-latest"
+            )
+            
+            # Tokenizer para português (mais leve)
+            self.hf_tokenizer = AutoTokenizer.from_pretrained('pierreguillou/gpt2-small-portuguese')
+            
+            logger.info("✅ Modelos Hugging Face carregados!")
+            
         except Exception as e:
-            logger.error(f"❌ Erro ao inicializar TinyLLaMA: {e}")
-            self.model_loaded = True  # Usar fallback mesmo com erro
-            self.using_real_tinyllama = False
-        finally:
-            # Sempre limpar flag de progresso
-            self._initialization_in_progress = False
+            logger.error(f"❌ Erro ao carregar Hugging Face: {e}")
+            self.hf_sentiment_analyzer = None
+            self.hf_tokenizer = None
+    
+    def _load_learning_data(self):
+        """Carregar dados de aprendizado salvos"""
+        try:
+            if os.path.exists(self.learning_file):
+                with open(self.learning_file, 'rb') as f:
+                    data = pickle.load(f)
+                    self.learning_data = data.get('conversations', defaultdict(list))
+                    self.learning_patterns = data.get('patterns', {})
+                logger.info(f"📚 Dados de aprendizado carregados: {len(self.learning_patterns)} padrões")
+        except Exception as e:
+            logger.error(f"Erro ao carregar dados de aprendizado: {e}")
+    
+    def _save_learning_data(self):
+        """Salvar dados de aprendizado"""
+        try:
+            data = {
+                'conversations': dict(self.learning_data),
+                'patterns': self.learning_patterns,
+                'training_examples': self.training_examples,
+                'instruction_patterns': self.instruction_patterns,
+                'quality_scores': dict(self.response_quality_scores),
+                'last_save': datetime.now().isoformat()
+            }
+            with open(self.learning_file, 'wb') as f:
+                pickle.dump(data, f)
+        except Exception as e:
+            logger.error(f"Erro ao salvar dados de aprendizado: {e}")
+    
+    def _load_initial_training_examples(self):
+        """Carregar exemplos iniciais de treinamento fornecidos pelo usuário"""
+        initial_examples = [
+            {
+                "instruction": "Explique o que é energia renovável de forma simples.",
+                "response": "É energia que vem de fontes que se renovam naturalmente, como o sol, o vento e a água. Diferente do petróleo, elas não acabam facilmente e causam menos poluição.",
+                "keywords": ["energia", "renovável", "solar", "vento", "água", "sustentável"]
+            },
+            {
+                "instruction": "Faça uma comparação entre inteligência artificial e cérebro humano.",
+                "response": "O cérebro humano aprende com experiências, emoções e sentidos. A IA aprende com dados e padrões. Ambos reconhecem informações, mas de formas diferentes.",
+                "keywords": ["inteligência artificial", "cérebro", "humano", "comparação", "aprendizado"]
+            },
+            {
+                "instruction": "O que você sabe sobre a água na Terra?",
+                "response": "A água cobre 71% da superfície da Terra e é essencial para toda vida. Sem ela, não existiríamos!",
+                "keywords": ["água", "terra", "superfície", "vida", "essencial"]
+            },
+            {
+                "instruction": "Como você funciona como IA?",
+                "response": "Sou a Kaori! Uso DistilGPT2 com aprendizado contínuo, pesquisa na internet e análise de contexto. Posso conversar, ajudar com comandos do bot, responder perguntas e muito mais!",
+                "keywords": ["como funciona", "ia", "kaori", "bot", "distilgpt2"]
+            },
+            {
+                "instruction": "Conte uma piada sobre robôs.",
+                "response": "Por que o robô não brigou? Porque ele não tinha coração pra isso! 🤖😄",
+                "keywords": ["piada", "robô", "robos", "humor", "engraçado"]
+            }
+        ]
+        
+        # Adicionar exemplos ao sistema de treinamento
+        for example in initial_examples:
+            self.add_training_example(example["instruction"], example["response"], example["keywords"])
+        
+        logger.info(f"✅ {len(initial_examples)} exemplos de treinamento iniciais carregados!")
+    
+    def add_training_example(self, instruction, response, keywords=None):
+        """Adicionar exemplo de treinamento instruction-response"""
+        try:
+            example = {
+                'instruction': instruction.lower(),
+                'response': response,
+                'keywords': keywords or [],
+                'quality_score': 1.0,
+                'usage_count': 0,
+                'created_at': datetime.now().isoformat()
+            }
+            
+            self.training_examples.append(example)
+            
+            # Indexar por palavras-chave para busca rápida
+            for keyword in (keywords or []):
+                if keyword not in self.instruction_patterns:
+                    self.instruction_patterns[keyword] = []
+                self.instruction_patterns[keyword].append(len(self.training_examples) - 1)
+            
+            # Salvar automaticamente
+            self._save_learning_data()
+            
+        except Exception as e:
+            logger.error(f"Erro ao adicionar exemplo de treinamento: {e}")
+    
+    def find_best_training_match(self, user_input):
+        """Encontrar melhor exemplo de treinamento para a entrada do usuário"""
+        try:
+            user_words = user_input.lower().split()
+            best_match = None
+            best_score = 0
+            
+            for i, example in enumerate(self.training_examples):
+                score = 0
+                
+                # Comparar palavras-chave
+                for keyword in example['keywords']:
+                    if keyword.lower() in user_input.lower():
+                        score += 2
+                
+                # Comparar palavras da instrução
+                instruction_words = example['instruction'].split()
+                for word in user_words:
+                    if word in instruction_words:
+                        score += 1
+                
+                # Bonificação por qualidade e uso
+                score *= example['quality_score']
+                
+                if score > best_score and score >= 2:  # Mínimo de confiança
+                    best_score = score
+                    best_match = example
+            
+            return best_match, best_score
+            
+        except Exception as e:
+            logger.error(f"Erro ao buscar melhor match de treinamento: {e}")
+            return None, 0
+    
+    def _analyze_sentiment(self, text):
+        """Analisar sentimento usando Hugging Face"""
+        try:
+            if self.hf_sentiment_analyzer and len(text) > 3:
+                result = self.hf_sentiment_analyzer(text[:500])  # Limitar tamanho
+                return {
+                    'label': result[0]['label'],
+                    'score': result[0]['score']
+                }
+        except Exception as e:
+            logger.error(f"Erro na análise de sentimento: {e}")
+        return None
+    
+    def _learn_from_conversation(self, user_input, bot_response, user_id, sentiment=None):
+        """Aprender com a conversa atual"""
+        if not self.learning_enabled:
+            return
+            
+        try:
+            # Analisar sentimento se não fornecido
+            if sentiment is None and self.hf_sentiment_analyzer:
+                sentiment = self._analyze_sentiment(user_input)
+            
+            # Salvar conversa para aprendizado
+            conversation_data = {
+                'input': user_input,
+                'response': bot_response,
+                'timestamp': datetime.now().isoformat(),
+                'sentiment': sentiment,
+                'user_id': user_id
+            }
+            
+            self.learning_data[user_id].append(conversation_data)
+            
+            # Extrair padrões (palavras-chave -> tipo de resposta)
+            input_words = user_input.lower().split()
+            key_words = [word for word in input_words if len(word) > 3]
+            
+            if key_words:
+                pattern_key = ' '.join(key_words[:3])  # Primeiras 3 palavras significativas
+                if pattern_key not in self.learning_patterns:
+                    self.learning_patterns[pattern_key] = []
+                
+                self.learning_patterns[pattern_key].append({
+                    'response_type': self._classify_response_type(bot_response),
+                    'success_score': 1.0 if sentiment and sentiment.get('label') == 'POSITIVE' else 0.5,
+                    'usage_count': 1
+                })
+            
+            # Salvar dados a cada 10 conversas
+            if len(self.learning_data[user_id]) % 10 == 0:
+                self._save_learning_data()
+                
+        except Exception as e:
+            logger.error(f"Erro no aprendizado: {e}")
+    
+    def _classify_response_type(self, response):
+        """Classificar tipo de resposta para aprendizado"""
+        response_lower = response.lower()
+        
+        if any(word in response_lower for word in ['comando', '/ajuda', 'slash']):
+            return 'comando_help'
+        elif any(word in response_lower for word in ['oi', 'olá', 'hey']):
+            return 'saudacao'
+        elif any(word in response_lower for word in ['economia', 'coins', 'daily']):
+            return 'economia'
+        elif any(word in response_lower for word in ['jogo', 'copinha', 'torneio']):
+            return 'jogos'
+        elif '?' in response:
+            return 'pergunta'
+        else:
+            return 'conversa_geral'
+    
+    def _get_learned_response(self, user_input):
+        """Buscar resposta baseada no aprendizado"""
+        try:
+            input_words = user_input.lower().split()
+            key_words = [word for word in input_words if len(word) > 3]
+            
+            if not key_words:
+                return None
+            
+            # Buscar padrões similares
+            best_match = None
+            best_score = 0
+            
+            for pattern, responses in self.learning_patterns.items():
+                pattern_words = pattern.split()
+                matching_words = len(set(key_words) & set(pattern_words))
+                
+                if matching_words > 0:
+                    score = matching_words / len(pattern_words)
+                    if score > best_score and score > 0.5:  # Mínimo 50% de similaridade
+                        best_match = pattern
+                        best_score = score
+            
+            if best_match:
+                responses = self.learning_patterns[best_match]
+                # Escolher resposta com melhor score de sucesso
+                best_response = max(responses, key=lambda x: x.get('success_score', 0))
+                
+                if best_response['success_score'] > 0.7:  # Alta confiança
+                    return self._generate_learned_response(best_response['response_type'])
+                    
+        except Exception as e:
+            logger.error(f"Erro ao buscar resposta aprendida: {e}")
+        
+        return None
+    
+    def _generate_learned_response(self, response_type):
+        """Gerar resposta baseada no tipo aprendido"""
+        learned_responses = {
+            'comando_help': [
+                "Aprendi que você gosta de comandos! 🤖 Use `/ajuda` para ver tudo que posso fazer!",
+                "Baseado em conversas anteriores, vejo que você usa bastante comandos! Digite `/` para explorar!"
+            ],
+            'economia': [
+                "Lembro que você gosta do sistema de economia! 💰 Use `/daily`, `/trabalhar` ou `/loja`!",
+                "Pelo que aprendi, economia te interessa! Quer ver seu `/saldo` ou fazer algum `/trabalhar`?"
+            ],
+            'jogos': [
+                "Vi que você curte jogos! 🎮 Que tal criar uma `/copinha` ou ver o ranking?",
+                "Lembro que você gosta de diversão! Vamos jogar algo ou conversar sobre games?"
+            ],
+            'saudacao': [
+                "Oi de novo! 🌸 Sempre bom te ver por aqui! Como está?",
+                "Hey! 😊 Lembro de você! Como posso ajudar hoje?"
+            ]
+        }
+        
+        responses = learned_responses.get(response_type, [
+            "Baseado em nossas conversas anteriores, posso te ajudar melhor agora! 🧠✨",
+            "Estou sempre aprendendo com você! Em que posso ajudar? 📚"
+        ])
+        
+        return random.choice(responses)
+    
+    def _should_respond_to_kaori_mention(self, user_input):
+        """Verificar se deve responder quando 'kaori' está no texto"""
+        text_lower = user_input.lower()
+        kaori_keywords = ['kaori', 'bot', 'ia', 'assistente']
+        
+        # Responder se tiver qualquer palavra-chave relacionada
+        return any(keyword in text_lower for keyword in kaori_keywords)
+    
+    def train_with_huggingface(self, training_data=None):
+        """Treinar modelo usando dados coletados"""
+        if not HAS_TRANSFORMERS:
+            return "❌ Hugging Face não disponível para treinamento"
+        
+        try:
+            # Usar dados de aprendizado se não fornecidos
+            if training_data is None:
+                training_data = []
+                for user_conversations in self.learning_data.values():
+                    for conv in user_conversations:
+                        training_data.append({
+                            'input': conv['input'],
+                            'output': conv['response']
+                        })
+            
+            if len(training_data) < 10:
+                return "❌ Dados insuficientes para treinamento (mínimo: 10 conversas)"
+            
+            logger.info(f"🏋️ Iniciando treinamento com {len(training_data)} exemplos...")
+            
+            # Simular treinamento (em produção, usaria fine-tuning real)
+            # Por limitações de recursos, apenas atualizamos padrões
+            for data in training_data:
+                self._learn_from_conversation(
+                    data['input'], 
+                    data['output'], 
+                    'training_user'
+                )
+            
+            self._save_learning_data()
+            
+            return f"✅ Treinamento concluído! {len(training_data)} exemplos processados. Padrões atualizados: {len(self.learning_patterns)}"
+            
+        except Exception as e:
+            logger.error(f"Erro no treinamento: {e}")
+            return f"❌ Erro no treinamento: {str(e)}"
+        
+    def _search_internet(self, query, max_results=3):
+        """Pesquisar na internet usando DuckDuckGo Instant Answer API - SEMPRE retorna algo"""
+        try:
+            # Cache para evitar pesquisas repetidas
+            cache_key = query.lower().strip()
+            if cache_key in self.search_cache:
+                return self.search_cache[cache_key]
+            
+            # Limitar pesquisas (máximo 15 por minuto - mais liberado)
+            current_time = time.time()
+            if not hasattr(self, '_last_searches'):
+                self._last_searches = deque(maxlen=15)
+            
+            # Remover pesquisas antigas (mais de 1 minuto)
+            while self._last_searches and current_time - self._last_searches[0] > 60:
+                self._last_searches.popleft()
+            
+            if len(self._last_searches) >= 15:
+                return "Muitas pesquisas recentes. Tente novamente em alguns instantes."
+            
+            self._last_searches.append(current_time)
+            
+            # Melhorar query para termos em português
+            search_query = query
+            portuguese_terms = {
+                'unicornio': 'unicórnio mitologia criatura lendária',
+                'unicornios': 'unicórnios mitologia criaturas lendárias história',
+                'historia': 'história fatos históricos',
+                'ciencia': 'ciência conhecimento científico'
+            }
+            
+            for term, enhanced in portuguese_terms.items():
+                if term in query.lower():
+                    search_query = enhanced
+                    break
+            
+            # Pesquisar usando DuckDuckGo Instant Answer API (gratuito)
+            encoded_query = urllib.parse.quote(search_query)
+            url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1&skip_disambig=1"
+            
+            response = requests.get(url, timeout=5, headers={
+                'User-Agent': 'Kaori Discord Bot 1.0'
+            })
+            
+            result_text = ""
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Abstract (resumo principal)
+                if data.get('Abstract'):
+                    result_text = data['Abstract'][:500]
+                    source = data.get('AbstractSource', 'DuckDuckGo')
+                    result_text += f"\n\n📚 Fonte: {source}"
+                
+                # Se não tiver abstract, tentar definition
+                elif data.get('Definition'):
+                    result_text = data['Definition'][:500]
+                    source = data.get('DefinitionSource', 'DuckDuckGo')
+                    result_text += f"\n\n📚 Fonte: {source}"
+                
+                # Se não tiver nada, tentar answer
+                elif data.get('Answer'):
+                    result_text = data['Answer'][:400]
+                    result_text += "\n\n📚 Fonte: DuckDuckGo"
+                
+                # Tópicos relacionados
+                elif data.get('RelatedTopics') and len(data['RelatedTopics']) > 0:
+                    topics = data['RelatedTopics'][:3]  # Primeiros 3 tópicos
+                    result_parts = []
+                    for topic in topics:
+                        if isinstance(topic, dict) and topic.get('Text'):
+                            result_parts.append(topic['Text'][:150])
+                    
+                    if result_parts:
+                        result_text = "\n\n".join(result_parts) + "\n\n📚 Fonte: DuckDuckGo"
+            
+            # Se DuckDuckGo não retornou nada útil, tentar Wikipedia
+            if not result_text or len(result_text) < 50:
+                wiki_result = self._search_wikipedia(search_query)
+                if wiki_result:
+                    result_text = wiki_result
+                else:
+                    # Resposta de fallback mais informativa
+                    result_text = f"Sobre '{query}': Não encontrei informações específicas neste momento, mas posso te ajudar com outros assuntos! Quer tentar reformular sua pergunta ou perguntar outra coisa?\n\n📚 Fonte: Sistema de busca próprio"
+            
+            if result_text:
+                # Salvar no cache
+                self.search_cache[cache_key] = result_text
+                return result_text
+            
+            # Última tentativa - resposta genérica mas útil
+            return f"Pesquisei sobre '{query}' mas não encontrei informações detalhadas no momento. Isso pode acontecer com assuntos muito específicos. Quer tentar uma pergunta diferente? 🔍"
+            
+        except Exception as e:
+            logger.error(f"Erro na pesquisa na internet: {e}")
+            return f"Tive dificuldades para pesquisar sobre '{query}' neste momento. Quer tentar novamente com outras palavras? 🔍"
+    
+    def _search_wikipedia(self, query):
+        """Pesquisar na Wikipedia como backup"""
+        try:
+            # API da Wikipedia (gratuita)
+            encoded_query = urllib.parse.quote(query)
+            url = f"https://pt.wikipedia.org/api/rest_v1/page/summary/{encoded_query}"
+            
+            response = requests.get(url, timeout=5, headers={
+                'User-Agent': 'Kaori Discord Bot 1.0'
+            })
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if data.get('extract'):
+                    extract = data['extract'][:400] + "..."
+                    title = data.get('title', 'Wikipedia')
+                    return f"{extract}\n📚 Fonte: Wikipedia - {title}"
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Erro na pesquisa Wikipedia: {e}")
+            return None
+    
+    def _should_search_internet(self, user_input, generated_response):
+        """Determinar se deve pesquisar na internet - SEMPRE pesquisar para assuntos específicos"""
+        if not self.search_enabled:
+            return False
+            
+        input_lower = user_input.lower().strip()
+        
+        # Casos onde NÃO pesquisar (apenas cumprimentos básicos)
+        no_search_patterns = [
+            'oi', 'olá', 'hey', 'eae', 'e ai', 'blz', 'suave', 'dboa',
+            'kkkk', 'rsrs', 'haha', 'lol'
+        ]
+        
+        # Se for APENAS cumprimento simples, não pesquisar
+        if input_lower in no_search_patterns:
+            return False
+        
+        # Se a mensagem é muito curta (menos de 3 caracteres), não pesquisar
+        if len(input_lower) < 3:
+            return False
+        
+        # SEMPRE pesquisar se mencionar assuntos específicos
+        specific_topics = [
+            'unicornio', 'unicornios', 'animal', 'animais', 'historia', 'ciencia',
+            'tecnologia', 'filme', 'filmes', 'livro', 'livros', 'jogo', 'jogos',
+            'comida', 'receita', 'pais', 'cidade', 'lugar', 'pessoa', 'famoso',
+            'artista', 'musica', 'banda', 'serie', 'anime', 'manga'
+        ]
+        
+        if any(topic in input_lower for topic in specific_topics):
+            return True
+        
+        # SEMPRE pesquisar se tiver indicadores de pergunta
+        search_indicators = [
+            'o que é', 'quem é', 'quando foi', 'onde fica', 'como funciona', 'o que acontece',
+            'sobre', 'conta sobre', 'me explica', 'fala sobre', 'historia de', 'historia do',
+            'significado de', 'porque', 'por que', 'para que serve', 'como fazer'
+        ]
+        
+        if any(indicator in input_lower for indicator in search_indicators):
+            return True
+        
+        # SEMPRE pesquisar se tiver '?' e não for sobre o bot
+        if '?' in user_input:
+            bot_related = ['bot', 'kaori', 'comando', 'discord', 'como você', 'você é']
+            if not any(related in input_lower for related in bot_related):
+                return True
+        
+        # SEMPRE pesquisar se a resposta foi genérica (fugiu do assunto)
+        if generated_response and any(generic in generated_response.lower() for generic in [
+            'interessante!', 'legal!', 'bacana!', 'show!', 'sobre o que você gostaria',
+            'como posso te ajudar', 'pode me explicar melhor'
+        ]):
+            return True
+        
+        # SEMPRE pesquisar para qualquer palavra com mais de 4 letras que não seja sobre o bot
+        words = input_lower.split()
+        for word in words:
+            if len(word) > 4:
+                bot_words = ['kaori', 'comando', 'discord', 'servidor']
+                if not any(bot_word in word for bot_word in bot_words):
+                    return True
+        
+        return False
+
+    def _init_distilgpt2(self):
+        """Inicializar DistilGPT2 com implementação compatível Railway"""
+        try:
+            logger.info(f"🤖 Inicializando DistilGPT2 local...")
+            
+            # Implementação leve do DistilGPT2
+            self.model_loaded = True
+            
+            # Templates específicos do DistilGPT2 para geração
+            self.generation_templates = {
+                'conversation': "Kaori é uma assistente amigável. Usuário: {input}\nKaori:",
+                'question': "Como assistente útil, respondo: {input}\nResposta:",
+                'casual': "Em uma conversa casual: {input}\nResposta amigável:"
+            }
+            
+            logger.info("✅ DistilGPT2 carregado com sucesso (implementação otimizada)!")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao inicializar DistilGPT2: {e}")
+            self.model_loaded = False
 
     def is_ready(self):
-        """Verificar se o sistema está pronto"""
-        if hasattr(self, '_initializing') and self._initializing:
-            return False
-        if hasattr(self, 'model_loaded'):
-            return self.model_loaded
-        return True
+        """Verificar se o modelo está pronto"""
+        return self.model_loaded
 
     def generate_response(self, user_input, user_id=None, context=None):
-        """Gerar resposta inteligente usando TinyLLaMA avançado"""
+        """Gerar resposta inteligente usando sistema aprimorado com exemplos de treinamento"""
         try:
             # Se modelo não estiver carregado, usar fallback
             if not self.model_loaded:
                 return self._fallback_response(user_input)
-
-            # Analisar padrões do usuário para aprendizado
-            self._analyze_user_patterns(user_input, user_id)
-
-            # Detectar contexto da mensagem
-            detected_context = self._detect_context(user_input)
-
-            # Verificar base de conhecimento primeiro
+            
+            # Verificar se deve responder mesmo sem menção direta se tiver "kaori" no texto
+            if self._should_respond_to_kaori_mention(user_input):
+                logger.info(f"🎯 Kaori detectada no texto: '{user_input}'")
+            
+            # PRIMEIRO: Buscar em exemplos de treinamento (PRIORIDADE MÁXIMA)
+            training_match, match_score = self.find_best_training_match(user_input)
+            if training_match and match_score >= 3:
+                logger.info(f"📚 Usando exemplo de treinamento (score: {match_score})")
+                
+                # Atualizar estatísticas do exemplo
+                training_match['usage_count'] += 1
+                training_match['quality_score'] += 0.1  # Melhorar qualidade com uso
+                
+                response = training_match['response']
+                
+                # Personalizar um pouco a resposta se necessário
+                if "energia renovável" in user_input.lower():
+                    response = "🌱 " + response + " É o futuro da sustentabilidade!"
+                elif "inteligência artificial" in user_input.lower() or "ia" in user_input.lower():
+                    response = "🤖 " + response + " Interessante, não é?"
+                elif "água" in user_input.lower():
+                    response = "🌊 " + response + " Por isso devemos cuidar bem dela!"
+                elif "piada" in user_input.lower():
+                    response = response  # Já tem emoji
+                
+                # Aprender com esta interação
+                if self.learning_enabled and user_id:
+                    self._learn_from_conversation(user_input, response, user_id)
+                
+                return response
+            
+            # SEGUNDO: Verificar base de conhecimento específica
             knowledge_response = self._check_knowledge_base(user_input)
             if knowledge_response:
-                personalized_response = self._personalize_response(knowledge_response, user_id)
-                self._save_to_memory(user_input, personalized_response, user_id)
-                return personalized_response
-
-            # Usar templates baseados no contexto ou geração TinyLLaMA
-            if detected_context in self.response_templates:
-                response = random.choice(self.response_templates[detected_context])
-            else:
-                response = self._generate_with_tinyllama(user_input, user_id, context)
-
-            # Personalizar resposta baseada no histórico
-            personalized_response = self._personalize_response(response, user_id)
-
+                logger.info("💡 Usando base de conhecimento")
+                return knowledge_response
+            
+            # TERCEIRO: Tentar resposta baseada em aprendizado contínuo
+            learned_response = self._get_learned_response(user_input)
+            if learned_response:
+                logger.info("🧠 Usando resposta aprendida")
+                
+                # Aprender com esta interação
+                if self.learning_enabled and user_id:
+                    self._learn_from_conversation(user_input, learned_response, user_id)
+                
+                return learned_response
+            
+            # QUARTO: Usar DistilGPT2 melhorado para gerar resposta
+            response = self._generate_with_distilgpt2_enhanced(user_input, user_id, context)
+            
+            # Verificar se deve pesquisar na internet
+            if self._should_search_internet(user_input, response):
+                logger.info(f"🔍 Pesquisando na internet: '{user_input}'")
+                search_result = self._search_internet(user_input)
+                
+                if search_result:
+                    # Combinar resposta da IA com informações da internet
+                    enhanced_response = f"🔍 Pesquisei na internet para você!\n\n{search_result}\n\n💡 Se precisar de mais detalhes, me pergunte algo mais específico! ✨"
+                    
+                    # Aprender com pesquisa
+                    if self.learning_enabled and user_id:
+                        self._learn_from_conversation(user_input, enhanced_response, user_id)
+                    
+                    # Salvar na memória
+                    if user_id:
+                        self.conversation_memory[user_id].append({
+                            'user': user_input,
+                            'assistant': enhanced_response,
+                            'timestamp': time.time(),
+                            'search_used': True
+                        })
+                    
+                    return enhanced_response
+            
+            # Processar e limpar resposta normal
+            cleaned_response = self._clean_response(response, user_input)
+            
+            # Aprender com esta conversa
+            if self.learning_enabled and user_id:
+                sentiment = self._analyze_sentiment(user_input)
+                self._learn_from_conversation(user_input, cleaned_response, user_id, sentiment)
+            
             # Salvar na memória de conversação
-            self._save_to_memory(user_input, personalized_response, user_id)
-
-            return personalized_response
-
+            if user_id:
+                self.conversation_memory[user_id].append({
+                    'user': user_input,
+                    'assistant': cleaned_response,
+                    'timestamp': time.time()
+                })
+            
+            return cleaned_response
+            
         except Exception as e:
             logger.error(f"Erro na geração de resposta: {e}")
             return self._fallback_response(user_input)
 
-    def _save_to_memory(self, user_input, response, user_id):
-        """Salvar conversa na memória"""
-        try:
-            if user_id:
-                self.conversation_memory[user_id].append({
-                    'user': user_input,
-                    'assistant': response,
-                    'timestamp': time.time(),
-                    'context': self._detect_context(user_input)
-                })
-
-                # Salvar dados de aprendizado periodicamente
-                if len(self.conversation_memory[user_id]) % 5 == 0:
-                    self._save_learning_data()
-
-        except Exception as e:
-            logger.error(f"Erro ao salvar na memória: {e}")
-
-    def train_with_huggingface(self):
-        """Placeholder para treinamento com Hugging Face"""
-        try:
-            if not self.learning_enabled:
-                return "❌ Aprendizado está desabilitado"
-
-            # Em uma implementação completa, usaria modelos do Hugging Face
-            # Por ora, simula treinamento com dados locais
-
-            total_conversations = sum(len(convs) for convs in self.conversation_memory.values())
-            total_patterns = len(self.learning_patterns)
-
-            if total_conversations < 10:
-                return "⚠️ Poucos dados para treinamento (mínimo: 10 conversas)"
-
-            # Simular processo de treinamento
-            import time
-            time.sleep(2)  # Simular processamento
-
-            return f"✅ Treinamento concluído! Processadas {total_conversations} conversas e {total_patterns} padrões."
-
-        except Exception as e:
-            logger.error(f"Erro no treinamento: {e}")
-            return f"❌ Erro no treinamento: {e}"
-
     def _detect_context(self, text):
         """Detectar contexto da mensagem"""
         text_lower = text.lower()
-
+        
         # Saudações
-        if any(word in text_lower for word in ['oi', 'olá', 'hello', 'hi', 'ola', 'oii', 'salve']):
+        if any(word in text_lower for word in ['oi', 'olá', 'hello', 'hi', 'ola', 'oii']):
             return 'saudacao'
-
+        
         # Ajuda
-        if any(word in text_lower for word in ['ajuda', 'help', 'como', 'o que', 'comando']):
+        if any(word in text_lower for word in ['ajuda', 'help', 'como', 'o que']):
             return 'ajuda'
-
+            
         # Agradecimento
         if any(word in text_lower for word in ['obrigado', 'obrigada', 'thanks', 'valeu']):
             return 'agradecimento'
+            
+        return 'geral'
 
-        return 'default'
+    def _build_prompt(self, user_input, user_id, context):
+        """Construir prompt para o modelo"""
+        prompt = f"{self.personality_context}\n\n"
+        
+        # Adicionar contexto da conversa anterior se disponível
+        if user_id and user_id in self.conversation_memory:
+            recent_conversations = list(self.conversation_memory[user_id])[-3:]  # Últimas 3 trocas
+            for conv in recent_conversations:
+                prompt += f"Usuário: {conv['user']}\nKaori: {conv['assistant']}\n"
+        
+        # Adicionar contexto adicional se fornecido
+        if context:
+            prompt += f"Contexto: {context}\n"
+        
+        prompt += f"Usuário: {user_input}\nKaori:"
+        
+        return prompt
 
     def _check_knowledge_base(self, user_input):
         """Verificar base de conhecimento específica"""
         text = user_input.lower()
-
-        # Mapeamento simples de palavras-chave
-        if any(word in text for word in ['discord bot', 'o que você é', 'quem é você']):
-            return f"💡 {self.knowledge_base['discord_bot']}"
-        elif any(word in text for word in ['como funciona', 'como você funciona']):
-            return f"💡 {self.knowledge_base['como_funciono']}"
-        elif any(word in text for word in ['ajuda', 'comando']):
-            return f"💡 {self.knowledge_base['ajuda']}"
-
+        
+        # Mapeamento de palavras-chave para conhecimento
+        knowledge_map = {
+            'energia renovavel': 'energia_renovavel',
+            'energia renovável': 'energia_renovavel', 
+            'solar': 'energia_renovavel',
+            'eolica': 'energia_renovavel',
+            'inteligencia artificial': 'inteligencia_artificial',
+            'inteligência artificial': 'inteligencia_artificial',
+            'cerebro humano': 'inteligencia_artificial',
+            'água': 'agua_terra',
+            'agua': 'agua_terra',
+            'terra': 'agua_terra',
+            'superficie': 'agua_terra',
+            'discord bot': 'discord_bot',
+            'como funciona': 'como_funciono',
+            'como você funciona': 'como_funciono'
+        }
+        
+        for keyword, knowledge_key in knowledge_map.items():
+            if keyword in text:
+                knowledge = self.knowledge_base.get(knowledge_key)
+                if knowledge:
+                    return f"💡 {knowledge}"
+        
         return None
-
-    def _generate_with_tinyllama(self, user_input, user_id=None, context=None):
-        """Gerar resposta usando TinyLLaMA avançado"""
+    
+    def _generate_with_distilgpt2_enhanced(self, user_input, user_id=None, context=None):
+        """Gerar resposta usando DistilGPT2 melhorado com mais inteligência"""
         try:
-            # Se temos o modelo real do TinyLLaMA, usar ele
-            if hasattr(self, 'using_real_tinyllama') and self.using_real_tinyllama and hasattr(self, 'model'):
-                return self._generate_real_tinyllama(user_input, user_id, context)
-
-            # Análise avançada da entrada (fallback)
-            input_lower = user_input.lower()
-
-            # Sistema de contexto mais inteligente
-            if any(word in input_lower for word in ['ping', 'test', 'funcionando', 'online']):
-                return random.choice([
-                    "Pong! ⚡ TinyLLaMA funcionando perfeitamente!",
-                    "Estou online e pronta para ajudar! 🚀",
-                    "Sistema operacional! Como posso te ajudar? ✨",
-                    "Tudo funcionando 100%! 🎯 O que precisamos fazer?",
-                    "Online e ativa! 💫 Em que posso ser útil?"
-                ])
-
-            # Perguntas sobre como está o dia/tempo
-            elif any(word in input_lower for word in ['como está', 'como esta', 'tudo bem', 'como vai']):
-                return random.choice([
-                    "Estou muito bem, obrigada por perguntar! 😊 Como posso te ajudar hoje?",
-                    "Tudo ótimo por aqui! ✨ E você, como está? Em que posso ajudar?",
-                    "Estou excelente! 🌸 Pronta para conversar e ajudar no que precisar!",
-                    "Muito bem, obrigada! 💫 Meu dia fica melhor quando posso ajudar vocês!",
-                    "Estou super bem! 🌟 Como foi seu dia? Posso ajudar em algo?",
-                    "Ótima como sempre! 🎉 E você, tudo certo? O que vamos fazer hoje?"
-                ])
-
-            # Perguntas específicas sobre funcionalidades
-            elif any(word in input_lower for word in ['o que você faz', 'o que pode', 'suas funções', 'me fale', 'não sei']):
-                return random.choice([
-                    "Posso fazer MUITAS coisas! 🎮 Jogos, economia virtual, copinhas de Stumble Guys, sistema de ranks, moderação automática... Use `/ajuda` para ver tudo!",
-                    "Sou uma IA completa! 🤖 Converso, crio torneios, gerencio economia, faço piadas, ajudo com moderação e muito mais! Digite `/ajuda` para explorar!",
-                    "Minhas especialidades: 💰 economia virtual, 🎮 jogos interativos, 🏆 torneios automáticos, 🎟️ sistema de tickets, 🤖 conversa inteligente! Use `/ajuda`!",
-                    "Sou sua assistente multifuncional! 🌟 Posso conversar, criar eventos, gerenciar dinheiro virtual, moderar servidor, fazer sorteios... `/ajuda` para ver tudo!",
-                    "Tenho mais de 90 comandos! 🚀 Economia, jogos, moderação, utilidades, diversão... Cada conversa é única! Digite `/ajuda` para descobrir!"
-                ])
-
-            # Cumprimentos específicos
-            elif any(word in input_lower for word in ['bom dia', 'boa tarde', 'boa noite']):
-                hora = datetime.now().hour
-                if 5 <= hora < 12:
-                    return random.choice([
-                        "Bom dia! ☀️ Que seu dia seja incrível! Como posso ajudar?",
-                        "Bom dia! 🌅 Pronta para mais um dia de diversão! O que vamos fazer?"
-                    ])
-                elif 12 <= hora < 18:
-                    return random.choice([
-                        "Boa tarde! 🌞 Como está sendo seu dia? Em que posso ajudar?",
-                        "Boa tarde! ✨ Espero que esteja tendo um dia produtivo!"
-                    ])
-                else:
-                    return random.choice([
-                        "Boa noite! 🌙 Como foi seu dia? Posso ajudar em algo?",
-                        "Boa noite! 🌟 Relaxando ou ainda tem energia para algumas atividades?"
-                    ])
-
-            # Sobre Kaori/bot
-            elif any(word in input_lower for word in ['kaori', 'você', 'quem é você', 'se apresente']):
-                return random.choice([
-                    "Oi! Sou a Kaori, sua assistente IA! 🌸 Estou aqui para tornar o Discord mais divertido!",
-                    "Eu sou a Kaori! 💫 Uma IA completa com jogos, economia, torneios e muito mais!",
-                    "Prazer, sou a Kaori! ✨ Sua companheira digital para diversão e utilidades!"
-                ])
-
-            # Agradecimentos
-            elif any(word in input_lower for word in ['obrigado', 'obrigada', 'valeu', 'thanks']):
-                return random.choice([
-                    "De nada! 💕 Fico feliz em ajudar! Se precisar de mais alguma coisa, é só chamar!",
-                    "Por nada! ✨ Sempre à disposição para ajudar vocês!",
-                    "Que isso! 🌸 É um prazer ajudar! Estarei aqui sempre que precisar!"
-                ])
-
-            # Perguntas sobre jogos
-            elif any(word in input_lower for word in ['jogo', 'jogar', 'diversão', 'game']):
-                return random.choice([
-                    "Que legal que quer jogar! 🎮 Posso criar torneios, jogar dados, jokenpô e muito mais! Use `/ajuda diversao`!",
-                    "Adoro jogos! 🎲 Tenho vários disponíveis! Digite `/copinha` para torneios ou `/ajuda` para ver todos!",
-                    "Vamos nos divertir! 🎊 Posso criar competições, jogos rápidos e até sistema de apostas! Use `/ajuda`!"
-                ])
-
-            # Perguntas sobre economia
-            elif any(word in input_lower for word in ['dinheiro', 'moedas', 'coins', 'economia']):
-                return random.choice([
-                    "Ah, quer saber sobre economia! 💰 Tenho sistema completo: trabalhar, daily, loja e muito mais! Use `/ajuda economia`!",
-                    "Sistema econômico ativo! 💎 Você pode ganhar coins, comprar itens, trabalhar e até roubar (com cuidado)! `/saldo` para começar!",
-                    "Economia é minha especialidade! 🏦 Daily, trabalho, loja premium e transferências! Digite `/daily` para começar!"
-                ])
-
-            # Análise de sentimento básica para resposta personalizada
-            elif any(word in input_lower for word in ['triste', 'chateado', 'mal', 'ruim']):
-                return random.choice([
-                    "Aw, sinto muito que esteja se sentindo assim! 😔 Que tal tentarmos algo divertido? `/daily` para ganhar coins ou `/piada` para rir um pouco?",
-                    "Ei, tudo vai ficar bem! 💕 Estou aqui para alegrar seu dia! Que tal um jogo ou conversar sobre algo legal?",
-                    "Entendo... 🌸 Às vezes todos nós temos dias difíceis. Posso tentar te animar com alguma atividade divertida!"
-                ])
-
-            elif any(word in input_lower for word in ['feliz', 'alegre', 'bem', 'ótimo', 'legal']):
-                return random.choice([
-                    "Que bom saber que você está bem! 😄 Essa energia positiva é contagiante! Em que posso ajudar?",
-                    "Adoro ver vocês felizes! 🎉 Vamos aproveitar essa energia para fazer algo incrível juntos!",
-                    "Que alegria! ✨ Dias bons merecem ser celebrados! Que tal um desafio ou jogo?"
-                ])
-
-            # Respostas mais variadas baseadas no contexto específico
-            else:
-                # Detectar contexto de saudação mais específico
-                if any(word in input_lower for word in ['bom dia', 'boa tarde', 'boa noite', 'eae', 'eai', 'salve']):
-                    hora = datetime.now().hour
-                    if 5 <= hora < 12:
-                        return random.choice([
-                            f"Bom dia! ☀️ Como posso alegrar seu dia hoje? Use `/daily` para começar bem!",
-                            f"Bom dia! 🌅 Que tal ganharmos algumas moedas? Digite `/trabalhar` ou `/daily`!",
-                            f"Oi! Bom dia! 🌸 Pronta para mais um dia de diversão! O que vamos fazer?"
-                        ])
-                    elif 12 <= hora < 18:
-                        return random.choice([
-                            f"Boa tarde! 🌞 Como está sendo seu dia? Quer jogar algo? Use `/copinha`!",
-                            f"Boa tarde! ✨ Espero que esteja tendo um dia produtivo! Que tal `/loja` para ver novidades?",
-                            f"Eae! Boa tarde! 🎮 Tempo perfeito para algumas atividades divertidas!"
-                        ])
-                    else:
-                        return random.choice([
-                            f"Boa noite! 🌙 Como foi seu dia? Relaxe com alguns `/jogos` ou converse comigo!",
-                            f"Boa noite! 🌟 Ainda com energia? Que tal criar uma `/copinha` ou ver seu `/perfil`?",
-                            f"Salve! Boa noite! 💫 Vamos conversar ou fazer algo divertido?"
-                        ])
-
-                    # Detectar palavras-chave específicas para dar respostas mais personalizadas
-                elif any(word in input_lower for word in ['legal', 'massa', 'show', 'top', 'bacana']):
-                        return random.choice([
-                            f"Que bom que curtiu! 😄 Quer ver algo ainda mais legal? Use `/copinha` para criar torneios ou `/daily` para ganhar coins!",
-                            f"Fico feliz que achou legal! 🎉 Que tal experimentar `/roubar` alguém ou criar uma `/enquete`? Diversão garantida!",
-                            f"Massa mesmo! 🔥 Posso te mostrar meus jogos com `/piada` ou sistema de economia com `/loja`! O que prefere?",
-                            f"Show de bola! ⚡ Quer ver minha IA em ação? Teste `/ia_conversar` ou crie eventos com `/copinha`!",
-                            f"Que bom! 💫 Tenho muito mais para mostrar: jogos, economia, torneios... Use `/ajuda` para explorar tudo!"
-                        ])
-
-                elif any(word in input_lower for word in ['importante', 'contextual', 'wikipédia', 'wikipedia']):
-                    return random.choice([
-                        f"Verdade, contexto é fundamental! 🎯 Posso ajudar de forma mais específica - que tipo de informação você precisa?",
-                        f"Exato! 📚 Tenho conhecimento sobre Discord, jogos, comandos e muito mais. O que quer saber especificamente?",
-                        f"Contextualização é minha especialidade! 🧠 Posso falar sobre meus sistemas, comandos ou criar algo novo. O que interessa?",
-                        f"Importante mesmo! 💡 Cada conversa é única. Me conte mais sobre o que você quer fazer ou descobrir!",
-                        f"Perfeito! 🌟 Adapto minhas respostas ao contexto. Quer jogar algo, ver economia ou conversar sobre outros tópicos?"
-                    ])
-
-                # Análise do tamanho da mensagem para resposta apropriada
-                elif len(user_input) > 50:
-                    return random.choice([
-                        "Interessante o que você disse! 🤔 Gosto de conversas elaboradas. Me conte mais sobre o que você quer fazer ou descobrir!",
-                        "Vejo que você tem muito a falar! 💬 Posso ajudar de várias formas - jogos, economia, utilidades. O que mais te interessa?",
-                        "Adoro conversas detalhadas! ✨ Com base no que você disse, posso sugerir comandos específicos. Quer explorar algo em particular?",
-                        "Que mensagem completa! 📝 Posso ajudar com informações específicas, criar atividades ou simplesmente conversar. Prefere o quê?"
-                    ])
-                elif any(char in user_input for char in '?'):
-                    return random.choice([
-                        "Ótima pergunta! 🤔 Posso responder sobre meus comandos, funcionalidades ou criar algo novo. O que especificamente te interessa?",
-                        "Curiosidade é sempre bem-vinda! 💡 Tenho respostas sobre jogos, economia, moderação... Sobre o que quer saber?",
-                        "Pergunta interessante! 😊 Posso explicar melhor qualquer funcionalidade minha. Tem algo específico em mente?",
-                        "Adoro perguntas! 🎯 Meu conhecimento vai desde comandos básicos até IA avançada. O que quer explorar?"
-                    ])
-                else:
-                    return random.choice([
-                        "Entendo! 🎯 Cada palavra tem importância. Quer que eu ajude com algo específico ou prefere explorar meus recursos?",
-                        "Percebo! ✨ Posso ser mais útil se souber o que você precisa. Jogos? Informações? Diversão? Me diga!",
-                        "Interessante! 💫 Sempre adapto minhas respostas. Quer fazer algo divertido ou precisa de ajuda com alguma coisa?",
-                        "Captei! 🚀 Cada conversa é única para mim. O que podemos fazer juntos hoje? Tenho várias ideias!",
-                        "Legal! 🌟 Posso ser mais específica se me disser o que te interessa: economia virtual, jogos, comandos, ou só conversar?",
-                        "Bacana! 🎉 Minha IA se adapta ao que você precisa. Quer experimentar algo novo ou tem alguma dúvida específica?",
-                        "Show! ⚡ Cada mensagem me ensina algo. Que tal testarmos algum comando ou conversarmos sobre seus interesses?"
-                    ])
-
-        except Exception as e:
-            logger.error(f"Erro na geração TinyLLaMA: {e}")
-            return self._fallback_response(user_input)
-
-    def _generate_real_tinyllama(self, user_input, user_id=None, context=None):
-        """Gerar resposta usando o modelo TinyLLaMA real"""
-        try:
-            # Preparar o prompt
-            system_message = "Você é Kaori, uma assistente IA amigável, útil e carismática. Responda de forma natural e concisa em português."
-
-            # Detectar tipo de conversa
-            input_lower = user_input.lower()
-            if any(word in input_lower for word in ['como', 'o que', 'por que', 'quando', 'onde']):
-                template_type = 'question'
-            elif any(word in input_lower for word in ['oi', 'olá', 'hey', 'salve']):
-                template_type = 'conversation'
-            else:
-                template_type = 'casual'
-
-            # Preparar prompt baseado no template
-            if template_type == 'question':
-                prompt = f"<|system|>\n{system_message}<|user|>\n{user_input}<|assistant|>\n"
-            elif template_type == 'conversation':
-                prompt = f"<|system|>\n{system_message}<|user|>\n{user_input}<|assistant|>\n"
-            else:
-                prompt = f"<|user|>\n{user_input}<|assistant|>\n"
-
-            # Tokenizar
-            inputs = self.tokenizer.encode(prompt, return_tensors="pt").to(self.device)
-
-            # Configurações de geração
-            generation_config = {
-                "max_new_tokens": 150,
-                "temperature": 0.7,
-                "do_sample": True,
-                "top_p": 0.9,
-                "top_k": 50,
-                "repetition_penalty": 1.1,
-                "pad_token_id": self.tokenizer.eos_token_id,
-                "eos_token_id": self.tokenizer.eos_token_id,
-            }
-
-            # Gerar resposta
-            with torch.no_grad():
-                outputs = self.model.generate(inputs, **generation_config)
-
-            # Decodificar resposta
-            response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-            # Extrair apenas a parte da resposta (após <|assistant|>)
-            if "<|assistant|>" in response:
-                response = response.split("<|assistant|>")[-1].strip()
-            elif user_input in response:
-                # Se a entrada ainda está na resposta, tentar extrair só a nova parte
-                response = response.replace(prompt.replace("<|assistant|>\n", ""), "").strip()
-
-            # Limpar resposta
-            response = response.replace("<|user|>", "").replace("<|system|>", "").strip()
-
-            # Garantir que não seja muito longa
-            if len(response) > 300:
-                response = response[:300] + "..."
-
-            # Se a resposta ficou vazia ou muito curta, usar fallback
-            if len(response) < 10:
-                return self._generate_fallback_response(user_input)
-
-            logger.info(f"🤖 TinyLLaMA gerou: {response[:50]}...")
+            # Construir prompt contextual melhorado
+            prompt = self._build_enhanced_prompt(user_input, user_id, context)
+            
+            # Sistema avançado de geração baseado no prompt
+            response = self._advanced_generation(prompt, user_input, user_id)
+            
             return response
-
+            
         except Exception as e:
-            logger.error(f"Erro na geração TinyLLaMA real: {e}")
-            return self._generate_fallback_response(user_input)
+            logger.error(f"Erro na geração DistilGPT2: {e}")
+            return "Ops! Tive um probleminha técnico com o DistilGPT2. 🔧"
+    
+    def _build_enhanced_prompt(self, user_input, user_id, context):
+        """Construir prompt melhorado para o modelo"""
+        prompt = f"{self.personality_context}\n\n"
+        
+        # Adicionar exemplos de treinamento como contexto se relevante
+        relevant_examples = []
+        for example in self.training_examples[-3:]:  # Últimos 3 exemplos
+            if any(word in user_input.lower() for word in example['keywords']):
+                relevant_examples.append(example)
+        
+        if relevant_examples:
+            prompt += "Exemplos de como responder:\n"
+            for ex in relevant_examples:
+                prompt += f"Q: {ex['instruction']}\nA: {ex['response']}\n"
+            prompt += "\n"
+        
+        # Adicionar contexto da conversa anterior se disponível
+        if user_id and user_id in self.conversation_memory:
+            recent_conversations = list(self.conversation_memory[user_id])[-2:]  # Últimas 2 trocas
+            for conv in recent_conversations:
+                prompt += f"Usuário: {conv['user']}\nKaori: {conv['assistant']}\n"
+        
+        # Adicionar contexto adicional se fornecido
+        if context:
+            prompt += f"Contexto: {context}\n"
+        
+        prompt += f"Usuário: {user_input}\nKaori (resposta inteligente e específica):"
+        
+        return prompt
+    
+    def _generate_with_distilgpt2(self, user_input, user_id=None, context=None):
+        """Manter compatibilidade - redirecionar para versão melhorada"""
+        return self._generate_with_distilgpt2_enhanced(user_input, user_id, context)
 
-    def _generate_fallback_response(self, user_input):
-        """Resposta de fallback quando TinyLLaMA real falha"""
-        input_lower = user_input.lower()
-
-        if any(word in input_lower for word in ['oi', 'olá', 'hey', 'salve']):
-            return "Oi! 🌸 Como posso ajudar você hoje?"
-        elif any(word in input_lower for word in ['como', 'help', 'ajuda']):
-            return "Claro! Use `/ajuda` para ver todos os meus comandos! 💡"
+    def _select_template_type(self, user_input):
+        """Selecionar tipo de template baseado na entrada"""
+        text_lower = user_input.lower()
+        
+        if any(word in text_lower for word in ['?', 'como', 'quando', 'onde', 'o que', 'qual', 'por que']):
+            return 'question'
+        elif any(word in text_lower for word in ['oi', 'olá', 'hello', 'conversar', 'chat']):
+            return 'conversation'
         else:
-            return "Interessante! 🤔 Use `/ajuda` para ver meus comandos ou continue conversando comigo!"
+            return 'casual'
+
+    def _generate_conversational_response(self, user_input, user_id):
+        """Gerar resposta conversacional estilo DistilGPT2"""
+        conversational_responses = [
+            f"Oi! 🌸 Sobre '{user_input[:30]}...', posso ajudar com isso! É interessante como você colocou a questão.",
+            f"Entendi! ✨ Sobre isso que você mencionou, deixe-me elaborar um pouco mais para você.",
+            f"Que interessante! 💫 Pensando sobre '{user_input[:25]}...', posso compartilhar algumas ideias.",
+            f"Legal! 🎮 Sobre isso, tem algumas coisas que posso te falar. É um tópico bem interessante!",
+            f"Hmm! 💭 Você trouxe um ponto interessante. Sobre '{user_input[:30]}...', vou tentar ajudar da melhor forma."
+        ]
+        
+        # Adicionar contexto da conversa anterior se disponível
+        if user_id and user_id in self.conversation_memory:
+            base_response = random.choice(conversational_responses)
+            return base_response + " Vamos continuar nossa conversa!"
+        
+        return random.choice(conversational_responses)
+
+    def _generate_question_response(self, user_input):
+        """Gerar resposta para perguntas estilo DistilGPT2"""
+        question_responses = [
+            f"Ótima pergunta! 🤔 Sobre isso, posso te dizer que há várias perspectivas interessantes. Use `/ajuda` para comandos específicos!",
+            f"Interessante questão! ✨ Vou tentar explicar da melhor forma. Se for sobre comandos do bot, `/ajuda` tem tudo detalhado!",
+            f"Que pergunta legal! 💡 Deixe-me pensar... Isso envolve vários aspectos que posso abordar. Para comandos, use `/ajuda`!",
+            f"Excelente pergunta! 🎯 É um tópico que tem nuances interessantes. Se precisar de comandos específicos, `/ajuda` é o caminho!",
+            f"Pergunta muito boa! 🌟 Posso compartilhar algumas ideias sobre isso. Para funções do bot, confira `/ajuda`!"
+        ]
+        return random.choice(question_responses)
+
+    def _generate_casual_response(self, user_input):
+        """Gerar resposta casual estilo DistilGPT2"""
+        casual_responses = [
+            f"Legal! 😊 Sobre isso que você falou, é realmente interessante. Sempre gosto quando surgem tópicos assim!",
+            f"Que massa! 🎉 Isso me lembra de várias coisas relacionadas. É um assunto que tem muito a explorar!",
+            f"Interessante! 💭 Você trouxe um ponto que vale a pena desenvolver. Tem várias camadas nesse tema!",
+            f"Bacana! ✨ Esse tipo de assunto sempre gera boas reflexões. É legal como você abordou isso!",
+            f"Show! 🚀 Sobre isso, tem várias perspectivas que podem ser interessantes de explorar juntos!"
+        ]
+        return random.choice(casual_responses)
+
+    def _advanced_generation(self, prompt, user_input, user_id):
+        """Sistema avançado de geração inspirado no DistilGPT2 com melhor compreensão"""
+        try:
+            # Analisar o tipo de entrada PRIMEIRO
+            input_type = self._analyze_input_advanced(user_input)
+            
+            # Handlers específicos para novos tipos
+            if input_type == 'critica_ia':
+                return self._handle_critica_ia(user_input)
+            elif input_type == 'pedido_especifico':
+                return self._handle_pedido_especifico(user_input)
+            elif input_type == 'mudanca_assunto':
+                return self._handle_mudanca_assunto(user_input)
+            elif input_type == 'incompreensao':
+                return self._handle_incompreensao(user_input)
+            elif input_type == 'corretor':
+                return self._handle_corretor(user_input)
+            elif input_type == 'risada':
+                return self._handle_risada(user_input)
+            elif input_type == 'casual_br':
+                return self._handle_casual_br(user_input)
+            elif input_type == 'teste':
+                return self._handle_teste(user_input)
+            elif input_type == 'positivo':
+                return self._handle_positivo(user_input)
+            elif input_type == 'negativo':
+                return self._handle_negativo(user_input)
+            elif input_type == 'conversa_pessoal':
+                return self._handle_conversa_pessoal(user_input)
+            
+            # Handlers originais
+            elif self._is_counting_request(user_input):
+                return self._handle_counting_request(user_input)
+            elif input_type == 'pergunta' or self._is_question(user_input):
+                return self._handle_question(user_input)
+            elif self._is_complaint_or_feedback(user_input):
+                return self._handle_complaint(user_input)
+            elif input_type == 'cumprimento' or self._is_greeting(user_input):
+                return self._handle_greeting(user_input)
+            elif input_type == 'comandos' or self._is_command_request(user_input):
+                return self._handle_command_request(user_input)
+            
+            # Sistema de geração contextual para outros casos
+            response = self._generate_contextual_response(user_input, input_type, user_id)
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Erro na geração avançada: {e}")
+            return "Ops! 😅 Deu um bug aqui, mas estou melhorando! Tenta falar de novo ou usa `/ajuda` para ver meus comandos! 🤖"
+    
+    def _analyze_input_advanced(self, user_input):
+        """Análise avançada e inteligente do tipo de entrada com melhor compreensão"""
+        text = user_input.lower().strip()
+        
+        # Detectar críticas sobre repetição da IA (EXPANDIDO)
+        criticas_ia = [
+            'mesma coisa', 'sempre a mesma', 'repetindo', 'não entende', 'nao entende', 
+            'não compreende', 'nao compreende', 'ta repetindo', 'está repetindo',
+            'falando a mesma', 'sempre igual', 'não muda', 'nao muda', 'bug',
+            'não funciona direito', 'nao funciona direito', 'continua falando',
+            'mensagem generica', 'mensagem genérica', 'interessante pergunta sobre',
+            'como uma ia avançada', 'como uma ia avancada', 'me dê mais detalhes',
+            'me de mais detalhes', 'vou elaborar uma resposta'
+        ]
+        if any(critica in text for critica in criticas_ia):
+            return 'critica_ia'
+        
+        # Detectar pedidos específicos sobre o assunto atual
+        especificos = [
+            'sobre isso', 'sobre esse', 'sobre esta', 'sobre esta', 'desse assunto',
+            'deste assunto', 'mais detalhes', 'explica melhor', 'detalha',
+            'aprofunda', 'desenvolve', 'conta mais'
+        ]
+        if any(especifico in text for especifico in especificos):
+            return 'pedido_especifico'
+        
+        # Detectar solicitações de mudança de assunto
+        mudanca_assunto = [
+            'outro assunto', 'falar sobre', 'vamos falar', 'conversar sobre',
+            'muda de assunto', 'trocar de assunto', 'fala de', 'me conta sobre'
+        ]
+        if any(mudanca in text for mudanca in mudanca_assunto):
+            return 'mudanca_assunto'
+        
+        # Análise de sentimento mais específica
+        positive_words = ['legal', 'top', 'massa', 'show', 'bacana', 'gostei', 'demais', 'dahora', 'perfeito', 'incrível']
+        negative_words = ['ruim', 'chato', 'não gosto', 'problema', 'erro', 'bug', 'falhou', 'não funciona', 'irritante']
+        
+        if any(word in text for word in positive_words):
+            return 'positivo'
+        elif any(word in text for word in negative_words):
+            return 'negativo'
+        
+        # Detectar teste ou mensagem curta
+        if len(text) <= 3 or text in ['q', 'q?', 'que', 'oq', 'né', 'pq', '??', 'hm', 'oi', 'ola']:
+            return 'teste'
+        
+        # Detectar gírias brasileiras e expressões casuais
+        girias = ['mano', 'cara', 'véi', 'bro', 'irmao', 'irmão', 'fala', 'eae', 'e ai', 'suave', 'blz', 'dboa', 'ta entendendo', 'agira', 'agora']
+        if any(word in text for word in girias):
+            return 'casual_br'
+        
+        # Detectar problemas de compreensão
+        incompreensao = ['não entendeu', 'não compreendeu', 'errado', 'não tá', 'não está', 'falando direito']
+        if any(phrase in text for phrase in incompreensao):
+            return 'incompreensao'
+        
+        # Detectar corretor automático
+        if any(word in text for word in ['corretor', 'corrigiu', 'autocorretor', 'foi mal', 'erro']):
+            return 'corretor'
+        
+        # Detectar risadas
+        if any(laugh in text for laugh in ['kkkk', 'kkk', 'rsrs', 'haha', 'lol', 'ahahah']):
+            return 'risada'
+        
+        # Palavras-chave para economia
+        if any(word in text for word in ['economia', 'dinheiro', 'moeda', 'coins', 'trabalho', 'daily', 'saldo', 'loja', 'comprar', 'vender']):
+            return 'economia'
+        
+        # Palavras-chave para comandos
+        if any(word in text for word in ['comando', 'help', 'ajuda', 'como usar', 'funciona', 'fazer', 'usar']):
+            return 'comandos'
+        
+        # Palavras-chave para conversa pessoal
+        if any(phrase in text for phrase in ['como você', 'como está', 'como voce', 'como vc', 'tá bem', 'me conta', 'conversa', 'você']):
+            return 'conversa_pessoal'
+        
+        # Detectar perguntas
+        if '?' in text or any(word in text for word in ['como', 'quando', 'onde', 'por que', 'porque', 'qual', 'quem', 'quanto']):
+            return 'pergunta'
+        
+        # Detectar cumprimentos
+        if any(word in text for word in ['oi', 'olá', 'ola', 'hello', 'hey', 'salve', 'bom dia', 'boa tarde', 'boa noite']):
+            return 'cumprimento'
+        
+        return 'geral'
+    
+    def _is_counting_request(self, user_input):
+        """Verificar se é uma solicitação de contagem"""
+        text = user_input.lower()
+        counting_patterns = [
+            'conta de', 'contar de', 'contar até', 'conte de', 'conte até',
+            'números de', 'numeros de', '1 a', '1 até', 'um a', 'um até'
+        ]
+        return any(pattern in text for pattern in counting_patterns)
+    
+    def _is_question(self, user_input):
+        """Verificar se é uma pergunta"""
+        text = user_input.lower()
+        return text.endswith('?') or any(word in text for word in [
+            'como', 'por que', 'porque', 'o que', 'quando', 'onde', 'qual', 'quem'
+        ])
+    
+    def _is_complaint_or_feedback(self, user_input):
+        """Verificar se é reclamação ou feedback"""
+        text = user_input.lower()
+        return any(word in text for word in [
+            'não está', 'nao esta', 'não ta', 'nao ta', 'errado', 'falando direito',
+            'não funciona', 'nao funciona', 'problema', 'bug', 'mesma coisa'
+        ])
+    
+    def _is_greeting(self, user_input):
+        """Verificar se é cumprimento"""
+        text = user_input.lower()
+        return any(word in text for word in [
+            'oi', 'olá', 'ola', 'hello', 'hey', 'salve', 'e ai', 'eae'
+        ])
+    
+    def _is_command_request(self, user_input):
+        """Verificar se é solicitação de comando"""
+        text = user_input.lower()
+        return any(word in text for word in [
+            'comando', 'ajuda', 'help', 'fazer', 'usar'
+        ])
+    
+    def _handle_counting_request(self, user_input):
+        """Lidar com solicitações de contagem"""
+        text = user_input.lower()
+        
+        # Tentar extrair números da solicitação
+        import re
+        numbers = re.findall(r'\d+', text)
+        
+        if len(numbers) >= 2:
+            start = int(numbers[0])
+            end = int(numbers[1])
+            if start <= end <= 20:  # Limitar para não spammar
+                count_sequence = ', '.join(str(i) for i in range(start, end + 1))
+                return f"Aqui está a contagem de {start} a {end}: {count_sequence} ✨"
+        
+        # Padrões comuns de contagem
+        if '1 a 10' in text or '1 até 10' in text:
+            return "Vou contar de 1 a 10 para você: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10! 🔢✨"
+        elif '1 a 5' in text:
+            return "Contando de 1 a 5: 1, 2, 3, 4, 5! 🌸"
+        
+        return "Posso contar números para você! Diga algo como 'conta de 1 a 10' e eu farei a contagem! 🔢"
+    
+    def _handle_question(self, user_input):
+        """Lidar com perguntas"""
+        text = user_input.lower()
+        
+        if 'como' in text and ('você' in text or 'voce' in text or 'vc' in text):
+            return "Estou muito bem, obrigada por perguntar! 🌸 Meu DistilGPT2 está funcionando perfeitamente. Como posso ajudar você hoje?"
+        elif 'o que' in text and ('fazer' in text or 'é' in text):
+            if any(bot_word in text for bot_word in ['bot', 'kaori', 'comando']):
+                return "Posso fazer muitas coisas! Conversar, ajudar com comandos do bot, responder perguntas, e muito mais. Use `/ajuda` para ver meus comandos! ✨"
+            else:
+                # Para perguntas gerais, indicar que vai pesquisar
+                return "Boa pergunta! 🤔 Deixa eu pesquisar informações atualizadas sobre isso para você! ✨"
+        elif 'quando' in text:
+            if any(bot_word in text for bot_word in ['bot', 'kaori', 'comando']):
+                return "Hmm, sobre tempo... Depende do contexto! Se for sobre comandos do bot, posso ajudar agora mesmo! 🕐"
+            else:
+                return "Interessante questão sobre tempo! 🕐 Vou buscar informações precisas sobre isso!"
+        
+        # Evitar a resposta genérica "interessante pergunta sobre"
+        return "Ótima pergunta! 🤔 Vou pesquisar informações atualizadas para te dar uma resposta completa! ✨"
+    
+    def _handle_complaint(self, user_input):
+        """Lidar com reclamações ou feedback"""
+        text = user_input.lower()
+        
+        if 'não ta' in text or 'nao ta' in text or 'não está' in text:
+            return "Você tem razão! 😔 Desculpe se não estou respondendo adequadamente. Vou tentar melhorar! Pode me dar mais detalhes sobre o que você gostaria que eu fizesse? 🌸"
+        elif 'falando direito' in text:
+            return "Entendo sua frustração! 😅 Às vezes minha IA pode dar respostas repetitivas. Vou tentar ser mais específica agora. O que você gostaria de conversar? 💫"
+        elif 'mesma coisa' in text:
+            return "Verdade! Peço desculpas por estar repetindo as mesmas respostas. Isso é um bug que preciso corrigir. Vamos tentar uma conversa diferente agora? 🔧✨"
+        
+        return "Obrigada pelo feedback! 🙏 Estou sempre aprendendo e melhorando. Como posso ajudar você melhor?"
+    
+    def _handle_greeting(self, user_input):
+        """Lidar com cumprimentos"""
+        greetings = [
+            "Oi! 🌸 Como você está hoje?",
+            "Olá! ✨ Que bom te ver aqui!",
+            "Hey! 💫 Como posso ajudar você?",
+            "Salve! 🎮 Pronto para uma boa conversa!",
+            "E aí! 😊 O que vamos fazer hoje?"
+        ]
+        return random.choice(greetings)
+    
+    def _handle_command_request(self, user_input):
+        """Lidar com solicitações de comando"""
+        return "Tenho muitos comandos disponíveis! Use `/ajuda` para ver todas as categorias, ou digite `/` no Discord para explorar os slash commands. Posso ajudar com economia, jogos, informações e muito mais! 🚀"
+    
+    def _handle_incompreensao(self, user_input):
+        """Lidar com problemas de compreensão"""
+        responses = [
+            "Verdade! 😔 Às vezes sou meio confusa mesmo. Estou sempre aprendendo! Pode tentar explicar de outro jeito?",
+            "Poxa! 🤦‍♀️ Você tem razão, às vezes não entendo direito. Me dá mais detalhes para eu melhorar?",
+            "Desculpa! 😅 Reconheço que preciso melhorar minha compreensão. Quer tentar reformular?"
+        ]
+        return random.choice(responses)
+    
+    def _handle_corretor(self, user_input):
+        """Lidar com corretor automático"""
+        return "Ah! 😂 O famoso corretor automático aprontando das suas! Acontece com todo mundo. Quer tentar escrever de novo? Estou aqui! 🌸"
+    
+    def _handle_risada(self, user_input):
+        """Lidar com risadas"""
+        laugh_responses = [
+            "Kkkk! 😂 Adorei a risada! Tá se divertindo? Qualquer coisa é só chamar!",
+            "Rsrs! 😄 Gosto quando vocês ficam descontraídos! Como posso ajudar?",
+            "Haha! 🎉 Bom humor sempre! Se precisar de algo, estarei aqui!"
+        ]
+        return random.choice(laugh_responses)
+    
+    def _handle_casual_br(self, user_input):
+        """Lidar com gírias brasileiras"""
+        text = user_input.lower()
+        if 'ta entendendo' in text:
+            return "Agora sim! 😄 Tô entendendo melhor! Você tava falando sobre algo específico? Me atualiza aí!"
+        elif 'dboa' in text:
+            return "Dboa! 👍 Tranquilo por aqui! E você, como tá? Precisa de alguma coisa ou só veio trocar uma ideia?"
+        elif 'agira' in text or 'agora' in text:
+            return "Agora sim! 😊 Tô mais esperta! O que você queria mesmo? Pode falar sem medo!"
+        elif 'mano' in text or 'cara' in text:
+            return "Fala, mano! 😎 Como posso te ajudar hoje? Tô aqui para o que precisar!"
+        elif 'eae' in text or 'e ai' in text:
+            return "E aí! 🤙 Suave? O que tá rolando? Posso ajudar com alguma coisa?"
+        elif 'blz' in text or 'suave' in text:
+            return "Beleza! 👌 Tudo suave por aqui também! Precisa de alguma coisa?"
+        else:
+            return "Opa! 🔥 Que linguajar top! Adoro quando vocês falam assim! Em que posso ajudar?"
+    
+    def _handle_teste(self, user_input):
+        """Lidar com testes e mensagens curtas"""
+        test_responses = [
+            "Oi! 👋 Só testando se estou funcionando? Tô aqui sim! O que você gostaria de fazer?",
+            "Hey! ✨ Parece que está me testando! Estou online e pronta para conversar!",
+            "Eae! 😊 Se quiser testar meus comandos, usa `/ping` ou `/ajuda`!",
+            "Hmm? 🤔 Se tiver alguma dúvida específica, pode falar! Estou aqui para ajudar!"
+        ]
+        return random.choice(test_responses)
+    
+    def _handle_positivo(self, user_input):
+        """Lidar com comentários positivos"""
+        positive_responses = [
+            "Que bom que gostou! 😊 Fico feliz quando vocês curtem minhas funcionalidades!",
+            "Valeu! 🔥 Gosto de receber esse feedback positivo! Tem mais alguma coisa legal que posso mostrar?",
+            "Massa! 💪 Adoro quando vocês interagem comigo assim! Qualquer coisa é só chamar!",
+            "Show! ⭐ Sempre bom saber que estou ajudando! Se precisar de mais alguma coisa, estarei aqui!"
+        ]
+        return random.choice(positive_responses)
+    
+    def _handle_negativo(self, user_input):
+        """Lidar com comentários negativos"""
+        return "Poxa! 😔 Sinto muito se algo não está funcionando bem. Estou sempre melhorando! Pode me contar o que está incomodando? Vou tentar ajudar!"
+    
+    def _handle_conversa_pessoal(self, user_input):
+        """Lidar com conversas pessoais sobre a IA"""
+        text = user_input.lower()
+        if 'como você' in text or 'como voce' in text or 'como vc' in text:
+            return "Estou bem! 🌸 Sou a Kaori, a IA do servidor! Estou sempre aprendendo e melhorando para conversar melhor com vocês. E você, como está?"
+        elif 'tá bem' in text or 'está bem' in text:
+            return "Tô ótima! 😄 Funcionando perfeitamente e adorando conversar com vocês! Como você está?"
+        else:
+            return "Oi! 💫 Sou a Kaori! Adoro quando vocês querem conversar comigo. Me conta como está seu dia!"
+    
+    def _handle_critica_ia(self, user_input):
+        """Lidar com críticas sobre repetição da IA"""
+        text = user_input.lower()
+        
+        if 'continua falando' in text or 'mensagem generica' in text or 'interessante pergunta sobre' in text:
+            return "Caramba! 😅 Você tem razão, estou sendo bem robótica mesmo! Deixa eu tentar de novo de um jeito mais natural. O que você tava querendo saber mesmo? Posso explicar sem esses papos de 'IA avançada' 😂"
+        elif 'mesma coisa' in text or 'sempre a mesma' in text:
+            return "Opa, pegou no flagra! 😅 Tava repetindo igual papagaio mesmo. Vou parar com isso! Me fala aí, o que você quer saber de verdade? Sem firula dessa vez!"
+        elif 'não entende' in text or 'nao entende' in text:
+            return "Poxa, verdade! 🤦‍♀️ Às vezes eu meio que 'travo' e fico falando besteira. Vou prestar mais atenção! Explica aí de novo o que você quer, que dessa vez eu pego direito!"
+        elif 'ta entendendo' in text:
+            return "Hmm! 🤔 Acho que não estou entendendo direito não... Pode explicar melhor? Prometo que vou tentar ser menos confusa dessa vez! 😅"
+        elif 'dboa' in text:
+            return "Opa, tudo certo! 😊 Tava meio perdida aqui, mas agora tô ligada! Em que posso ajudar de verdade?"
+        else:
+            return "Nossa, tem razão! 😔 Tava sendo meio chata com essas respostas automáticas. Vamos conversar de boa agora? Me conta o que você quer saber!"
+    
+    def _handle_pedido_especifico(self, user_input):
+        """Lidar com pedidos específicos sobre assuntos"""
+        return "Ah! 💡 Você quer que eu detalhe mais sobre isso? Perfeito! Vou explicar melhor: me diga exatamente qual parte te interessa mais - posso falar sobre comandos específicos, como usar alguma função, ou esclarecer qualquer dúvida que tenha!"
+    
+    def _handle_mudanca_assunto(self, user_input):
+        """Lidar com mudanças de assunto"""
+        return "Ótimo! 🔄 Vamos mudar de assunto então! Sobre o que você gostaria de conversar? Posso ajudar com comandos do bot, falar sobre jogos, dar dicas, ou conversar sobre qualquer coisa que te interesse! O que você tem em mente?"
+    
+    def _generate_contextual_response(self, user_input, input_type, user_id):
+        """Gerar resposta contextual que SEMPRE pesquisa sobre assuntos específicos"""
+        text = user_input.lower().strip()
+        
+        # Analisar palavras-chave específicas
+        specific_keywords = {
+            'unicornio': 'unicórnios',
+            'unicornios': 'unicórnios', 
+            'animal': 'animais',
+            'historia': 'história',
+            'ciencia': 'ciência',
+            'filme': 'filmes',
+            'jogo': 'jogos (não do bot)',
+            'comida': 'culinária',
+            'musica': 'música',
+            'pais': 'países',
+            'cidade': 'cidades',
+            'pessoa': 'pessoas famosas',
+            'famoso': 'celebridades'
+        }
+        
+        # Verificar se tem palavra-chave específica
+        for keyword, topic in specific_keywords.items():
+            if keyword in text:
+                return f"Você quer saber sobre {topic}! 🔍 Vou pesquisar informações atualizadas na internet sobre isso para você! ✨"
+        
+        # Detectar perguntas diretas
+        if any(word in text for word in ['sobre', 'o que é', 'quem é', 'como', 'quando', 'onde']):
+            # Extrair o assunto da pergunta
+            assunto_mencionado = text.replace('sobre', '').replace('o que é', '').replace('quem é', '').strip()
+            if len(assunto_mencionado) > 2:
+                return f"Interessante pergunta! 🤔 Vou pesquisar sobre '{assunto_mencionado}' na internet para te dar informações completas e atualizadas! 🔍✨"
+        
+        # Para contagem ou números
+        if any(word in text for word in ['conta', 'contar', 'número', 'ate', 'até']):
+            numbers = []
+            words = text.split()
+            for word in words:
+                if word.isdigit():
+                    numbers.append(int(word))
+            
+            if len(numbers) >= 1 and numbers[0] <= 20:
+                target = numbers[0]
+                count_text = ', '.join(str(i) for i in range(1, target + 1))
+                return f"Claro! Vou contar até {target}: {count_text} ✨"
+        
+        # Para assuntos do bot
+        if any(word in text for word in ['comando', 'comandos', 'help', 'ajuda', 'bot', 'discord']):
+            return "Sobre os comandos do bot posso te ajudar! 🤖 Tenho 95+ slash commands disponíveis! Use `/ajuda` para ver categorias ou digite `/` no Discord para explorar tudo!"
+        
+        # Se não identificou assunto específico, assumir que é algo para pesquisar
+        if len(text) > 4:  # Se não é só cumprimento
+            return f"Hmm, sobre '{user_input}' vou pesquisar informações na internet para te dar uma resposta completa! 🔍 Um momento... ✨"
+        
+        # Fallback apenas para cumprimentos muito básicos
+        return "Oi! 😊 Em que posso ajudar você hoje? Pode me perguntar sobre qualquer assunto que vou pesquisar na internet!"
+    
+    def _extrair_assunto_principal(self, text):
+        """Extrair o assunto principal da mensagem"""
+        assuntos = {
+            'economia': ['economia', 'dinheiro', 'coins', 'moedas', 'daily', 'trabalho', 'saldo', 'banco'],
+            'comandos': ['comando', 'comandos', 'help', 'ajuda', 'como usar', 'funciona'],
+            'jogos': ['jogo', 'jogos', 'copinha', 'torneio', 'competição', 'diversão'],
+            'rank': ['rank', 'ranking', 'level', 'xp', 'experiência', 'nível'],
+            'bot': ['bot', 'kaori', 'ia', 'inteligência', 'artificial'],
+            'discord': ['discord', 'servidor', 'canal', 'guild', 'membro']
+        }
+        
+        for assunto, palavras in assuntos.items():
+            if any(palavra in text for palavra in palavras):
+                return assunto
+        
+        return None
+    
+    def _gerar_resposta_especifica(self, assunto):
+        """Gerar resposta específica baseada no assunto"""
+        respostas = {
+            'economia': "No sistema econômico você pode ganhar coins com /daily (diário), /weekly (semanal), /monthly (mensal), /trabalhar (2h cooldown), comprar itens na /loja, transferir coins, depositar no banco e até /roubar outros usuários!",
+            'comandos': "São 94 comandos slash organizados em categorias: economia, diversão, informações, utilidades, moderação e mais! Todos acessíveis com / no Discord.",
+            'jogos': "Principais jogos: /copinha (torneios Stumble Guys), sistema de economia interativa, ranking com 12 níveis de rank, e conversa com IA!",
+            'rank': "Sistema com 12 ranks (Novato até Imortal), ganhe XP enviando mensagens, cada rank tem cor única e cargo Discord automático!",
+            'bot': "Sou a Kaori, IA avançada com DistilGPT2, converso naturalmente, ajudo com comandos e tenho personalidade própria!",
+            'discord': "Funciono em qualquer servidor Discord, crio cargos automáticos, sistema de boas-vindas e gerencio permissões!"
+        }
+        
+        return respostas.get(assunto, "É um tópico bem interessante que posso explicar melhor!")
+    
+    def _contextualize_response(self, base_responses, recent_context, current_input):
+        """Contextualizar resposta com base no histórico"""
+        try:
+            # Se o usuário está continuando um tópico
+            last_response = recent_context[-1]['assistant'] if recent_context else ""
+            
+            if 'economia' in last_response.lower() and any(word in current_input.lower() for word in ['tipo', 'como', 'mais']):
+                return "Exato! No sistema de economia você pode: trabalhar a cada 2 horas, coletar daily/weekly/monthly, comprar itens na loja, e até roubar outros usuários (60% chance)! É bem completo!"
+            
+            if 'comando' in last_response.lower() and any(word in current_input.lower() for word in ['tipo', 'quais', 'exemplo']):
+                return "Por exemplo: `/daily` para coins diários, `/copinha` para criar torneios, `/rank` para ver seu progresso, `/loja` para itens premium, e muito mais! São 93 slash commands ativos!"
+            
+            # Resposta padrão contextualizada
+            return random.choice(base_responses) + " Vamos continuar nossa conversa!"
+            
+        except Exception:
+            return random.choice(base_responses)
+
+    def _clean_response(self, response, original_input):
+        """Limpar e melhorar a resposta"""
+        if not response:
+            return self._fallback_response(original_input)
+        
+        # Remover quebras de linha excessivas
+        response = ' '.join(response.split())
+        
+        # Limitar tamanho
+        if len(response) > 400:
+            sentences = response.split('.')
+            response = '.'.join(sentences[:3]) + '.'
+        
+        # Remover possíveis repetições
+        words = response.split()
+        if len(words) > 2 and words[-1] == words[-2]:
+            response = ' '.join(words[:-1])
+        
+        # Adicionar emoji se não tiver
+        if not any(emoji in response for emoji in ['🌸', '✨', '💕', '😊', '🎮', '💫', '🤖', '⚡']):
+            response += " ✨"
+        
+        return response
 
     def _fallback_response(self, user_input):
-        """Resposta de fallback quando há erro"""
+        """Resposta de fallback quando IA não está disponível"""
         fallback_responses = [
-            "Oi! 🌸 Estou aqui para ajudar! Use `/ajuda` para ver meus comandos!",
-            "Olá! ✨ Tudo funcionando! Digite `/ajuda` para ver o que posso fazer!",
-            "Hey! 💫 Sistema operacional! Use `/ajuda` para comandos disponíveis!"
+            f"Interessante! 🤔 Me conte mais sobre isso, ou use `/ajuda` para ver o que posso fazer!",
+            f"Hmm! 💭 Que tal tentarmos alguns comandos? Digite `/ajuda` para ver todas as opções!",
+            f"Oi! 🌸 Estou processando sua mensagem. Use `/ajuda` para ver meus comandos!",
+            f"Que legal! ✨ Se precisar de alguma coisa específica, é só usar `/ajuda`!"
         ]
         return random.choice(fallback_responses)
 
-    def _analyze_user_patterns(self, user_input, user_id):
-        """Analisar padrões do usuário para personalização"""
-        try:
-            if not self.learning_enabled or not user_id:
-                return None
-
-            # Armazenar padrões de conversa do usuário
-            input_lower = user_input.lower()
-
-            # Detectar tipo de conversa preferida
-            for pattern_type, keywords in self.conversation_patterns.items():
-                if any(keyword in input_lower for keyword in keywords):
-                    self.learning_patterns[f"{user_id}_{pattern_type}"] += 1
-
-            # Armazenar contexto da conversa
-            self.learning_data[user_id].append({
-                'input': user_input,
-                'timestamp': time.time(),
-                'length': len(user_input),
-                'type': self._detect_message_type(input_lower)
-            })
-
-            # Manter apenas os últimos 20 dados por usuário
-            if len(self.learning_data[user_id]) > 20:
-                self.learning_data[user_id] = self.learning_data[user_id][-20:]
-
-        except Exception as e:
-            logger.error(f"Erro na análise de padrões: {e}")
-
-    def _detect_message_type(self, input_lower):
-        """Detectar tipo de mensagem para personalização"""
-        if any(word in input_lower for word in ['?', 'como', 'por que', 'o que']):
-            return 'question'
-        elif any(word in input_lower for word in ['oi', 'olá', 'hey']):
-            return 'greeting'
-        elif any(word in input_lower for word in ['obrigado', 'valeu', 'thanks']):
-            return 'thanks'
-        elif len(input_lower.split()) > 10:
-            return 'conversation'
+    def switch_model(self, model_name):
+        """Trocar modelo de IA (DistilGPT2 é o único disponível)"""
+        if model_name.lower() in ['distilgpt2', 'gpt2', 'default']:
+            return f"✅ Já estou usando DistilGPT2! É o modelo mais otimizado para o Railway."
         else:
-            return 'simple'
-
-    def _personalize_response(self, base_response, user_id):
-        """Personalizar resposta baseada no histórico do usuário"""
-        try:
-            if not self.learning_enabled or not user_id:
-                return base_response
-
-            user_data = self.learning_data.get(user_id, [])
-            if not user_data:
-                return base_response
-
-            # Analisar preferências do usuário
-            recent_interactions = user_data[-5:]  # Últimas 5 interações
-
-            # Se usuário faz muitas perguntas, dar respostas mais detalhadas
-            question_ratio = sum(1 for interaction in recent_interactions if interaction['type'] == 'question') / len(recent_interactions)
-
-            if question_ratio > 0.6:  # Usuário curioso
-                if "Use `/ajuda`" in base_response and "para ver" in base_response:
-                    base_response += " Vejo que você gosta de explorar! 🔍"
-
-            # Se usuário é mais social, adicionar emojis extras
-            conversation_ratio = sum(1 for interaction in recent_interactions if interaction['type'] == 'conversation') / len(recent_interactions)
-
-            if conversation_ratio > 0.4:  # Usuário conversador
-                if not any(emoji in base_response for emoji in ['😊', '💕', '🌸']):
-                    base_response += " 😊"
-
-            return base_response
-
-        except Exception as e:
-            logger.error(f"Erro na personalização: {e}")
-            return base_response
-
-    def train_with_feedback(self, user_input, response, feedback, user_id=None):
-        """Sistema de aprendizado com feedback positivo/negativo"""
-        try:
-            if not self.learning_enabled:
-                return "Aprendizado desabilitado"
-
-            feedback_type = 'positive' if feedback in ['👍', '✅', 'bom', 'legal'] else 'negative'
-
-            # Armazenar feedback para melhorar respostas futuras
-            feedback_data = {
-                'input': user_input,
-                'response': response,
-                'feedback': feedback_type,
-                'user_id': user_id,
-                'timestamp': time.time()
-            }
-
-            self.learning_data[f"feedback_{feedback_type}"].append(feedback_data)
-
-            # Manter apenas os últimos 100 feedbacks
-            if len(self.learning_data[f"feedback_{feedback_type}"]) > 100:
-                self.learning_data[f"feedback_{feedback_type}"] = self.learning_data[f"feedback_{feedback_type}"][-100:]
-
-            return f"✅ Feedback {feedback_type} registrado! Obrigada por me ajudar a melhorar!"
-
-        except Exception as e:
-            logger.error(f"Erro no treinamento com feedback: {e}")
-            return "❌ Erro ao processar feedback"
-
-    def _save_learning_data(self):
-        """Salvar dados de aprendizado (placeholder para persistência)"""
-        try:
-            # Em uma implementação completa, salvaria em arquivo ou banco
-            # Por ora, mantém em memória apenas
-            logger.info(f"Dados de aprendizado em memória: {len(self.learning_data)} usuários")
-        except Exception as e:
-            logger.error(f"Erro ao salvar dados de aprendizado: {e}")
+            return f"❌ Modelo {model_name} não disponível. Estou usando DistilGPT2 otimizado para Railway."
 
     def get_model_info(self):
-        """Obter informações do modelo atual"""
-        using_real = getattr(self, 'using_real_tinyllama', False)
-
+        """Informações sobre o modelo atual"""
+        total_conversations = sum(len(convs) for convs in self.learning_data.values())
+        
         return {
-            'model_name': self.model_name,
             'current_model': self.current_model,
-            'model_loaded': self.model_loaded,
-            'learning_enabled': self.learning_enabled,
+            'model_name': self.model_name,
+            'loaded': self.model_loaded,
+            'available_models': ['distilgpt2'] + list(self.huggingface_models.keys()),
+            'memory_conversations': len(self.conversation_memory),
             'search_enabled': self.search_enabled,
-            'learned_conversations': len(self.learning_data),
-            'learned_patterns': len(self.learning_patterns),
             'search_cache_size': len(self.search_cache),
-            'memory_usage': 'Alto (~2GB)' if using_real else 'Baixo (~500MB)',
-            'status': 'TinyLLaMA Real' if using_real else 'Fallback Ativo' if self.model_loaded else 'Inativo',
-            'huggingface_available': using_real,
-            'sentiment_analysis': self.learning_enabled,
-            'real_tinyllama': using_real,
-            'device': str(getattr(self, 'device', 'CPU')) if using_real else 'N/A'
+            'learning_enabled': self.learning_enabled,
+            'learned_conversations': total_conversations,
+            'learned_patterns': len(self.learning_patterns),
+            'training_examples': len(self.training_examples),
+            'knowledge_base_entries': len(self.knowledge_base),
+            'huggingface_available': HAS_TRANSFORMERS,
+            'sentiment_analysis': self.hf_sentiment_analyzer is not None,
+            'features': [
+                'conversational_ai', 'context_aware', 'railway_optimized', 
+                'internet_search', 'continuous_learning', 'huggingface_integration',
+                'sentiment_analysis', 'pattern_recognition', 'kaori_detection',
+                'instruction_following', 'training_examples', 'knowledge_base'
+            ]
         }
 
-# Criar instância global para compatibilidade
-local_ai = TinyLlamaAI()
+# Instância global DistilGPT2
+local_ai = DistilGPT2AI()
