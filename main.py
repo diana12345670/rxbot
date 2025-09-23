@@ -1491,7 +1491,13 @@ async def check_giveaways():
             return
 
         for giveaway in finished_giveaways:
-            giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, participants_json, status, created_at = giveaway
+            # Descompactar corretamente incluindo bet_amount (13 valores no total)
+            if len(giveaway) == 13:
+                giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, bet_amount, end_time, message_id, participants_json, status, created_at = giveaway
+            else:
+                # Fallback para estrutura antiga (12 valores)
+                giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, participants_json, status, created_at = giveaway
+                bet_amount = 0
 
             try:
                 channel = bot.get_channel(channel_id)
@@ -1515,9 +1521,8 @@ async def check_giveaways():
                 else:
                     winners = random.sample(participants, winners_count)
 
-                # Verificar se é sorteio de coins e distribuir automaticamente
-                bet_result = execute_query('SELECT bet_amount FROM giveaways WHERE id = %s', (giveaway_id,), fetch_one=True)
-                coin_amount = bet_result[0] if bet_result and bet_result[0] else 0
+                # Usar o bet_amount já obtido da query principal
+                coin_amount = bet_amount if bet_amount else 0
 
                 if winners:
                     winner_mentions = []
