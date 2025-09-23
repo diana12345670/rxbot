@@ -349,68 +349,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger('Kaori')
 
-# Sistema de IA da Kaori - LOCAL AI (após configurar logging)
+# Sistema de IA da Kaori - TinyLLaMA
 try:
     from local_ai import local_ai
     USING_LOCAL_AI = True
-    logger.info("🤖 IA Local carregada com sucesso!")
+    
+    # Forçar inicialização do TinyLLaMA real
+    if hasattr(local_ai, '_init_tinyllama'):
+        local_ai._init_tinyllama()
+    
+    if hasattr(local_ai, 'using_real_tinyllama') and local_ai.using_real_tinyllama:
+        logger.info("🤖 TinyLLaMA REAL carregado com sucesso!")
+        print("🎯 USANDO TinyLLaMA REAL com Transformers!")
+        print(f"📱 Device: {getattr(local_ai, 'device', 'CPU')}")
+        print(f"🧠 Modelo: TinyLlama-1.1B-Chat-v1.0")
+    else:
+        logger.info("🤖 TinyLLaMA fallback carregado!")
+        print("⚠️ Usando TinyLLaMA fallback (transformers não disponível)")
+        print("💡 Para usar TinyLLaMA real, instale: pip install transformers torch")
+        
 except ImportError as e:
-    print(f"⚠️ IA Local não disponível, usando fallback: {e}")
-    logger.info(f"⚠️ IA Local não disponível, usando fallback: {e}")
+    print(f"❌ Erro crítico: TinyLLaMA não disponível: {e}")
+    logger.error(f"❌ Erro crítico: TinyLLaMA não disponível: {e}")
     USING_LOCAL_AI = False
+    # Não sair do programa, usar fallback básico
+    local_ai = None
     
-    # Sistema de IA de fallback melhorado
-    class BasicKaoriAI:
-        def __init__(self):
-            self.responses = {
-                'cumprimento': [
-                    "Oi! 🌸 Como posso ajudar você hoje?",
-                    "Olá! ✨ Em que posso ser útil?", 
-                    "Hey! 💫 Pronto para ajudar!",
-                    "Salve! 🎮 O que precisamos fazer hoje?"
-                ],
-                'ajuda': [
-                    "Claro! Use `/ajuda` para ver todos os meus comandos! 💡",
-                    "Posso ajudar sim! Digite `/ajuda` para ver o que posso fazer! 🚀",
-                    "Com certeza! Use `/ping` para testar ou `/ajuda` para comandos! ⚡"
-                ],
-                'ping': [
-                    "Pong! 🏓 Estou funcionando perfeitamente!",
-                    "Pong! ⚡ Tudo certo por aqui!",
-                    "Pong! 🎯 Use `/ping` para ver minha latência!"
-                ],
-                'default': [
-                    "Interessante! 🤔 Use `/ajuda` para ver meus comandos!",
-                    "Que legal! ✨ Se precisar de algo, é só usar `/ajuda`!",
-                    "Legal! 🎉 Digite `/ping` para testar ou `/ajuda` para comandos!",
-                    "Bacana! 💫 Estou aqui para ajudar! Use `/ajuda` para ver o que posso fazer!"
-                ]
-            }
-            
-        def get_response(self, user_message, user_name=""):
-            content_lower = user_message.lower()
-            
-            if any(word in content_lower for word in ['oi', 'olá', 'hello', 'hey', 'salve', 'eae']):
-                return random.choice(self.responses['cumprimento'])
-            elif any(word in content_lower for word in ['como', 'help', 'ajuda', 'comando']):
-                return random.choice(self.responses['ajuda'])  
-            elif any(word in content_lower for word in ['ping', 'test', 'funcionando', 'online']):
-                return random.choice(self.responses['ping'])
-            else:
-                return random.choice(self.responses['default'])
-                
-        def generate_response(self, message, user_id=None, context=""):
-            return self.get_response(message)
-            
-        def is_ready(self):
-            return True
-            
-        @property
-        def current_model(self):
-            return "Kaori AI Básica (Fallback)"
     
-    local_ai = BasicKaoriAI()
-
 # Configuração de intents
 intents = discord.Intents.all()
 intents.message_content = True
@@ -822,7 +787,7 @@ def init_database():
                 message_id {integer_type},
                 channel_id {integer_type},
                 guild_id {integer_type},
-                message_type {text_type},
+                type {text_type},
                 data {text_type} DEFAULT '{{}}',
                 status {text_type} DEFAULT 'active',
                 created_at {timestamp_type}
@@ -859,10 +824,11 @@ def init_database():
                 WHERE table_schema = 'public' 
                 AND table_name IN ('users', 'tickets', 'giveaways', 'copinhas')
             """)
-            table_count = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            table_count = result[0] if result else 0
             
-            if table_count != 4:
-                raise Exception(f"❌ Table verification failed! Expected 4 core tables, found {table_count} in public schema")
+            if table_count < 4:
+                logger.warning(f"⚠️ Only {table_count}/4 core tables found, but continuing initialization")
             
             # Log all created tables for diagnostic purposes
             cursor.execute("""
@@ -4072,39 +4038,27 @@ async def create_persistent_ticket_message(ctx_or_interaction):
     except Exception as e:
         logger.error(f"Erro ao criar mensagem de ticket persistente: {e}")
 
-# ============ COMANDOS DE CONTROLE DA IA LOCAL ============
+# ============ COMANDO DE STATUS DA IA SIMPLIFICADO ============
 
-@bot.tree.command(name="ia_status", description="Ver status da IA local")
+@bot.tree.command(name="ia_status", description="Ver status da IA TinyLLaMA")
 async def slash_ia_status(interaction: discord.Interaction):
-    """Status da IA local"""
+    """Status da IA TinyLLaMA"""
     try:
-        if not USING_LOCAL_AI:
+        if not USING_LOCAL_AI or not local_ai.is_ready():
             embed = create_embed(
-                "🤖 IA Local - Status",
-                "❌ **IA Local não disponível**\n\n"
-                "Usando sistema básico de fallback.\n"
-                "Para ativar IA local, instale as dependências necessárias.",
-                color=0xff6b6b
-            )
-        elif local_ai.is_ready():
-            info = local_ai.get_model_info()
-            embed = create_embed(
-                "🤖 IA Local - Status",
-                f"✅ **IA Local ATIVA**\n\n"
-                f"**📋 Modelo atual:** {info['current_model']}\n"
-                f"**🚀 Status:** {'Carregado' if info['loaded'] else 'Carregando...'}\n"
-                f"**💾 Conversas na memória:** {info['memory_conversations']}\n"
-                f"**🔧 Modelos disponíveis:** {', '.join(info['available_models'])}\n\n"
-                f"**💡 Use `/ia_trocar_modelo` para mudar o modelo!**",
-                color=0x00ff00
+                "❌ TinyLLaMA Offline",
+                "O sistema TinyLLaMA não está disponível.\nUse `/ajuda` para ver comandos disponíveis.",
+                color=0xff0000
             )
         else:
+            info = local_ai.get_model_info()
             embed = create_embed(
-                "🤖 IA Local - Status", 
-                "🔄 **Carregando IA Local...**\n\n"
-                "O modelo está sendo carregado em background.\n"
-                "Isso pode levar alguns minutos na primeira vez.",
-                color=0xffa500
+                "🤖 TinyLLaMA Ativo",
+                f"✅ **Status:** {info['status']}\n"
+                f"**📋 Modelo:** {info['model_name']}\n"
+                f"**💾 Uso de memória:** {info['memory_usage']}\n\n"
+                f"Use `/ajuda` para ver todos os comandos!",
+                color=0x00ff00
             )
         
         await interaction.response.send_message(embed=embed)
@@ -4113,48 +4067,7 @@ async def slash_ia_status(interaction: discord.Interaction):
         logger.error(f"Erro no comando ia_status: {e}")
         await interaction.response.send_message("❌ Erro ao verificar status da IA!", ephemeral=True)
 
-@bot.tree.command(name="ia_trocar_modelo", description="Trocar modelo de IA (Admin)")
-@app_commands.describe(modelo="Nome do modelo: gpt2-medium, distilgpt2, ou microsoft/DialoGPT-medium")
-@app_commands.choices(modelo=[
-    app_commands.Choice(name="GPT-2 Medium (355M) - Melhor qualidade", value="gpt2-medium"),
-    app_commands.Choice(name="DistilGPT-2 (82M) - Mais rápido", value="distilgpt2"),
-    app_commands.Choice(name="DialoGPT Medium - Especializado em diálogo", value="microsoft/DialoGPT-medium")
-])
-async def slash_ia_trocar_modelo(interaction: discord.Interaction, modelo: str):
-    """Trocar modelo de IA local"""
-    try:
-        # Verificar permissões (admin ou usuário privilegiado)
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
-            embed = create_embed("❌ Sem permissão", "Apenas administradores podem trocar o modelo de IA!", color=0xff0000)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        
-        if not USING_LOCAL_AI:
-            embed = create_embed("❌ IA Local indisponível", "IA Local não está configurada neste bot.", color=0xff0000)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        
-        # Trocar modelo
-        result = local_ai.switch_model(modelo)
-        
-        embed = create_embed(
-            "🔄 Trocando Modelo de IA",
-            f"{result}\n\n"
-            f"**📋 Novo modelo:** {modelo}\n"
-            f"**⏱️ Tempo estimado:** 1-3 minutos\n"
-            f"**👤 Solicitado por:** {interaction.user.mention}\n\n"
-            f"*A IA ficará temporariamente indisponível durante o carregamento.*",
-            color=0xffa500
-        )
-        
-        await interaction.response.send_message(embed=embed)
-        
-        # Log da ação
-        logger.info(f"Admin {interaction.user.name} trocou modelo de IA para: {modelo}")
-        
-    except Exception as e:
-        logger.error(f"Erro ao trocar modelo: {e}")
-        await interaction.response.send_message("❌ Erro ao trocar modelo de IA!", ephemeral=True)
+# Comando removido: ia_trocar_modelo (desnecessário com TinyLLaMA fixo)
 
 @bot.tree.command(name="ia_conversar", description="Conversar diretamente com a IA")
 @app_commands.describe(mensagem="Sua mensagem para a IA")
@@ -19187,7 +19100,7 @@ def readiness_check():
         }
         
         # Verificar conexão com banco apenas se token existe (modo completo)
-        if os.getenv('TOKEN'):
+        if os.getenv('DISCORD_TOKEN'):
             try:
                 execute_query("SELECT 1", fetch_one=True)
                 ready_status['database'] = 'connected'
@@ -19417,7 +19330,7 @@ def start_dashboard():
 
 async def start_bot():
     """Sistema de inicialização simplificado"""
-    token = os.getenv('TOKEN')
+    token = os.getenv('DISCORD_TOKEN')
     if not token:
         logger.error("🚨 TOKEN não encontrado!")
         return
@@ -19437,7 +19350,7 @@ async def start_bot():
 if __name__ == "__main__":
     try:
         # Verificar token
-        token = os.getenv('TOKEN')
+        token = os.getenv('DISCORD_TOKEN')
         
         logger.info("🚀 Iniciando RXBot + Dashboard...")
 
@@ -19460,7 +19373,7 @@ if __name__ == "__main__":
         print("🌐 Iniciando servidor Flask...")
         
         if not token:
-            logger.warning("⚠️ TOKEN não encontrado nas variáveis de ambiente!")
+            logger.warning("⚠️ DISCORD_TOKEN não encontrado nas variáveis de ambiente!")
             logger.info("🌐 Rodando apenas o servidor Flask para health check")
             
             # Modo Flask-only para Railway (thread não-daemon)
