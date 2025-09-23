@@ -42,11 +42,6 @@ class LocalAI:
     def _initialize_llama(self):
         """Inicializa LLaMA.cpp de forma segura"""
         try:
-            # Verificar se está no Railway - permitir LLaMA local
-            railway_env = os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('DATABASE_URL')
-            if railway_env:
-                logger.info("🚂 Railway detectado - Tentando inicializar LLaMA local...")
-            
             # Importar apenas quando necessário para evitar erros se não estiver instalado
             from llama_cpp import Llama
             

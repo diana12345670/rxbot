@@ -1544,78 +1544,31 @@ async def check_giveaways():
             return
 
         for giveaway in finished_giveaways:
+            # Descompactar corretamente incluindo bet_amount (13 valores no total)
+            if len(giveaway) == 13:
+                giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, bet_amount, end_time, message_id, participants_json, status, created_at = giveaway
+            else:
+                # Fallback para estrutura antiga (12 valores)
+                giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, participants_json, status, created_at = giveaway
+                bet_amount = 0
+
             try:
-                # Validar estrutura do giveaway primeiro
-                if not giveaway or len(giveaway) < 10:
-                    logger.warning(f"Estrutura de sorteio inválida: {giveaway}")
-                    continue
-                
-                # Descompactar corretamente incluindo bet_amount (13 valores no total)
-                if len(giveaway) == 13:
-                    giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, bet_amount, end_time, message_id, participants_json, status, created_at = giveaway
-                else:
-                    # Fallback para estrutura antiga (12 valores)
-                    giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, participants_json, status, created_at = giveaway
-                    bet_amount = 0
-
-                # Validar message_id antes de usar
-                if not message_id or message_id == "[]" or not str(message_id).isdigit():
-                    logger.error(f"Message ID inválido para sorteio {giveaway_id}: {message_id}")
-                    # Marcar sorteio como erro e continuar
-                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('error', giveaway_id))
-                    continue
-
-                # Converter message_id para int se necessário
-                try:
-                    message_id = int(message_id)
-                except (ValueError, TypeError):
-                    logger.error(f"Não foi possível converter message_id para int: {message_id}")
-                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('error', giveaway_id))
-                    continue
-
-                # Validar outros IDs críticos
-                if not channel_id or not guild_id:
-                    logger.error(f"IDs críticos inválidos para sorteio {giveaway_id}: channel={channel_id}, guild={guild_id}")
-                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('error', giveaway_id))
-                    continue
-
                 channel = bot.get_channel(channel_id)
                 if not channel:
-                    logger.warning(f"Canal não encontrado: {channel_id}")
-                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('expired', giveaway_id))
                     continue
 
-                # Tentar buscar mensagem com tratamento de erro
-                try:
-                    message = await channel.fetch_message(message_id)
-                    if not message:
-                        logger.warning(f"Mensagem não encontrada: {message_id}")
-                        execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('expired', giveaway_id))
-                        continue
-                except discord.NotFound:
-                    logger.warning(f"Mensagem deletada: {message_id}")
-                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('expired', giveaway_id))
-                    continue
-                except discord.HTTPException as http_err:
-                    logger.error(f"Erro HTTP ao buscar mensagem {message_id}: {http_err}")
-                    continue
-                except Exception as fetch_err:
-                    logger.error(f"Erro inesperado ao buscar mensagem {message_id}: {fetch_err}")
+                message = await channel.fetch_message(message_id)
+                if not message:
                     continue
 
                 # Obter participantes das reações
                 participants = []
-                try:
-                    for reaction in message.reactions:
-                        if str(reaction.emoji) == "🎉":
-                            async for user in reaction.users():
-                                if not user.bot:
-                                    participants.append(user.id)
-                except Exception as reaction_err:
-                    logger.error(f"Erro ao obter reações: {reaction_err}")
-                    participants = []
+                for reaction in message.reactions:
+                    if str(reaction.emoji) == "🎉":
+                        async for user in reaction.users():
+                            if not user.bot:
+                                participants.append(user.id)
 
-                # Determinar vencedores
                 if len(participants) < winners_count:
                     winners = participants
                 else:
@@ -1629,44 +1582,42 @@ async def check_giveaways():
 
                     # Se é sorteio de coins, distribuir automaticamente
                     if coin_amount > 0 and "coins" in prize.lower():
+
                         coins_per_winner = coin_amount // len(winners)
 
                         for winner_id in winners:
+                            # Adicionar coins usando execute_query
+                            winner_data = get_user_data(winner_id)
+                            if not winner_data:
+                                update_user_data(winner_id)
+                                current_coins = 50
+                            else:
+                                current_coins = winner_data[1]
+
+                            new_coins = current_coins + coins_per_winner
+                            execute_query('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, winner_id))
+
+                            # Registrar transação
+                            execute_query('''
+                                INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                                VALUES (%s, %s, %s, %s, %s)
+                            ''', (winner_id, guild_id, 'giveaway_win', coins_per_winner, f"Ganhou sorteio: {title}"))
+
+                            winner_mentions.append(f"<@{winner_id}>")
+
+                            # Notificar vencedor por DM
                             try:
-                                # Adicionar coins usando execute_query
-                                winner_data = get_user_data(winner_id)
-                                if not winner_data:
-                                    update_user_data(winner_id)
-                                    current_coins = 50
-                                else:
-                                    current_coins = winner_data[1]
-
-                                new_coins = current_coins + coins_per_winner
-                                execute_query('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, winner_id))
-
-                                # Registrar transação
-                                execute_query('''
-                                    INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                                    VALUES (%s, %s, %s, %s, %s)
-                                ''', (winner_id, guild_id, 'giveaway_win', coins_per_winner, f"Ganhou sorteio: {title}"))
-
-                                winner_mentions.append(f"<@{winner_id}>")
-
-                                # Notificar vencedor por DM
-                                try:
-                                    winner_user = bot.get_user(winner_id)
-                                    if winner_user:
-                                        dm_embed = create_embed(
-                                            "🎉 Você Ganhou!",
-                                            f"Parabéns! Você ganhou **{coins_per_winner:,} coins** no sorteio **{title}**!\n\n"
-                                            f"Os coins foram automaticamente adicionados ao seu saldo.",
-                                            color=0xffd700
-                                        )
-                                        await winner_user.send(embed=dm_embed)
-                                except Exception as dm_err:
-                                    logger.info(f"Não foi possível enviar DM para {winner_id}: {dm_err}")
-                            except Exception as winner_err:
-                                logger.error(f"Erro ao processar vencedor {winner_id}: {winner_err}")
+                                winner_user = bot.get_user(winner_id)
+                                if winner_user:
+                                    dm_embed = create_embed(
+                                        "🎉 Você Ganhou!",
+                                        f"Parabéns! Você ganhou **{coins_per_winner:,} coins** no sorteio **{title}**!\n\n"
+                                        f"Os coins foram automaticamente adicionados ao seu saldo.",
+                                        color=0xffd700
+                                    )
+                                    await winner_user.send(embed=dm_embed)
+                            except:
+                                pass
 
                         embed = create_embed(
                             f"🎉 Sorteio de Coins Finalizado: {title}",
@@ -1695,24 +1646,16 @@ async def check_giveaways():
                         color=0xff6b6b
                     )
 
-                # Enviar resultado no canal
-                try:
-                    await channel.send(embed=embed)
-                except Exception as send_err:
-                    logger.error(f"Erro ao enviar resultado do sorteio: {send_err}")
+                await channel.send(embed=embed)
 
                 # Marcar como finalizado
                 execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('finished', giveaway_id))
-                logger.info(f"Sorteio {giveaway_id} finalizado com sucesso")
 
             except Exception as e:
-                logger.error(f"Erro ao finalizar sorteio {giveaway.get('id', 'unknown') if isinstance(giveaway, dict) else 'unknown'}: {e}")
-                # Marcar sorteio com erro para evitar tentar novamente
-                if 'giveaway_id' in locals():
-                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('error', giveaway_id))
+                logger.error(f"Erro ao finalizar sorteio {giveaway_id}: {e}")
 
     except Exception as e:
-        logger.error(f"Erro geral no check_giveaways: {e}")
+        logger.error(f"Erro check_giveaways: {e}")
 
 
 async def get_user_position(user_id, guild_id):
