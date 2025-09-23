@@ -25,11 +25,11 @@ except ImportError:
 class DistilGPT2AI:
     def __init__(self):
         self.model_loaded = False
-        self.conversation_memory = defaultdict(lambda: deque(maxlen=15))  # Aumentado para melhor contexto
+        self.conversation_memory = defaultdict(lambda: deque(maxlen=10))
         
         # Usando DistilGPT2 como modelo principal
         self.current_model = 'distilgpt2'
-        self.model_name = 'DistilGPT2 Enhanced (Local)'
+        self.model_name = 'DistilGPT2 (Local)'
         
         # Cache de modelos offline para Railway
         self.model_cache = {}
@@ -42,25 +42,11 @@ class DistilGPT2AI:
         # Verificar se está rodando localmente
         self.is_local = os.getenv('REPLIT_ENVIRONMENT') or not os.getenv('RAILWAY_ENVIRONMENT')
         
-        # Sistema de aprendizado contínuo MELHORADO
+        # Sistema de aprendizado contínuo
         self.learning_enabled = True
         self.learning_data = defaultdict(list)  # Armazena conversas para aprendizado
         self.learning_patterns = {}  # Padrões aprendidos
         self.learning_file = 'kaori_learning.pkl'
-        
-        # Sistema de treinamento por exemplos (instruction-response)
-        self.training_examples = []
-        self.instruction_patterns = {}
-        self.response_quality_scores = defaultdict(float)
-        
-        # Base de conhecimento expandida
-        self.knowledge_base = {
-            'energia_renovavel': "É energia que vem de fontes naturais que se renovam, como sol, vento e água. Diferente do petróleo, elas não acabam e poluem menos.",
-            'inteligencia_artificial': "IA aprende com dados e padrões, enquanto o cérebro humano usa experiências e emoções. Ambos processam informações, mas de formas diferentes.",
-            'agua_terra': "A Terra tem 71% de sua superfície coberta por água, que é essencial para toda vida.",
-            'discord_bot': "Sou a Kaori, uma IA avançada para Discord com 95+ comandos, sistema de economia, jogos e conversa inteligente!",
-            'como_funciono': "Uso DistilGPT2 com aprendizado contínuo, pesquisa na internet e análise de contexto para dar respostas inteligentes."
-        }
         
         # Modelos Hugging Face disponíveis
         self.huggingface_models = {
@@ -71,9 +57,6 @@ class DistilGPT2AI:
         
         # Carregar dados de aprendizado salvos
         self._load_learning_data()
-        
-        # Carregar exemplos de treinamento iniciais
-        self._load_initial_training_examples()
         
         # Inicializar modelos Hugging Face se disponível
         self.hf_tokenizer = None
@@ -156,111 +139,12 @@ Características:
             data = {
                 'conversations': dict(self.learning_data),
                 'patterns': self.learning_patterns,
-                'training_examples': self.training_examples,
-                'instruction_patterns': self.instruction_patterns,
-                'quality_scores': dict(self.response_quality_scores),
                 'last_save': datetime.now().isoformat()
             }
             with open(self.learning_file, 'wb') as f:
                 pickle.dump(data, f)
         except Exception as e:
             logger.error(f"Erro ao salvar dados de aprendizado: {e}")
-    
-    def _load_initial_training_examples(self):
-        """Carregar exemplos iniciais de treinamento fornecidos pelo usuário"""
-        initial_examples = [
-            {
-                "instruction": "Explique o que é energia renovável de forma simples.",
-                "response": "É energia que vem de fontes que se renovam naturalmente, como o sol, o vento e a água. Diferente do petróleo, elas não acabam facilmente e causam menos poluição.",
-                "keywords": ["energia", "renovável", "solar", "vento", "água", "sustentável"]
-            },
-            {
-                "instruction": "Faça uma comparação entre inteligência artificial e cérebro humano.",
-                "response": "O cérebro humano aprende com experiências, emoções e sentidos. A IA aprende com dados e padrões. Ambos reconhecem informações, mas de formas diferentes.",
-                "keywords": ["inteligência artificial", "cérebro", "humano", "comparação", "aprendizado"]
-            },
-            {
-                "instruction": "O que você sabe sobre a água na Terra?",
-                "response": "A água cobre 71% da superfície da Terra e é essencial para toda vida. Sem ela, não existiríamos!",
-                "keywords": ["água", "terra", "superfície", "vida", "essencial"]
-            },
-            {
-                "instruction": "Como você funciona como IA?",
-                "response": "Sou a Kaori! Uso DistilGPT2 com aprendizado contínuo, pesquisa na internet e análise de contexto. Posso conversar, ajudar com comandos do bot, responder perguntas e muito mais!",
-                "keywords": ["como funciona", "ia", "kaori", "bot", "distilgpt2"]
-            },
-            {
-                "instruction": "Conte uma piada sobre robôs.",
-                "response": "Por que o robô não brigou? Porque ele não tinha coração pra isso! 🤖😄",
-                "keywords": ["piada", "robô", "robos", "humor", "engraçado"]
-            }
-        ]
-        
-        # Adicionar exemplos ao sistema de treinamento
-        for example in initial_examples:
-            self.add_training_example(example["instruction"], example["response"], example["keywords"])
-        
-        logger.info(f"✅ {len(initial_examples)} exemplos de treinamento iniciais carregados!")
-    
-    def add_training_example(self, instruction, response, keywords=None):
-        """Adicionar exemplo de treinamento instruction-response"""
-        try:
-            example = {
-                'instruction': instruction.lower(),
-                'response': response,
-                'keywords': keywords or [],
-                'quality_score': 1.0,
-                'usage_count': 0,
-                'created_at': datetime.now().isoformat()
-            }
-            
-            self.training_examples.append(example)
-            
-            # Indexar por palavras-chave para busca rápida
-            for keyword in (keywords or []):
-                if keyword not in self.instruction_patterns:
-                    self.instruction_patterns[keyword] = []
-                self.instruction_patterns[keyword].append(len(self.training_examples) - 1)
-            
-            # Salvar automaticamente
-            self._save_learning_data()
-            
-        except Exception as e:
-            logger.error(f"Erro ao adicionar exemplo de treinamento: {e}")
-    
-    def find_best_training_match(self, user_input):
-        """Encontrar melhor exemplo de treinamento para a entrada do usuário"""
-        try:
-            user_words = user_input.lower().split()
-            best_match = None
-            best_score = 0
-            
-            for i, example in enumerate(self.training_examples):
-                score = 0
-                
-                # Comparar palavras-chave
-                for keyword in example['keywords']:
-                    if keyword.lower() in user_input.lower():
-                        score += 2
-                
-                # Comparar palavras da instrução
-                instruction_words = example['instruction'].split()
-                for word in user_words:
-                    if word in instruction_words:
-                        score += 1
-                
-                # Bonificação por qualidade e uso
-                score *= example['quality_score']
-                
-                if score > best_score and score >= 2:  # Mínimo de confiança
-                    best_score = score
-                    best_match = example
-            
-            return best_match, best_score
-            
-        except Exception as e:
-            logger.error(f"Erro ao buscar melhor match de treinamento: {e}")
-            return None, 0
     
     def _analyze_sentiment(self, text):
         """Analisar sentimento usando Hugging Face"""
@@ -659,7 +543,7 @@ Características:
         return self.model_loaded
 
     def generate_response(self, user_input, user_id=None, context=None):
-        """Gerar resposta inteligente usando sistema aprimorado com exemplos de treinamento"""
+        """Gerar resposta usando DistilGPT2 com aprendizado contínuo e pesquisa na internet"""
         try:
             # Se modelo não estiver carregado, usar fallback
             if not self.model_loaded:
@@ -669,40 +553,7 @@ Características:
             if self._should_respond_to_kaori_mention(user_input):
                 logger.info(f"🎯 Kaori detectada no texto: '{user_input}'")
             
-            # PRIMEIRO: Buscar em exemplos de treinamento (PRIORIDADE MÁXIMA)
-            training_match, match_score = self.find_best_training_match(user_input)
-            if training_match and match_score >= 3:
-                logger.info(f"📚 Usando exemplo de treinamento (score: {match_score})")
-                
-                # Atualizar estatísticas do exemplo
-                training_match['usage_count'] += 1
-                training_match['quality_score'] += 0.1  # Melhorar qualidade com uso
-                
-                response = training_match['response']
-                
-                # Personalizar um pouco a resposta se necessário
-                if "energia renovável" in user_input.lower():
-                    response = "🌱 " + response + " É o futuro da sustentabilidade!"
-                elif "inteligência artificial" in user_input.lower() or "ia" in user_input.lower():
-                    response = "🤖 " + response + " Interessante, não é?"
-                elif "água" in user_input.lower():
-                    response = "🌊 " + response + " Por isso devemos cuidar bem dela!"
-                elif "piada" in user_input.lower():
-                    response = response  # Já tem emoji
-                
-                # Aprender com esta interação
-                if self.learning_enabled and user_id:
-                    self._learn_from_conversation(user_input, response, user_id)
-                
-                return response
-            
-            # SEGUNDO: Verificar base de conhecimento específica
-            knowledge_response = self._check_knowledge_base(user_input)
-            if knowledge_response:
-                logger.info("💡 Usando base de conhecimento")
-                return knowledge_response
-            
-            # TERCEIRO: Tentar resposta baseada em aprendizado contínuo
+            # Primeiro, tentar resposta baseada em aprendizado
             learned_response = self._get_learned_response(user_input)
             if learned_response:
                 logger.info("🧠 Usando resposta aprendida")
@@ -713,8 +564,8 @@ Características:
                 
                 return learned_response
             
-            # QUARTO: Usar DistilGPT2 melhorado para gerar resposta
-            response = self._generate_with_distilgpt2_enhanced(user_input, user_id, context)
+            # SEMPRE usar DistilGPT2 para gerar resposta mais elaborada
+            response = self._generate_with_distilgpt2(user_input, user_id, context)
             
             # Verificar se deve pesquisar na internet
             if self._should_search_internet(user_input, response):
@@ -798,41 +649,11 @@ Características:
         
         return prompt
 
-    def _check_knowledge_base(self, user_input):
-        """Verificar base de conhecimento específica"""
-        text = user_input.lower()
-        
-        # Mapeamento de palavras-chave para conhecimento
-        knowledge_map = {
-            'energia renovavel': 'energia_renovavel',
-            'energia renovável': 'energia_renovavel', 
-            'solar': 'energia_renovavel',
-            'eolica': 'energia_renovavel',
-            'inteligencia artificial': 'inteligencia_artificial',
-            'inteligência artificial': 'inteligencia_artificial',
-            'cerebro humano': 'inteligencia_artificial',
-            'água': 'agua_terra',
-            'agua': 'agua_terra',
-            'terra': 'agua_terra',
-            'superficie': 'agua_terra',
-            'discord bot': 'discord_bot',
-            'como funciona': 'como_funciono',
-            'como você funciona': 'como_funciono'
-        }
-        
-        for keyword, knowledge_key in knowledge_map.items():
-            if keyword in text:
-                knowledge = self.knowledge_base.get(knowledge_key)
-                if knowledge:
-                    return f"💡 {knowledge}"
-        
-        return None
-    
-    def _generate_with_distilgpt2_enhanced(self, user_input, user_id=None, context=None):
-        """Gerar resposta usando DistilGPT2 melhorado com mais inteligência"""
+    def _generate_with_distilgpt2(self, user_input, user_id=None, context=None):
+        """Gerar resposta usando DistilGPT2 avançado"""
         try:
-            # Construir prompt contextual melhorado
-            prompt = self._build_enhanced_prompt(user_input, user_id, context)
+            # Construir prompt contextual
+            prompt = self._build_prompt(user_input, user_id, context)
             
             # Sistema avançado de geração baseado no prompt
             response = self._advanced_generation(prompt, user_input, user_id)
@@ -842,40 +663,6 @@ Características:
         except Exception as e:
             logger.error(f"Erro na geração DistilGPT2: {e}")
             return "Ops! Tive um probleminha técnico com o DistilGPT2. 🔧"
-    
-    def _build_enhanced_prompt(self, user_input, user_id, context):
-        """Construir prompt melhorado para o modelo"""
-        prompt = f"{self.personality_context}\n\n"
-        
-        # Adicionar exemplos de treinamento como contexto se relevante
-        relevant_examples = []
-        for example in self.training_examples[-3:]:  # Últimos 3 exemplos
-            if any(word in user_input.lower() for word in example['keywords']):
-                relevant_examples.append(example)
-        
-        if relevant_examples:
-            prompt += "Exemplos de como responder:\n"
-            for ex in relevant_examples:
-                prompt += f"Q: {ex['instruction']}\nA: {ex['response']}\n"
-            prompt += "\n"
-        
-        # Adicionar contexto da conversa anterior se disponível
-        if user_id and user_id in self.conversation_memory:
-            recent_conversations = list(self.conversation_memory[user_id])[-2:]  # Últimas 2 trocas
-            for conv in recent_conversations:
-                prompt += f"Usuário: {conv['user']}\nKaori: {conv['assistant']}\n"
-        
-        # Adicionar contexto adicional se fornecido
-        if context:
-            prompt += f"Contexto: {context}\n"
-        
-        prompt += f"Usuário: {user_input}\nKaori (resposta inteligente e específica):"
-        
-        return prompt
-    
-    def _generate_with_distilgpt2(self, user_input, user_id=None, context=None):
-        """Manter compatibilidade - redirecionar para versão melhorada"""
-        return self._generate_with_distilgpt2_enhanced(user_input, user_id, context)
 
     def _select_template_type(self, user_input):
         """Selecionar tipo de template baseado na entrada"""
@@ -1435,15 +1222,12 @@ Características:
             'learning_enabled': self.learning_enabled,
             'learned_conversations': total_conversations,
             'learned_patterns': len(self.learning_patterns),
-            'training_examples': len(self.training_examples),
-            'knowledge_base_entries': len(self.knowledge_base),
             'huggingface_available': HAS_TRANSFORMERS,
             'sentiment_analysis': self.hf_sentiment_analyzer is not None,
             'features': [
                 'conversational_ai', 'context_aware', 'railway_optimized', 
                 'internet_search', 'continuous_learning', 'huggingface_integration',
-                'sentiment_analysis', 'pattern_recognition', 'kaori_detection',
-                'instruction_following', 'training_examples', 'knowledge_base'
+                'sentiment_analysis', 'pattern_recognition', 'kaori_detection'
             ]
         }
 
