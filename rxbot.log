@@ -1203,3 +1203,148 @@ LINE 3:                 FROM interactive_messages
 2025-09-19 20:39:46,537 - Kaori - INFO - ✅ Database initialized successfully!
 2025-09-19 20:39:46,537 - Kaori - WARNING - ⚠️ TOKEN não encontrado nas variáveis de ambiente!
 2025-09-19 20:39:46,537 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-23 14:53:52,093 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 14:53:52,114 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-23 14:53:52,114 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-23 14:53:55,599 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-23 14:53:55,723 - Kaori - ERROR - ❌ Database initialization failed: ❌ Table verification failed! Expected 4 core tables, found 0 in public schema
+2025-09-23 14:53:55,723 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 14:53:55,723 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-23 14:53:58,726 - Kaori - WARNING - ⚠️ Não foi possível testar Flask: HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /healthz (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f99b8d0a810>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-09-23 14:53:58,726 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-23 14:53:58,727 - discord.client - INFO - logging in using static token
+2025-09-23 14:53:59,747 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: d2c2b5e14c0b277a986a2c6ec89bccab).
+2025-09-23 14:55:54,728 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 14:55:54,746 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-23 14:55:54,746 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-23 14:55:54,756 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-23 14:55:55,010 - Kaori - INFO - 📋 Created tables in public schema: copinhas, giveaways, guilds, tickets, users
+2025-09-23 14:55:55,011 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 14:55:55,011 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 14:55:55,012 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-23 14:55:58,016 - Kaori - WARNING - ⚠️ Não foi possível testar Flask: HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /healthz (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7ffbdf1a0710>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-09-23 14:55:58,017 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-23 14:55:58,017 - discord.client - INFO - logging in using static token
+2025-09-23 14:55:58,861 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: 52baaa80e1257f4a1c474c4729730d1a).
+2025-09-23 14:56:00,877 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-23 14:56:00,878 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-23 14:56:00,879 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-23 14:56:01,039 - Kaori - INFO - 📋 Created tables in public schema: copinhas, giveaways, guilds, tickets, users
+2025-09-23 14:56:01,039 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 14:56:01,071 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-23 14:56:01,072 - Kaori - INFO - ✅ Database inicializado
+2025-09-23 14:56:01,072 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-23 14:56:01,072 - Kaori - INFO - 📊 Conectado em 2 servidores
+2025-09-23 14:56:01,072 - Kaori - INFO - 👥 Servindo 65 usuários únicos
+2025-09-23 14:56:01,072 - Kaori - INFO - 🚀 Kaori Online! Servidores: 2 | Usuários: 65 | Latência: 79.73ms
+2025-09-23 14:56:01,073 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-23 14:56:01,079 - Kaori - INFO - ⏭️ Backup desabilitado no Railway para economia de recursos
+2025-09-23 14:56:01,773 - Kaori - ERROR - Erro na limpeza de mensagens: relation "interactive_messages" does not exist
+LINE 2: ...               SELECT message_id, channel_id FROM interactiv...
+                                                             ^
+
+2025-09-23 14:56:06,888 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-23 14:56:12,288 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-23 14:56:12,288 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-23 14:56:12,297 - Kaori - ERROR - Erro ao restaurar mensagens interativas: relation "interactive_messages" does not exist
+LINE 3:                 FROM interactive_messages 
+                             ^
+
+2025-09-23 14:56:12,826 - Kaori - INFO - ✅ 89 slash commands sincronizados
+2025-09-23 14:56:12,826 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-23 14:56:12,827 - Kaori - INFO - 🚀 Total de comandos slash: 89
+2025-09-23 14:56:12,827 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-23 14:56:12,827 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-23 14:56:12,827 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-23 14:56:12,827 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-23 14:56:12,828 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-23 14:56:12,828 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-23 14:56:12,828 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-23 14:56:12,828 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-23 14:56:12,828 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-23 14:56:12,828 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-23 14:56:12,829 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-23 14:56:12,832 - Kaori - INFO -    /cuptop10 - Ver top 10 do ranking das copinhas
+2025-09-23 14:56:12,833 - Kaori - INFO -    /rankcopas - Ativar sistema de ranking das copinhas (RXscoreCup)
+2025-09-23 14:56:12,834 - Kaori - INFO -    /escolhercargo - Escolher um cargo personalizado (somente usuários autorizados)
+2025-09-23 14:56:12,835 - Kaori - INFO -    /desbugar - Cancelar uma copinha ativa
+2025-09-23 14:56:12,836 - Kaori - INFO -    ... e mais 74 comandos!
+2025-09-23 14:56:12,838 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-23 14:56:54,860 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 14:56:54,882 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-23 14:56:54,882 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-23 14:56:54,901 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-23 14:56:55,020 - Kaori - INFO - 📋 Created tables in public schema: copinha_scoreboard, copinhas, giveaways, guild_channels, guilds, tickets, users
+2025-09-23 14:56:55,020 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 14:56:55,021 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 14:56:55,021 - Kaori - INFO - 🎯 Modo completo: Flask + Bot Discord...
+2025-09-23 14:56:58,023 - Kaori - WARNING - ⚠️ Não foi possível testar Flask: HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /healthz (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f31a28b4310>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-09-23 14:56:58,024 - Kaori - INFO - 🤖 Iniciando bot Discord...
+2025-09-23 14:56:58,024 - discord.client - INFO - logging in using static token
+2025-09-23 14:56:59,304 - discord.gateway - INFO - Shard ID None has connected to Gateway (Session ID: 61055a8702037668a8b86c472121e5be).
+2025-09-23 14:57:01,320 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-23 14:57:01,320 - Kaori - INFO - 🔗 DATABASE_URL found: postgresql://po***de=disable
+2025-09-23 14:57:01,320 - Kaori - INFO - 🌐 Environment: Local | Port: 5000
+2025-09-23 14:57:01,486 - Kaori - INFO - 📋 Created tables in public schema: copinha_scoreboard, copinhas, giveaways, guild_channels, guilds, tickets, users
+2025-09-23 14:57:01,486 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 14:57:01,500 - Kaori - INFO - ✅ Tabelas do scoreboard da copinha criadas
+2025-09-23 14:57:01,500 - Kaori - INFO - ✅ Database inicializado
+2025-09-23 14:57:01,501 - Kaori - INFO - 🤖 Kaori está online! Conectado como RX • Ka͟o͟r͟i͟#5175
+2025-09-23 14:57:01,505 - Kaori - INFO - 📊 Conectado em 2 servidores
+2025-09-23 14:57:01,506 - Kaori - INFO - 👥 Servindo 65 usuários únicos
+2025-09-23 14:57:01,506 - Kaori - INFO - 🚀 Kaori Online! Servidores: 2 | Usuários: 65 | Latência: 77.22ms
+2025-09-23 14:57:01,510 - Kaori - INFO - ✅ Background tasks e monitor de saúde iniciados
+2025-09-23 14:57:01,526 - Kaori - INFO - ⏭️ Backup desabilitado no Railway para economia de recursos
+2025-09-23 14:57:02,185 - Kaori - ERROR - Erro na limpeza de mensagens: relation "interactive_messages" does not exist
+LINE 2: ...               SELECT message_id, channel_id FROM interactiv...
+                                                             ^
+
+2025-09-23 14:57:06,813 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-23 14:57:11,142 - Kaori - INFO - ✅ Cargos de rank organizados na hierarquia
+2025-09-23 14:57:11,142 - Kaori - INFO - ✅ Cargos de rank inicializados em todos os servidores
+2025-09-23 14:57:11,155 - Kaori - ERROR - Erro ao restaurar mensagens interativas: relation "interactive_messages" does not exist
+LINE 3:                 FROM interactive_messages 
+                             ^
+
+2025-09-23 14:57:11,721 - Kaori - INFO - ✅ 89 slash commands sincronizados
+2025-09-23 14:57:11,721 - Kaori - INFO - 📋 Comandos slash disponíveis: ping, ajuda, copinha, saldo, daily, trabalhar, weekly, monthly, roubar, loja...
+2025-09-23 14:57:11,721 - Kaori - INFO - 🚀 Total de comandos slash: 89
+2025-09-23 14:57:11,721 - Kaori - INFO -    /ping - Ver latência do bot
+2025-09-23 14:57:11,721 - Kaori - INFO -    /ajuda - Sistema de ajuda completo
+2025-09-23 14:57:11,721 - Kaori - INFO -    /copinha - Criar uma copinha/torneio de Stumble Guys
+2025-09-23 14:57:11,721 - Kaori - INFO -    /saldo - Ver saldo de moedas
+2025-09-23 14:57:11,722 - Kaori - INFO -    /daily - Recompensa diária
+2025-09-23 14:57:11,722 - Kaori - INFO -    /trabalhar - Trabalhar para ganhar dinheiro
+2025-09-23 14:57:11,722 - Kaori - INFO -    /weekly - Recompensa semanal
+2025-09-23 14:57:11,722 - Kaori - INFO -    /monthly - Recompensa mensal
+2025-09-23 14:57:11,722 - Kaori - INFO -    /roubar - Roube coins de outro usuário (60% de chance de sucesso)
+2025-09-23 14:57:11,722 - Kaori - INFO -    /loja - Ver loja de itens
+2025-09-23 14:57:11,722 - Kaori - INFO -    /inventario - Ver inventário de itens
+2025-09-23 14:57:11,722 - Kaori - INFO -    /cuptop10 - Ver top 10 do ranking das copinhas
+2025-09-23 14:57:11,722 - Kaori - INFO -    /rankcopas - Ativar sistema de ranking das copinhas (RXscoreCup)
+2025-09-23 14:57:11,722 - Kaori - INFO -    /escolhercargo - Escolher um cargo personalizado (somente usuários autorizados)
+2025-09-23 14:57:11,722 - Kaori - INFO -    /desbugar - Cancelar uma copinha ativa
+2025-09-23 14:57:11,723 - Kaori - INFO -    ... e mais 74 comandos!
+2025-09-23 14:57:11,723 - Kaori - INFO - ✅ Status inicial configurado
+2025-09-23 15:00:05,492 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 15:00:26,237 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 15:00:28,472 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-23 15:08:09,620 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 15:08:10,040 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-23 15:12:16,426 - Kaori - INFO - 🤖 OpenAI ChatGPT integrado com sucesso!
+2025-09-23 15:12:16,427 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 15:12:16,532 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-23 15:13:59,450 - Kaori - INFO - 🤖 OpenAI ChatGPT integrado com sucesso! Modelo: gpt-4o
+2025-09-23 15:14:01,116 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-09-23 15:14:01,138 - Kaori - INFO - ✅ Teste ChatGPT: API funcionando corretamente
+2025-09-23 15:14:01,138 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 15:14:01,744 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-23 15:18:10,881 - Kaori - INFO - 🤖 OpenAI ChatGPT integrado com sucesso! Modelo: gpt-4o
+2025-09-23 15:18:12,073 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-09-23 15:18:12,085 - Kaori - INFO - ✅ Teste ChatGPT: API funcionando corretamente
+2025-09-23 15:18:12,086 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 15:18:12,141 - Kaori - INFO - 🔗 DB Connected: heliumdb | User: pos*** | Schema: public
+2025-09-23 15:19:55,803 - Kaori - INFO - 🤖 OpenAI ChatGPT integrado com sucesso! Modelo: gpt-4o
+2025-09-23 15:19:56,945 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-09-23 15:19:56,956 - Kaori - INFO - ✅ Teste ChatGPT: API funcionando corretamente
+2025-09-23 15:19:56,957 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported

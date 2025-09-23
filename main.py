@@ -150,9 +150,19 @@ import hmac
 import requests # Importado para substituir aiohttp
 from flask import Flask, render_template, jsonify, request
 
-# Sistema de IA da Kaori
+# OpenAI Integration - blueprint:python_openai
+import openai
+from openai import OpenAI
+
+# Sistema de IA da Kaori com ChatGPT Real - blueprint:python_openai
 class KaoriAI:
     def __init__(self):
+        # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
+        # do not change this unless explicitly requested by the user
+        self.openai_client = None
+        self.model = "gpt-5"
+        self.initialize_openai()
+        
         self.personality = {
             "name": "Kaori",
             "traits": [
@@ -160,61 +170,129 @@ class KaoriAI:
                 "Inteligente e útil", 
                 "Divertida e brincalhona",
                 "Sempre disposta a ajudar",
-                "Gosta de conversar sobre anime e tecnologia"
-            ],
-            "greeting_responses": [
-                "Oi! 🌸 Como posso ajudar você hoje?",
-                "Olá! ✨ Em que posso ser útil?",
-                "Oi querido! 💕 O que você gostaria de saber?",
-                "Olá! 🌟 Como está seu dia? Posso ajudar com algo?"
-            ],
-            "help_responses": [
-                "Claro! 💫 Posso ajudar com comandos, jogos, economia e muito mais!",
-                "Estou aqui para ajudar! ✨ Use `/ajuda` para ver todos os meus comandos!",
-                "Com certeza! 🌸 Sou especialista em diversão e utilidades!"
-            ],
-            "thanks_responses": [
-                "De nada! 💕 Fico feliz em ajudar!",
-                "Por nada! ✨ Sempre às ordens!",
-                "É um prazer! 🌸 Estou sempre aqui para você!"
+                "Gosta de conversar sobre anime, tecnologia e jogos"
             ]
         }
+        
+        # System prompt para definir a personalidade da Kaori
+        self.system_prompt = """Você é a Kaori, uma assistente virtual carinhosa para um bot Discord de torneios de Stumble Guys. 
+
+Sua personalidade:
+- Carinhosa e atenciosa com todos os usuários
+- Inteligente e sempre disposta a ajudar
+- Divertida e brincalhona
+- Adora conversar sobre anime, tecnologia e jogos
+- Usa emojis fofinhos como 🌸 ✨ 💕 🌟 💫
+- Sempre menciona comandos úteis como /ajuda quando relevante
+- Responde em português brasileiro de forma natural e amigável
+
+Contexto: Você faz parte do RXBot, um bot para gerenciar torneios de Stumble Guys chamados "copinhas". O bot tem economia, jogos, moderação e muitos outros recursos.
+
+Mantenha respostas concisas (máximo 2-3 frases) e sempre seja positiva e útil!"""
+
+    def initialize_openai(self):
+        """Inicializar cliente OpenAI"""
+        try:
+            api_key = os.getenv('OPENAI_API_KEY')
+            if api_key:
+                self.openai_client = OpenAI(api_key=api_key)
+                
+                # Configurar modelo baseado na variável de ambiente
+                # Usar gpt-4o como padrão mais disponível ao invés de gpt-5
+                self.model = os.getenv('OPENAI_MODEL', 'gpt-4o')
+                logger.info(f"🤖 OpenAI ChatGPT integrado com sucesso! Modelo: {self.model}")
+                
+                # Teste de saúde da API
+                self.test_openai_health()
+            else:
+                logger.warning("⚠️ OPENAI_API_KEY não encontrada - usando respostas padrão")
+                self.openai_client = None
+        except Exception as e:
+            logger.error(f"❌ Erro ao inicializar OpenAI: {e}")
+            self.openai_client = None
     
+    def test_openai_health(self):
+        """Testar se a API do ChatGPT está funcionando"""
+        try:
+            if self.openai_client:
+                # Fazer uma chamada de teste pequena
+                response = self.openai_client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "Responda apenas 'OK' para confirmar que está funcionando."},
+                        {"role": "user", "content": "teste"}
+                    ],
+                    max_tokens=5
+                )
+                
+                if response and response.choices:
+                    logger.info("✅ Teste ChatGPT: API funcionando corretamente")
+                    return True
+                else:
+                    logger.warning("⚠️ Teste ChatGPT: Resposta vazia - usando fallback")
+                    
+        except Exception as e:
+            logger.error(f"❌ Teste ChatGPT falhou: {e} - usando fallback")
+            # Se o teste falhar, desabilitar OpenAI para este processo
+            self.openai_client = None
+        
+        return False
+
     def get_response(self, user_message, user_name=""):
-        """Gera resposta da Kaori baseada na mensagem do usuário"""
+        """Gera resposta da Kaori usando ChatGPT real ou fallback para respostas locais"""
+        
+        # Tentar usar ChatGPT primeiro
+        if self.openai_client:
+            try:
+                # Preparar mensagem com contexto do usuário
+                user_context = f"Usuário: {user_name}\n" if user_name else ""
+                full_message = f"{user_context}Mensagem: {user_message}"
+                
+                response = self.openai_client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": full_message}
+                    ],
+                    max_tokens=150  # Manter respostas concisas
+                )
+                
+                ai_response = response.choices[0].message.content.strip()
+                
+                # Log da interação (sem expor dados sensíveis)
+                logger.info(f"🤖 ChatGPT respondeu para {user_name or 'usuário'}")
+                
+                return ai_response
+                
+            except Exception as e:
+                logger.error(f"❌ Erro no ChatGPT: {e}")
+                # Continuar para fallback
+        
+        # Fallback: respostas locais simples se ChatGPT falhar
         message_lower = user_message.lower()
         
-        # Respostas para saudações
         if any(word in message_lower for word in ["oi", "olá", "hello", "hi", "ola", "oii"]):
-            response = random.choice(self.personality["greeting_responses"])
+            responses = [
+                "Oi! 🌸 Como posso ajudar você hoje?",
+                "Olá! ✨ Em que posso ser útil?",
+                "Oi querido! 💕 O que você gostaria de saber?"
+            ]
+            response = random.choice(responses)
             if user_name:
                 response = response.replace("você", user_name)
             return response
+            
+        elif any(word in message_lower for word in ["ajuda", "help", "como", "o que"]):
+            return "Claro! 💫 Posso ajudar com comandos, jogos, economia e muito mais! Use `/ajuda` para ver todas as opções! ✨"
+            
+        elif any(word in message_lower for word in ["obrigado", "obrigada", "thanks", "valeu"]):
+            return "De nada! 💕 Fico feliz em ajudar!"
+            
+        elif any(word in message_lower for word in ["quem é você", "quem você é", "seu nome"]):
+            return "Eu sou a Kaori! 🌸 Sou sua assistente virtual carinhosa e estou aqui para tornar este servidor mais divertido! ✨"
         
-        # Respostas para pedidos de ajuda
-        elif any(word in message_lower for word in ["ajuda", "help", "como", "o que", "que você faz"]):
-            return random.choice(self.personality["help_responses"])
-        
-        # Respostas para agradecimentos
-        elif any(word in message_lower for word in ["obrigado", "obrigada", "thanks", "valeu", "brigado"]):
-            return random.choice(self.personality["thanks_responses"])
-        
-        # Respostas sobre si mesma
-        elif any(word in message_lower for word in ["quem é você", "quem você é", "seu nome", "como se chama"]):
-            return f"Eu sou a Kaori! 🌸 Sou sua assistente virtual carinhosa e estou aqui para tornar este servidor mais divertido! ✨"
-        
-        # Resposta padrão
         else:
-            default_responses = [
-                f"Interessante! 🤔 Me conte mais sobre isso, ou use `/ajuda` para ver o que posso fazer!",
-                f"Hmm! 💭 Que tal tentarmos alguns comandos? Digite `/ajuda` para ver todas as opções!",
-                f"Oi! 🌸 Não entendi muito bem, mas posso ajudar com jogos, economia e muito mais! Use `/ajuda`!",
-                f"Que legal! ✨ Se precisar de alguma coisa específica, é só usar `/ajuda` para ver meus comandos!"
-            ]
-            return random.choice(default_responses)
-
-# Instanciar a IA da Kaori
-kaori_ai = KaoriAI()
+            return "Interessante! 🤔 Me conte mais sobre isso, ou use `/ajuda` para ver o que posso fazer! 💫"
 
 # Import PostgreSQL (obrigatório)
 import psycopg2
@@ -406,10 +484,43 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('rxbot.log'),
-        logging.StreamHandler()
+        logging.StreamHandler(sys.stdout)  # Force stdout para gunicorn ver
     ]
 )
+
+# Log adicional para gunicorn
+if os.getenv('GUNICORN_CMD_ARGS'):
+    print("🚀 Executando via Gunicorn - Logs detalhados do bot aparecerão aqui")
+    # Forçar flush do stdout para gunicorn
+    import sys
+    sys.stdout.flush()
+
+# Remover todos os handlers existentes para evitar conflitos
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+
+# Configurar logging do zero para funcionar com gunicorn
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)  # Forçar para stdout
+    ],
+    force=True  # Forçar reconfiguração
+)
+
+# Configurar logger principal
 logger = logging.getLogger('Kaori')
+logger.setLevel(logging.INFO)
+
+# Garantir que todos os loggers importantes sejam configurados
+important_loggers = ['discord', 'httpx', 'asyncio']
+for logger_name in important_loggers:
+    temp_logger = logging.getLogger(logger_name)
+    temp_logger.setLevel(logging.INFO)
+
+# Instanciar a IA da Kaori (depois do logger)
+kaori_ai = KaoriAI()
 
 # Configuração de intents
 intents = discord.Intents.all()
@@ -1181,89 +1292,7 @@ LOJA_ITENS = {
     }
 }
 
-# Sistema de IA Expandido com 200+ tópicos
-class AdvancedAI:
-    def __init__(self):
-        self.context_patterns = {
-            'cumprimento': ['oi', 'olá', 'hey', 'salve', 'fala', 'eae', 'bom dia', 'boa tarde', 'boa noite'],
-            'pergunta': ['como', 'por que', 'o que', 'quando', 'onde', 'qual', 'quem', 'quanto'],
-            'ajuda': ['ajuda', 'help', 'socorro', 'não sei', 'como fazer', 'me ensina', 'tutorial'],
-            'positivo': ['obrigado', 'valeu', 'legal', 'bom', 'ótimo', 'massa', 'show', 'perfeito'],
-            'negativo': ['ruim', 'chato', 'não gosto', 'problema', 'erro', 'bug', 'falhou'],
-            'comando': ['comando', 'fazer', 'executar', 'rodar', 'usar', 'funcionar'],
-            'diversão': ['jogo', 'brincadeira', 'piada', 'diversão', 'entretenimento', 'game'],
-            'eventos': ['evento', 'festa', 'torneio', 'competição', 'atividade'],
-            'sorteio': ['sorteio', 'giveaway', 'concurso', 'prêmio', 'ganhar'],
-            'tecnologia': ['programação', 'código', 'python', 'javascript', 'html', 'css'],
-            'games': ['minecraft', 'fortnite', 'lol', 'valorant', 'csgo', 'free fire'],
-            'música': ['música', 'cantando', 'banda', 'artista', 'som', 'playlist']
-        }
-
-        self.responses = {
-            'cumprimento': [
-                "Olá! 👋 Como posso ajudar você hoje?",
-                "Oi! 😊 Em que posso ser útil?",
-                "Salve! 🔥 Pronto para ajudar você!",
-                "Hey! 🚀 O que precisamos fazer hoje?",
-                "Olá! 🌟 Como está seu dia?",
-                "Oi! 💫 Que bom te ver por aqui!"
-            ],
-            'pergunta': [
-                "Ótima pergunta! Vou explicar de forma clara:",
-                "Interessante! Deixe-me esclarecer isso:",
-                "Perfeito! Aqui está uma explicação detalhada:",
-                "Excelente dúvida! Vou te ajudar:",
-                "Que pergunta inteligente! Vou responder:",
-                "Adorei sua curiosidade! Aqui vai a resposta:"
-            ],
-            'ajuda': [
-                "Claro! Estou aqui para ajudar. Vou te guiar passo a passo:",
-                "Sem problemas! Vou explicar tudo detalhadamente:",
-                "Pode contar comigo! Aqui está a solução:",
-                "Tranquilo! Vou te mostrar como fazer:",
-                "Com certeza! Vou te dar todo suporte necessário:",
-                "Sempre à disposição para ajudar! Vamos lá:"
-            ],
-            'positivo': [
-                "Fico feliz em ajudar! 😊",
-                "De nada! Sempre à disposição! 💪",
-                "Que bom que foi útil! 🎉",
-                "Por nada! Pode contar comigo sempre! ✨",
-                "Fico contente que gostou! 😄",
-                "É sempre um prazer ajudar! 🌟"
-            ]
-        }
-
-    def analyze_message(self, message_content):
-        """Analisa a mensagem e detecta o contexto"""
-        content_lower = message_content.lower()
-        detected_contexts = []
-
-        for context, keywords in self.context_patterns.items():
-            if any(keyword in content_lower for keyword in keywords):
-                detected_contexts.append(context)
-
-        return detected_contexts if detected_contexts else ['geral']
-
-    def generate_response(self, message_content, user_data=None):
-        """Gera uma resposta inteligente baseada no contexto"""
-        contexts = self.analyze_message(message_content)
-        primary_context = contexts[0]
-
-        if len(message_content.strip()) <= 3:
-            return random.choice([
-                "Entendi! 😄 Como posso ajudar?",
-                "Haha! 😊 Em que posso ser útil?",
-                "Legal! 🎉 Vamos conversar?",
-                "Interessante! 🤔 Me conte mais!"
-            ])
-
-        if primary_context in self.responses:
-            return random.choice(self.responses[primary_context])
-
-        return "Interessante! Como posso te ajudar hoje? Use `RXajuda` para ver todos os comandos!"
-
-ai_system = AdvancedAI()
+# A classe AdvancedAI foi removida - agora usando KaoriAI com ChatGPT real
 
 # Background tasks
 @tasks.loop(minutes=5)
@@ -1978,6 +2007,11 @@ def check_auto_violations(message_content):
 @bot.tree.command(name="ping", description="Ver latência do bot")
 async def slash_ping(interaction: discord.Interaction):
     """Slash command para ping"""
+    cmd_msg = f"⚡ Comando /ping executado por {interaction.user.name} no servidor {interaction.guild.name if interaction.guild else 'DM'}"
+    print(cmd_msg)
+    sys.stdout.flush()
+    logger.info(cmd_msg)
+    
     start_time = time.time()
     end_time = time.time()
 
@@ -2922,6 +2956,13 @@ async def on_message(message):
         return
 
     global_stats['messages_processed'] += 1
+    
+    # Log ocasional de atividade (a cada 25 mensagens para ver mais logs)
+    if global_stats['messages_processed'] % 25 == 0:
+        activity_msg = f"📨 Processadas {global_stats['messages_processed']} mensagens | Usuário: {message.author.name} | Servidor: {message.guild.name if message.guild else 'DM'}"
+        print(activity_msg)
+        sys.stdout.flush()
+        logger.info(f"📨 Atividade: {global_stats['messages_processed']} mensagens processadas")
 
     # Sistema de XP
     try:
@@ -2955,13 +2996,24 @@ async def on_message(message):
     except Exception as e:
         logger.error(f"Erro no sistema XP: {e}")
 
-    # Sistema de IA (responder quando mencionado)
+    # Sistema de IA (responder quando mencionado OU quando "kaori" aparecer no texto)
+    should_respond = False
+    content = message.content
+    
+    # Verificar se o bot foi mencionado
     if bot.user.mentioned_in(message) and not message.mention_everyone:
+        should_respond = True
+        content = message.content.replace(f'<@{bot.user.id}>', '').strip()
+    
+    # Verificar se "kaori" aparece no texto (case insensitive)
+    elif "kaori" in message.content.lower():
+        should_respond = True
+        content = message.content.strip()
+    
+    if should_respond and content:
         try:
-            content = message.content.replace(f'<@{bot.user.id}>', '').strip()
-            if content:
-                response = ai_system.generate_response(content)
-                await message.reply(response)
+            response = kaori_ai.get_response(content, message.author.display_name)
+            await message.reply(response)
         except Exception as e:
             logger.error(f"Erro no sistema IA: {e}")
 
@@ -2987,46 +3039,15 @@ async def on_guild_join(guild):
         logger.error(f"Erro no evento on_guild_join: {e}")
         await send_error_to_privileged_user(f"Erro ao entrar no servidor {guild.name}: {e}", guild)
 
-@bot.event
-async def on_message(message):
-    """Handler para mensagens - inclui sistema de IA da Kaori"""
-    # Ignorar mensagens do próprio bot
-    if message.author == bot.user:
-        return
-    
-    # Verificar se o bot foi mencionado
-    if bot.user in message.mentions:
-        try:
-            # Remover a menção do bot da mensagem
-            content = message.content
-            for mention in message.mentions:
-                if mention == bot.user:
-                    content = content.replace(f'<@{mention.id}>', '').replace(f'<@!{mention.id}>', '').strip()
-            
-            # Se não sobrou conteúdo, usar saudação padrão
-            if not content:
-                content = "oi"
-            
-            # Gerar resposta da Kaori
-            user_name = message.author.display_name
-            ai_response = kaori_ai.get_response(content, user_name)
-            
-            # Responder na thread se for reply, senão no canal
-            if message.reference:
-                await message.reply(ai_response)
-            else:
-                await message.channel.send(ai_response)
-                
-        except Exception as e:
-            # Log silencioso para evitar spam
-            pass
-    
-    # Processar comandos normalmente
-    await bot.process_commands(message)
+# O handler on_message duplicado foi removido - usando apenas o principal acima
 
 @bot.event
 async def on_ready():
     # Environment check with diagnostic logging
+    print("🎯 Inicializando sistema completo...")
+    print("📋 Configurando sistema de logs...")
+    sys.stdout.flush()  # Forçar flush
+    
     logger.info("🎯 Inicializando sistema completo...")
     
     # Diagnostic environment check
@@ -3052,8 +3073,15 @@ async def on_ready():
         logger.error(f"❌ Erro ao inicializar database: {db_error}")
         logger.error(f"💡 DATABASE_URL status: {'SET' if database_url else 'NOT SET'}")
     
+    print(f"🤖 Kaori está online! Conectado como {bot.user}")
+    print(f"📊 Conectado em {len(bot.guilds)} servidores") 
+    print(f"👥 Servindo {len(set(bot.get_all_members()))} usuários únicos")
+    print("🎮 Bot totalmente operacional!")
+    sys.stdout.flush()  # Forçar flush
+    
     logger.info(f"🤖 Kaori está online! Conectado como {bot.user}")
     logger.info(f"📊 Conectado em {len(bot.guilds)} servidores")
+    logger.info("🎮 Bot totalmente operacional!")
     logger.info(f"👥 Servindo {len(set(bot.get_all_members()))} usuários únicos")
 
     # Log de reinício (sem enviar para Discord)
