@@ -154,10 +154,8 @@ from flask import Flask, render_template, jsonify, request
 USING_LOCAL_AI = False
 local_ai = None
 
-# Import PostgreSQL (obrigatório)
-import psycopg2
-import psycopg2.extras
-HAS_POSTGRESQL = True
+# Import PostgreSQL - será configurado após logger
+HAS_POSTGRESQL = False
 
 # Imports opcionais que podem não estar disponíveis
 try:
@@ -349,31 +347,66 @@ logging.basicConfig(
 )
 logger = logging.getLogger('Kaori')
 
-# Sistema de IA da Kaori - TinyLLaMA
+# Configurar PostgreSQL após logger estar disponível
+try:
+    import os
+    if os.getenv('DATABASE_URL'):
+        import psycopg2
+        import psycopg2.extras
+        HAS_POSTGRESQL = True
+        logger.info("✅ PostgreSQL disponível e DATABASE_URL configurada")
+    else:
+        logger.info("⚠️ DATABASE_URL não encontrada - modo sem banco")
+except ImportError:
+    logger.warning("⚠️ psycopg2 não disponível - modo sem banco")
+
+# Funções de banco condicionais
+if not HAS_POSTGRESQL:
+    def get_db_connection():
+        return None
+    
+    def execute_query(*args, **kwargs):
+        return None
+    
+    def init_database():
+        logger.info("⚠️ Banco de dados desabilitado - sem PostgreSQL ou DATABASE_URL")
+
+# Sistema de IA da Kaori - TinyLLaMA com proteção contra loops
+USING_LOCAL_AI = False
+local_ai = None
+
 try:
     from local_ai import local_ai
     USING_LOCAL_AI = True
     
-    # Forçar inicialização do TinyLLaMA real
-    if hasattr(local_ai, '_init_tinyllama'):
-        local_ai._init_tinyllama()
+    # Aguardar inicialização completa com timeout
+    import time
+    timeout = 45  # 45 segundos para inicialização
+    start_time = time.time()
     
-    if hasattr(local_ai, 'using_real_tinyllama') and local_ai.using_real_tinyllama:
-        logger.info("🤖 TinyLLaMA REAL carregado com sucesso!")
-        print("🎯 USANDO TinyLLaMA REAL com Transformers!")
-        print(f"📱 Device: {getattr(local_ai, 'device', 'CPU')}")
-        print(f"🧠 Modelo: TinyLlama-1.1B-Chat-v1.0")
+    while not local_ai.is_ready() and (time.time() - start_time) < timeout:
+        time.sleep(1)
+    
+    if local_ai.is_ready():
+        if hasattr(local_ai, 'using_real_tinyllama') and local_ai.using_real_tinyllama:
+            logger.info("🤖 TinyLLaMA REAL carregado com sucesso!")
+            print("🎯 USANDO TinyLLaMA REAL com Transformers!")
+            print(f"📱 Device: {getattr(local_ai, 'device', 'CPU')}")
+            print(f"🧠 Modelo: TinyLlama-1.1B-Chat-v1.0")
+        else:
+            logger.info("🤖 TinyLLaMA fallback carregado!")
+            print("⚡ Usando TinyLLaMA fallback otimizado")
+            print("✅ Sistema funcionando em modo estável")
     else:
-        logger.info("🤖 TinyLLaMA fallback carregado!")
-        print("⚠️ Usando TinyLLaMA fallback (transformers não disponível)")
-        print("💡 Para usar TinyLLaMA real, instale: pip install transformers torch")
+        logger.warning("⚠️ TinyLLaMA não ficou pronto no tempo esperado, usando fallback")
+        print("⚡ Sistema funcionando em modo fallback por timeout")
         
 except ImportError as e:
-    print(f"❌ Erro crítico: TinyLLaMA não disponível: {e}")
-    logger.error(f"❌ Erro crítico: TinyLLaMA não disponível: {e}")
-    USING_LOCAL_AI = False
-    # Não sair do programa, usar fallback básico
-    local_ai = None
+    logger.warning(f"⚠️ TinyLLaMA não disponível: {e}")
+    print("⚡ Sistema funcionando sem IA local")
+except Exception as e:
+    logger.error(f"❌ Erro na inicialização do TinyLLaMA: {e}")
+    print("⚡ Sistema funcionando em modo seguro")
     
     
 # Configuração de intents
@@ -427,112 +460,113 @@ def is_production():
         return False
     return bool(os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RAILWAY_PROJECT_NAME'))
 
-def get_db_connection():
-    """Get PostgreSQL database connection with schema normalization"""
-    global _db_connection_logged, _db_connection_error_state
-    
-    database_url = os.getenv('DATABASE_URL')
-    if not database_url:
-        raise Exception("DATABASE_URL não encontrada. PostgreSQL é obrigatório.")
-    
-    try:
-        conn = psycopg2.connect(database_url)
-        conn.autocommit = False
+# Funções de banco movidas para após configuração condicional
+# Só definir se HAS_POSTGRESQL for True
+if HAS_POSTGRESQL:
+    def get_db_connection():
+        """Get PostgreSQL database connection with schema normalization"""
+        global _db_connection_logged, _db_connection_error_state
         
-        # Normalize schema to 'public' and log connection details
-        cursor = conn.cursor()
-        cursor.execute("SET search_path TO public;")
+        database_url = os.getenv('DATABASE_URL')
+        if not database_url:
+            raise Exception("DATABASE_URL não encontrada. PostgreSQL é obrigatório.")
         
-        # Log diagnostic information (mask credentials) - only log once or after error recovery
-        
-        if not _db_connection_logged or _db_connection_error_state:
-            cursor.execute("SELECT current_database(), current_user, current_setting('search_path');")
-            db_name, db_user, search_path = cursor.fetchone()
-            
-            # Mask user details for security
-            masked_user = db_user[:3] + "***" if len(db_user) > 3 else "***"
-            
-            if _db_connection_error_state:
-                logger.info(f"🔄 DB Reconnected: {db_name} | User: {masked_user} | Schema: {search_path}")
-            else:
-                logger.info(f"🔗 DB Connected: {db_name} | User: {masked_user} | Schema: {search_path}")
-            
-            _db_connection_logged = True
-            _db_connection_error_state = False
-        
-        conn.commit()
-        return conn
-    except Exception as e:
-        _db_connection_error_state = True
-        logger.error(f"Erro ao conectar PostgreSQL: {e}")
-        raise e
-
-def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=10):
-    """Executar query PostgreSQL com melhor tratamento de erros"""
-    max_retries = 3
-    
-    # All queries now use native PostgreSQL %s placeholders
-    # Validate no SQLite placeholders remain
-    if '?' in query:
-        raise ValueError(f"SQLite placeholder '?' detected in query. Use '%s' instead: {query}")
-    
-    # Validar parâmetros
-    if params is None:
-        params = []
-    elif not isinstance(params, (list, tuple)):
-        params = [params]
-    
-    for attempt in range(max_retries):
-        conn = None
         try:
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                
-                try:
-                    if params:
-                        cursor.execute(query, params)
-                    else:
-                        cursor.execute(query)
-
-                    result = None
-                    if fetch_one:
-                        result = cursor.fetchone()
-                    elif fetch_all:
-                        result = cursor.fetchall()
-
-                    conn.commit()
-                    return result
-
-                except psycopg2.Error as e:
-                    conn.rollback()
-                    # Log silencioso - apenas na última tentativa
-                    if attempt == max_retries - 1:
-                        # Apenas registros críticos
-                        pass
-                except Exception as e:
-                    conn.rollback()
-                    # Log silencioso - apenas na última tentativa
-                    if attempt == max_retries - 1:
-                        pass
-                finally:
-                    if conn:
-                        conn.close()
-                        
-        except Exception as e:
-            # Log silencioso para evitar spam
-            if attempt == max_retries - 1:
-                return None
+            conn = psycopg2.connect(database_url)
+            conn.autocommit = False
             
-        # Pausa progressiva antes de tentar novamente
-        import time
-        time.sleep(0.1 * (attempt + 1))
-    
-    return None
+            # Normalize schema to 'public' and log connection details
+            cursor = conn.cursor()
+            cursor.execute("SET search_path TO public;")
+            
+            # Log diagnostic information (mask credentials) - only log once or after error recovery
+            
+            if not _db_connection_logged or _db_connection_error_state:
+                cursor.execute("SELECT current_database(), current_user, current_setting('search_path');")
+                db_name, db_user, search_path = cursor.fetchone()
+                
+                # Mask user details for security
+                masked_user = db_user[:3] + "***" if len(db_user) > 3 else "***"
+                
+                if _db_connection_error_state:
+                    logger.info(f"🔄 DB Reconnected: {db_name} | User: {masked_user} | Schema: {search_path}")
+                else:
+                    logger.info(f"🔗 DB Connected: {db_name} | User: {masked_user} | Schema: {search_path}")
+                
+                _db_connection_logged = True
+                _db_connection_error_state = False
+            
+            conn.commit()
+            return conn
+        except Exception as e:
+            _db_connection_error_state = True
+            logger.error(f"Erro ao conectar PostgreSQL: {e}")
+            raise e
+
+    def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=10):
+        """Executar query PostgreSQL com melhor tratamento de erros"""
+        max_retries = 3
+        
+        # All queries now use native PostgreSQL %s placeholders
+        # Validate no SQLite placeholders remain
+        if '?' in query:
+            raise ValueError(f"SQLite placeholder '?' detected in query. Use '%s' instead: {query}")
+        
+        # Validar parâmetros
+        if params is None:
+            params = []
+        elif not isinstance(params, (list, tuple)):
+            params = [params]
+        
+        for attempt in range(max_retries):
+            conn = None
+            try:
+                with db_lock:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                
+                    try:
+                        if params:
+                            cursor.execute(query, params)
+                        else:
+                            cursor.execute(query)
+
+                        result = None
+                        if fetch_one:
+                            result = cursor.fetchone()
+                        elif fetch_all:
+                            result = cursor.fetchall()
+
+                        conn.commit()
+                        return result
+
+                    except Exception as e:
+                        conn.rollback()
+                        # Log silencioso - apenas na última tentativa
+                        if attempt == max_retries - 1:
+                            pass
+                    finally:
+                        if conn:
+                            conn.close()
+                            
+            except Exception as e:
+                # Log silencioso para evitar spam
+                if attempt == max_retries - 1:
+                    return None
+                
+            # Pausa progressiva antes de tentar novamente
+            import time
+            time.sleep(0.1 * (attempt + 1))
+        
+        return None
 
 # Database setup with proper error handling
 def init_database():
     """Initialize PostgreSQL database"""
+    if not HAS_POSTGRESQL:
+        logger.info("⚠️ Banco de dados desabilitado - sem PostgreSQL ou DATABASE_URL")
+        return
+        
     with db_lock:
         conn = None
         try:
@@ -2929,7 +2963,7 @@ async def on_message(message):
 
         # Sistema de IA - Verificar se bot foi mencionado OU se tem "kaori" no texto
         mentioned_directly = bot.user in message.mentions
-        has_kaori_in_text = any(word in message.content.lower() for word in ['kaori', 'bot', 'ia'])
+        has_kaori_in_text = 'kaori' in message.content.lower()
         
         if mentioned_directly or has_kaori_in_text:
             mention_type = "menção direta" if mentioned_directly else "kaori no texto"
@@ -2947,17 +2981,27 @@ async def on_message(message):
                 
                 logger.info(f"💬 Processando: '{content}'")
                 
-                # Gerar resposta com sistema de IA
-                if USING_LOCAL_AI and hasattr(local_ai, 'is_ready') and local_ai.is_ready():
-                    logger.info("🤖 Usando IA local avançada")
-                    response = local_ai.generate_response(
-                        content, 
-                        user_id=message.author.id,
-                        context=f"Servidor: {message.guild.name if message.guild else 'DM'}"
-                    )
-                else:
+                # Gerar resposta com sistema de IA - COM PROTEÇÕES APRIMORADAS
+                response = None
+                if (USING_LOCAL_AI and local_ai and 
+                    hasattr(local_ai, 'is_ready') and 
+                    not local_ai._initializing and  # Verificar se não está inicializando
+                    local_ai.is_ready()):
+                    
+                    try:
+                        logger.info("🤖 Usando IA local avançada")
+                        response = local_ai.generate_response(
+                            content, 
+                            user_id=message.author.id,
+                            context=f"Servidor: {message.guild.name if message.guild else 'DM'}"
+                        )
+                    except Exception as ai_error:
+                        logger.warning(f"⚠️ Erro na IA local, usando fallback: {ai_error}")
+                        response = None
+                
+                if not response:
                     # Sistema de fallback melhorado
-                    logger.info("🔄 Usando sistema de fallback")
+                    logger.info("🔄 Usando sistema de fallback - trigger 'kaori' funcionando!")
                     responses = [
                         f"Oi {message.author.display_name}! 🌸 Como posso ajudar você hoje?",
                         f"Olá! ✨ Em que posso ser útil?",

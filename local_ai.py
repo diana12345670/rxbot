@@ -11,74 +11,124 @@ from datetime import datetime, timedelta
 logger = logging.getLogger('LocalAI')
 
 class TinyLlamaAI:
+    _instance = None
+    _initialized = False
+    _initialization_lock = threading.Lock()
+
+    def __new__(cls):
+        """Implementar singleton para evitar múltiplas instâncias"""
+        if cls._instance is None:
+            with cls._initialization_lock:
+                if cls._instance is None:
+                    cls._instance = super(TinyLlamaAI, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        self.model_loaded = False
-        self.conversation_memory = defaultdict(lambda: deque(maxlen=10))  # Aumentado para melhor contexto
-        self.learning_enabled = True
-        self.search_enabled = False
-        self.learning_data = defaultdict(list)
-        self.learning_patterns = defaultdict(int)
-        self.search_cache = {}
+        # Evitar reinicialização se já foi inicializado
+        if TinyLlamaAI._initialized:
+            logger.info("🔄 TinyLLaMA já inicializado, reutilizando instância")
+            return
 
-        # Usando TinyLLaMA como modelo principal
-        self.current_model = 'tinyllama'
-        self.model_name = 'TinyLLaMA-1.1B (Intelligent)'
+        with TinyLlamaAI._initialization_lock:
+            if TinyLlamaAI._initialized:
+                return
 
-        # Base de conhecimento expandida
-        self.knowledge_base = {
-            'discord_bot': "Sou a Kaori, uma IA avançada para Discord com comandos, jogos, economia, torneios e conversa inteligente!",
-            'como_funciono': "Uso TinyLLaMA com sistema de aprendizado contínuo e análise de contexto para dar respostas mais naturais.",
-            'ajuda': "Use `/ajuda` para ver meus comandos disponíveis!",
-            'economia': "Tenho sistema completo de economia: daily, trabalhar, loja, roubar, transferir e muito mais!",
-            'jogos': "Posso criar torneios, copinhas, jogar dados, jokenpô e várias outras diversões!",
-            'torneios': "Especialista em criar copinhas de Stumble Guys com sistema automático de brackets!",
-            'comandos': "Tenho mais de 90+ comandos slash disponíveis! Digite / no Discord para ver todos!"
-        }
+            logger.info("🆕 Primeira inicialização do TinyLLaMA")
 
-        # Padrões de conversa para respostas mais naturais
-        self.conversation_patterns = {
-            'greeting': ['oi', 'olá', 'hey', 'salve', 'e aí', 'opa'],
-            'question': ['como', 'por que', 'o que', 'qual', 'quando', 'onde', 'quem'],
-            'help': ['ajuda', 'help', 'não sei', 'como fazer', 'explicar'],
-            'thanks': ['obrigado', 'obrigada', 'valeu', 'thanks', 'vlw'],
-            'goodbye': ['tchau', 'bye', 'até mais', 'falou', 'xau'],
-            'compliment': ['legal', 'bom', 'ótimo', 'incrível', 'massa', 'show'],
-            'games': ['jogo', 'jogar', 'game', 'copinha', 'torneio', 'diversão'],
-            'economy': ['dinheiro', 'coins', 'moedas', 'daily', 'trabalhar', 'economia']
-        }
+            self.model_loaded = False
+            self.conversation_memory = defaultdict(lambda: deque(maxlen=10))
+            self.learning_enabled = True
+            self.search_enabled = False
+            self.learning_data = defaultdict(list)
+            self.learning_patterns = defaultdict(int)
+            self.search_cache = {}
 
-        # Templates de resposta simplificados
-        self.response_templates = {
-            'saudacao': [
-                "Oi! 🌸 Como posso ajudar você hoje?",
-                "Olá! ✨ Em que posso ser útil?",
-                "Hey! 💫 Pronto para ajudar!"
-            ],
-            'ajuda': [
-                "Claro! Use `/ajuda` para ver meus comandos! 💡",
-                "Posso ajudar! Digite `/ajuda` para ver o que posso fazer! 🚀"
-            ],
-            'agradecimento': [
-                "De nada! 💕 Fico feliz em ajudar!",
-                "Por nada! ✨ Sempre às ordens!"
-            ],
-            'default': [
-                "Interessante! 🤔 Use `/ajuda` para ver meus comandos!",
-                "Legal! ✨ Se precisar de algo, é só usar `/ajuda`!",
-                "Bacana! 💫 Digite `/ajuda` para ver o que posso fazer!"
-            ]
-        }
+            # Usando TinyLLaMA como modelo principal
+            self.current_model = 'tinyllama'
+            self.model_name = 'TinyLLaMA-1.1B (Intelligent)'
 
-        # Inicializar TinyLLaMA
-        self._init_tinyllama()
+            # Base de conhecimento expandida
+            self.knowledge_base = {
+                'discord_bot': "Sou a Kaori, uma IA avançada para Discord com comandos, jogos, economia, torneios e conversa inteligente!",
+                'como_funciono': "Uso TinyLLaMA com sistema de aprendizado contínuo e análise de contexto para dar respostas mais naturais.",
+                'ajuda': "Use `/ajuda` para ver meus comandos disponíveis!",
+                'economia': "Tenho sistema completo de economia: daily, trabalhar, loja, roubar, transferir e muito mais!",
+                'jogos': "Posso criar torneios, copinhas, jogar dados, jokenpô e várias outras diversões!",
+                'torneios': "Especialista em criar copinhas de Stumble Guys com sistema automático de brackets!",
+                'comandos': "Tenho mais de 90+ comandos slash disponíveis! Digite / no Discord para ver todos!"
+            }
+
+            # Padrões de conversa para respostas mais naturais
+            self.conversation_patterns = {
+                'greeting': ['oi', 'olá', 'hey', 'salve', 'e aí', 'opa'],
+                'question': ['como', 'por que', 'o que', 'qual', 'quando', 'onde', 'quem'],
+                'help': ['ajuda', 'help', 'não sei', 'como fazer', 'explicar'],
+                'thanks': ['obrigado', 'obrigada', 'valeu', 'thanks', 'vlw'],
+                'goodbye': ['tchau', 'bye', 'até mais', 'falou', 'xau'],
+                'compliment': ['legal', 'bom', 'ótimo', 'incrível', 'massa', 'show'],
+                'games': ['jogo', 'jogar', 'game', 'copinha', 'torneio', 'diversão'],
+                'economy': ['dinheiro', 'coins', 'moedas', 'daily', 'trabalhar', 'economia']
+            }
+
+            # Templates de resposta simplificados
+            self.response_templates = {
+                'saudacao': [
+                    "Oi! 🌸 Como posso ajudar você hoje?",
+                    "Olá! ✨ Em que posso ser útil?",
+                    "Hey! 💫 Pronto para ajudar!"
+                ],
+                'ajuda': [
+                    "Claro! Use `/ajuda` para ver meus comandos! 💡",
+                    "Posso ajudar! Digite `/ajuda` para ver o que posso fazer! 🚀"
+                ],
+                'agradecimento': [
+                    "De nada! 💕 Fico feliz em ajudar!",
+                    "Por nada! ✨ Sempre às ordens!"
+                ],
+                'default': [
+                    "Interessante! 🤔 Use `/ajuda` para ver meus comandos!",
+                    "Legal! ✨ Se precisar de algo, é só usar `/ajuda`!",
+                    "Bacana! 💫 Digite `/ajuda` para ver o que posso fazer!"
+                ]
+            }
+
+            # Inicializar TinyLLaMA apenas na primeira vez
+            self._init_tinyllama()
+            TinyLlamaAI._initialized = True
+            logger.info("✅ TinyLLaMA singleton inicializado com sucesso")
 
     def _init_tinyllama(self):
-        """Inicializar TinyLLaMA real com transformers"""
+        """Inicializar TinyLLaMA real com transformers - PROTEGIDO CONTRA LOOPS"""
         try:
-            logger.info(f"🤖 Inicializando TinyLLaMA real...")
+            # PROTEÇÃO DUPLA: Verificar se já foi inicializado
+            if hasattr(self, 'model_loaded') and self.model_loaded:
+                logger.info("🔄 TinyLLaMA já carregado, evitando reinicialização")
+                return
+
+            if hasattr(self, '_initialization_in_progress') and self._initialization_in_progress:
+                logger.warning("⚠️ Inicialização já em progresso, evitando loop")
+                return
+
+            # Marcar como em progresso para evitar loops
+            self._initialization_in_progress = True
+
+            logger.info(f"🤖 [ÚNICO] Inicializando TinyLLaMA real...")
 
             # Tentar importar e carregar TinyLLaMA real
             try:
+                import os
+                # Verificar se está no Railway e ajustar configurações
+                is_railway = os.getenv('RAILWAY_ENVIRONMENT') is not None
+
+                if is_railway:
+                    logger.info("🚂 Detectado ambiente Railway - otimizando configurações")
+                    # No Railway, usar configurações mais conservadoras
+                    self.model_loaded = True
+                    self.using_real_tinyllama = False
+                    logger.info("⚡ Usando fallback otimizado para Railway")
+                    self._initialization_in_progress = False
+                    return
+
                 from transformers import AutoTokenizer, AutoModelForCausalLM
                 import torch
 
@@ -94,8 +144,8 @@ class TinyLlamaAI:
                 # Carregar modelo com configurações otimizadas
                 self.model = AutoModelForCausalLM.from_pretrained(
                     model_name,
-                    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                    device_map="auto" if torch.cuda.is_available() else None,
+                    torch_dtype=torch.float32,  # Railway funciona melhor com float32
+                    device_map=None,  # Desabilitar device_map no Railway
                     low_cpu_mem_usage=True
                 )
 
@@ -120,6 +170,14 @@ class TinyLlamaAI:
                 self.using_real_tinyllama = False
 
                 logger.info("✅ TinyLLaMA fallback carregado!")
+            except Exception as model_error:
+                logger.warning(f"⚠️ Erro ao carregar modelo: {model_error}")
+                logger.info("🔄 Usando fallback por erro no modelo...")
+
+                # Fallback por erro
+                self.model_loaded = True
+                self.using_real_tinyllama = False
+                logger.info("✅ TinyLLaMA fallback ativado por erro!")
 
             # Templates específicos do TinyLLaMA para geração
             self.generation_templates = {
@@ -130,12 +188,19 @@ class TinyLlamaAI:
 
         except Exception as e:
             logger.error(f"❌ Erro ao inicializar TinyLLaMA: {e}")
-            self.model_loaded = False
+            self.model_loaded = True  # Usar fallback mesmo com erro
             self.using_real_tinyllama = False
+        finally:
+            # Sempre limpar flag de progresso
+            self._initialization_in_progress = False
 
     def is_ready(self):
-        """Verificar se o modelo está pronto"""
-        return self.model_loaded
+        """Verificar se o sistema está pronto"""
+        if self._initializing:
+            return False
+        if not hasattr(self, 'model_ready'):
+            return False
+        return self.model_ready or hasattr(self, 'fallback_ready')
 
     def generate_response(self, user_input, user_id=None, context=None):
         """Gerar resposta inteligente usando TinyLLaMA avançado"""
@@ -428,11 +493,7 @@ class TinyLlamaAI:
 
         except Exception as e:
             logger.error(f"Erro na geração TinyLLaMA: {e}")
-            return random.choice([
-                "Ops! Tive um pequeno problema técnico! 🔧 Mas estou funcionando! Como posso ajudar?",
-                "Houve um pequeno soluço no sistema! 💫 Mas estou aqui e pronta para ajudar!",
-                "Pequeno bug resolvido! ✨ Estou 100% operacional! Em que posso ajudar?"
-            ])
+            return self._fallback_response(user_input)
 
     def _generate_real_tinyllama(self, user_input, user_id=None, context=None):
         """Gerar resposta usando o modelo TinyLLaMA real"""

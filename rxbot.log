@@ -4034,3 +4034,137 @@ LINE 3:                 FROM interactive_messages
 2025-09-23 00:40:56,436 - Kaori - INFO - 🤖 Usando IA local avançada
 2025-09-23 00:40:56,436 - Kaori - INFO - ✅ Resposta: 'Bacana! 💫 Digite `/ajuda` para ver o que posso fazer!'
 2025-09-23 00:40:56,746 - Kaori - INFO - 📤 Resposta enviada com sucesso!
+2025-09-23 01:20:34,696 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 01:20:34,725 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-23 01:20:34,726 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-23 01:20:34,726 - Kaori - ERROR - Erro ao conectar PostgreSQL: name 'psycopg2' is not defined
+2025-09-23 01:20:34,726 - Kaori - ERROR - ❌ Database initialization failed: name 'psycopg2' is not defined
+2025-09-23 01:20:34,726 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 01:20:34,728 - Kaori - WARNING - ⚠️ DISCORD_TOKEN não encontrado nas variáveis de ambiente!
+2025-09-23 01:20:34,729 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-23 01:20:34,753 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.85.226:5000
+2025-09-23 01:20:34,754 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-23 01:26:51,810 - LocalAI - INFO - 🆕 Primeira inicialização do TinyLLaMA
+2025-09-23 01:26:51,811 - LocalAI - INFO - 🤖 [ÚNICO] Inicializando TinyLLaMA real...
+2025-09-23 01:26:51,811 - LocalAI - WARNING - ⚠️ Transformers não disponível: No module named 'transformers'
+2025-09-23 01:26:51,811 - LocalAI - INFO - 🔄 Usando implementação de fallback...
+2025-09-23 01:26:51,811 - LocalAI - INFO - ✅ TinyLLaMA fallback carregado!
+2025-09-23 01:26:51,811 - LocalAI - INFO - ✅ TinyLLaMA singleton inicializado com sucesso
+2025-09-23 01:26:51,812 - Kaori - INFO - 🤖 TinyLLaMA fallback carregado!
+2025-09-23 01:26:51,812 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 01:26:51,838 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-23 01:26:51,838 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-23 01:26:51,838 - Kaori - ERROR - Erro ao conectar PostgreSQL: name 'psycopg2' is not defined
+2025-09-23 01:26:51,838 - Kaori - ERROR - ❌ Database initialization failed: name 'psycopg2' is not defined
+2025-09-23 01:26:51,839 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 01:26:51,839 - Kaori - WARNING - ⚠️ DISCORD_TOKEN não encontrado nas variáveis de ambiente!
+2025-09-23 01:26:51,839 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-23 01:26:51,849 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.85.226:5000
+2025-09-23 01:26:51,850 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-23 01:29:09,076 - Kaori - WARNING - ⚠️ psycopg2 não disponível - modo sem banco
+2025-09-23 01:29:09,077 - LocalAI - INFO - 🆕 Primeira inicialização do TinyLLaMA
+2025-09-23 01:29:09,080 - LocalAI - INFO - 🤖 [ÚNICO] Inicializando TinyLLaMA real...
+2025-09-23 01:29:09,084 - LocalAI - WARNING - ⚠️ Transformers não disponível: No module named 'transformers'
+2025-09-23 01:29:09,085 - LocalAI - INFO - 🔄 Usando implementação de fallback...
+2025-09-23 01:29:09,085 - LocalAI - INFO - ✅ TinyLLaMA fallback carregado!
+2025-09-23 01:29:09,085 - LocalAI - INFO - ✅ TinyLLaMA singleton inicializado com sucesso
+2025-09-23 01:29:09,086 - Kaori - INFO - 🤖 TinyLLaMA fallback carregado!
+2025-09-23 01:29:09,087 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 01:29:09,147 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-23 01:29:09,148 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-23 01:29:09,148 - Kaori - ERROR - Erro ao conectar PostgreSQL: name 'psycopg2' is not defined
+2025-09-23 01:29:09,148 - Kaori - ERROR - ❌ Database initialization failed: name 'psycopg2' is not defined
+2025-09-23 01:29:09,148 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 01:29:09,149 - Kaori - WARNING - ⚠️ DISCORD_TOKEN não encontrado nas variáveis de ambiente!
+2025-09-23 01:29:09,149 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-23 01:29:09,185 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.85.226:5000
+2025-09-23 01:29:09,186 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-23 01:31:02,252 - Kaori - WARNING - ⚠️ psycopg2 não disponível - modo sem banco
+2025-09-23 01:31:02,253 - LocalAI - INFO - 🆕 Primeira inicialização do TinyLLaMA
+2025-09-23 01:31:02,253 - LocalAI - INFO - 🤖 [ÚNICO] Inicializando TinyLLaMA real...
+2025-09-23 01:31:02,253 - LocalAI - WARNING - ⚠️ Transformers não disponível: No module named 'transformers'
+2025-09-23 01:31:02,254 - LocalAI - INFO - 🔄 Usando implementação de fallback...
+2025-09-23 01:31:02,254 - LocalAI - INFO - ✅ TinyLLaMA fallback carregado!
+2025-09-23 01:31:02,254 - LocalAI - INFO - ✅ TinyLLaMA singleton inicializado com sucesso
+2025-09-23 01:31:02,254 - Kaori - INFO - 🤖 TinyLLaMA fallback carregado!
+2025-09-23 01:31:02,255 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 01:31:02,277 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-23 01:31:02,278 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-23 01:31:02,278 - Kaori - ERROR - ❌ Database initialization failed: 'NoneType' object has no attribute 'cursor'
+2025-09-23 01:31:02,279 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 01:31:02,279 - Kaori - WARNING - ⚠️ DISCORD_TOKEN não encontrado nas variáveis de ambiente!
+2025-09-23 01:31:02,279 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-23 01:31:02,334 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.85.226:5000
+2025-09-23 01:31:02,334 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-23 01:33:11,195 - Kaori - WARNING - ⚠️ psycopg2 não disponível - modo sem banco
+2025-09-23 01:33:11,196 - LocalAI - INFO - 🆕 Primeira inicialização do TinyLLaMA
+2025-09-23 01:33:11,196 - LocalAI - INFO - 🤖 [ÚNICO] Inicializando TinyLLaMA real...
+2025-09-23 01:33:11,196 - LocalAI - WARNING - ⚠️ Transformers não disponível: No module named 'transformers'
+2025-09-23 01:33:11,196 - LocalAI - INFO - 🔄 Usando implementação de fallback...
+2025-09-23 01:33:11,196 - LocalAI - INFO - ✅ TinyLLaMA fallback carregado!
+2025-09-23 01:33:11,196 - LocalAI - INFO - ✅ TinyLLaMA singleton inicializado com sucesso
+2025-09-23 01:33:11,196 - Kaori - INFO - 🤖 TinyLLaMA fallback carregado!
+2025-09-23 01:33:11,197 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 01:33:11,248 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-23 01:33:11,249 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-23 01:33:11,249 - Kaori - INFO - ⚠️ Banco de dados desabilitado - sem PostgreSQL ou DATABASE_URL
+2025-09-23 01:33:11,249 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 01:33:11,250 - Kaori - WARNING - ⚠️ DISCORD_TOKEN não encontrado nas variáveis de ambiente!
+2025-09-23 01:33:11,250 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-23 01:33:11,258 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.85.226:5000
+2025-09-23 01:33:11,258 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-23 12:33:50,421 - Kaori - WARNING - ⚠️ psycopg2 não disponível - modo sem banco
+2025-09-23 12:33:50,426 - LocalAI - INFO - 🆕 Primeira inicialização do TinyLLaMA
+2025-09-23 12:33:50,427 - LocalAI - INFO - 🤖 [ÚNICO] Inicializando TinyLLaMA real...
+2025-09-23 12:33:50,427 - LocalAI - WARNING - ⚠️ Transformers não disponível: No module named 'transformers'
+2025-09-23 12:33:50,427 - LocalAI - INFO - 🔄 Usando implementação de fallback...
+2025-09-23 12:33:50,427 - LocalAI - INFO - ✅ TinyLLaMA fallback carregado!
+2025-09-23 12:33:50,427 - LocalAI - INFO - ✅ TinyLLaMA singleton inicializado com sucesso
+2025-09-23 12:33:50,427 - Kaori - INFO - 🤖 TinyLLaMA fallback carregado!
+2025-09-23 12:33:50,428 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 12:33:50,454 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-23 12:33:50,454 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-23 12:33:50,454 - Kaori - INFO - ⚠️ Banco de dados desabilitado - sem PostgreSQL ou DATABASE_URL
+2025-09-23 12:33:50,454 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 12:33:50,455 - Kaori - WARNING - ⚠️ DISCORD_TOKEN não encontrado nas variáveis de ambiente!
+2025-09-23 12:33:50,455 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-23 12:33:50,470 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.125.130:5000
+2025-09-23 12:33:50,471 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-23 12:38:16,452 - Kaori - WARNING - ⚠️ psycopg2 não disponível - modo sem banco
+2025-09-23 12:38:16,459 - LocalAI - INFO - 🆕 Primeira inicialização do TinyLLaMA
+2025-09-23 12:38:16,459 - LocalAI - INFO - 🤖 [ÚNICO] Inicializando TinyLLaMA real...
+2025-09-23 12:38:16,460 - LocalAI - WARNING - ⚠️ Transformers não disponível: No module named 'transformers'
+2025-09-23 12:38:16,460 - LocalAI - INFO - 🔄 Usando implementação de fallback...
+2025-09-23 12:38:16,460 - LocalAI - INFO - ✅ TinyLLaMA fallback carregado!
+2025-09-23 12:38:16,460 - LocalAI - INFO - ✅ TinyLLaMA singleton inicializado com sucesso
+2025-09-23 12:38:16,460 - Kaori - ERROR - ❌ Erro na inicialização do TinyLLaMA: 'TinyLlamaAI' object has no attribute '_initializing'
+2025-09-23 12:38:16,461 - discord.client - WARNING - PyNaCl is not installed, voice will NOT be supported
+2025-09-23 12:38:16,485 - Kaori - INFO - 🚀 Iniciando RXBot + Dashboard...
+2025-09-23 12:38:16,486 - Kaori - INFO - 🎯 Inicializando sistema completo...
+2025-09-23 12:38:16,486 - Kaori - INFO - ⚠️ Banco de dados desabilitado - sem PostgreSQL ou DATABASE_URL
+2025-09-23 12:38:16,486 - Kaori - INFO - ✅ Database initialized successfully!
+2025-09-23 12:38:16,486 - Kaori - WARNING - ⚠️ DISCORD_TOKEN não encontrado nas variáveis de ambiente!
+2025-09-23 12:38:16,486 - Kaori - INFO - 🌐 Rodando apenas o servidor Flask para health check
+2025-09-23 12:38:16,501 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.125.130:5000
+2025-09-23 12:38:16,501 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
