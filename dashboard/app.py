@@ -131,44 +131,54 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=
 def get_bot_stats():
     """Obter estatísticas do bot"""
     try:
-        # Contar usuários únicos com tratamento de erro
-        try:
-            result = execute_query('SELECT COUNT(DISTINCT user_id) as total_users FROM users', fetch_one=True)
-            total_users = result['total_users'] if result else 0
-        except Exception as e:
-            logger.error(f"Erro ao contar usuários: {e}")
-            total_users = 0
+        # Verificar se as tabelas existem primeiro
+        total_users = 0
+        total_copinhas = 0
+        total_tickets = 0
+        total_giveaways = 0
         
-        # Contar copinhas criadas com tratamento de erro
         try:
-            result = execute_query('SELECT COUNT(*) as total_copinhas FROM copinhas', fetch_one=True)
-            total_copinhas = result['total_copinhas'] if result else 0
+            # Verificar se tabela users existe
+            test_result = execute_query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = %s", ['users'], fetch_one=True)
+            if test_result and test_result[0] > 0:
+                result = execute_query('SELECT COUNT(DISTINCT user_id) as total_users FROM users', fetch_one=True)
+                total_users = result['total_users'] if result else 0
         except Exception as e:
-            logger.error(f"Erro ao contar copinhas: {e}")
-            total_copinhas = 0
+            logger.warning(f"Tabela users não disponível: {e}")
         
-        # Contar tickets abertos com tratamento de erro
         try:
-            result = execute_query("SELECT COUNT(*) as total_tickets FROM tickets WHERE status = %s", ['open'], fetch_one=True)
-            total_tickets = result['total_tickets'] if result else 0
+            # Verificar se tabela copinhas existe
+            test_result = execute_query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = %s", ['copinhas'], fetch_one=True)
+            if test_result and test_result[0] > 0:
+                result = execute_query('SELECT COUNT(*) as total_copinhas FROM copinhas', fetch_one=True)
+                total_copinhas = result['total_copinhas'] if result else 0
         except Exception as e:
-            logger.error(f"Erro ao contar tickets: {e}")
-            total_tickets = 0
+            logger.warning(f"Tabela copinhas não disponível: {e}")
         
-        # Contar giveaways com tratamento de erro
         try:
-            result = execute_query('SELECT COUNT(*) as total_giveaways FROM giveaways', fetch_one=True)
-            total_giveaways = result['total_giveaways'] if result else 0
+            # Verificar se tabela tickets existe
+            test_result = execute_query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = %s", ['tickets'], fetch_one=True)
+            if test_result and test_result[0] > 0:
+                result = execute_query("SELECT COUNT(*) as total_tickets FROM tickets WHERE status = %s", ['open'], fetch_one=True)
+                total_tickets = result['total_tickets'] if result else 0
         except Exception as e:
-            logger.error(f"Erro ao contar giveaways: {e}")
-            total_giveaways = 0
+            logger.warning(f"Tabela tickets não disponível: {e}")
+        
+        try:
+            # Verificar se tabela giveaways existe
+            test_result = execute_query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = %s", ['giveaways'], fetch_one=True)
+            if test_result and test_result[0] > 0:
+                result = execute_query('SELECT COUNT(*) as total_giveaways FROM giveaways', fetch_one=True)
+                total_giveaways = result['total_giveaways'] if result else 0
+        except Exception as e:
+            logger.warning(f"Tabela giveaways não disponível: {e}")
         
         return {
             'total_users': total_users,
             'total_copinhas': total_copinhas,
             'total_tickets': total_tickets,
             'total_giveaways': total_giveaways,
-            'total_commands': 99
+            'total_commands': 90
         }
     except Exception as e:
         logger.error(f"Erro geral nas estatísticas: {e}")
@@ -177,7 +187,7 @@ def get_bot_stats():
             'total_copinhas': 0,
             'total_tickets': 0,
             'total_giveaways': 0,
-            'total_commands': 99
+            'total_commands': 90
         }
 
 @app.route('/')

@@ -154,6 +154,9 @@ from flask import Flask, render_template, jsonify, request
 import openai
 from openai import OpenAI
 
+# Local AI Integration - blueprint:python_llamacpp
+from local_ai import local_ai
+
 # Sistema de IA da Kaori com ChatGPT Real - blueprint:python_openai
 class KaoriAI:
     def __init__(self):
@@ -161,6 +164,7 @@ class KaoriAI:
         # do not change this unless explicitly requested by the user
         self.openai_client = None
         self.model = "gpt-5"
+        self.ai_mode = os.getenv('AI_MODE', 'auto')  # auto, openai, local
         self.initialize_openai()
         
         self.personality = {
@@ -238,13 +242,48 @@ Mantenha respostas concisas (máximo 2-3 frases) e sempre seja positiva e útil!
         
         return False
 
-    def get_response(self, user_message, user_name=""):
-        """Gera resposta da Kaori usando ChatGPT real ou fallback para respostas locais"""
+    async def get_response(self, user_message, user_name=""):
+        """Gera resposta da Kaori usando ChatGPT, IA Local ou fallback para respostas simples"""
         
-        # Tentar usar ChatGPT primeiro
-        if self.openai_client:
+        # Modo auto: tenta OpenAI primeiro, depois IA local
+        if self.ai_mode == "auto":
+            # Tentar OpenAI primeiro
+            if self.openai_client:
+                try:
+                    # Preparar mensagem com contexto do usuário
+                    user_context = f"Usuário: {user_name}\n" if user_name else ""
+                    full_message = f"{user_context}Mensagem: {user_message}"
+                    
+                    response = self.openai_client.chat.completions.create(
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": self.system_prompt},
+                            {"role": "user", "content": full_message}
+                        ],
+                        max_tokens=150  # Manter respostas concisas
+                    )
+                    
+                    ai_response = response.choices[0].message.content.strip()
+                    logger.info(f"🤖 OpenAI respondeu para {user_name or 'usuário'}")
+                    return ai_response
+                    
+                except Exception as e:
+                    logger.error(f"❌ Erro no OpenAI: {e}")
+                    # Continua para tentar IA local
+            
+            # Tentar IA Local se OpenAI falhar
+            if local_ai.is_initialized:
+                try:
+                    local_response = await local_ai.responder_ia(user_message)
+                    if local_response:
+                        logger.info(f"🤖 IA Local respondeu para {user_name or 'usuário'}")
+                        return local_response
+                except Exception as e:
+                    logger.error(f"❌ Erro na IA Local: {e}")
+        
+        # Modo OpenAI apenas
+        elif self.ai_mode == "openai" and self.openai_client:
             try:
-                # Preparar mensagem com contexto do usuário
                 user_context = f"Usuário: {user_name}\n" if user_name else ""
                 full_message = f"{user_context}Mensagem: {user_message}"
                 
@@ -254,21 +293,27 @@ Mantenha respostas concisas (máximo 2-3 frases) e sempre seja positiva e útil!
                         {"role": "system", "content": self.system_prompt},
                         {"role": "user", "content": full_message}
                     ],
-                    max_tokens=150  # Manter respostas concisas
+                    max_tokens=150
                 )
                 
                 ai_response = response.choices[0].message.content.strip()
-                
-                # Log da interação (sem expor dados sensíveis)
-                logger.info(f"🤖 ChatGPT respondeu para {user_name or 'usuário'}")
-                
+                logger.info(f"🤖 OpenAI respondeu para {user_name or 'usuário'}")
                 return ai_response
                 
             except Exception as e:
-                logger.error(f"❌ Erro no ChatGPT: {e}")
-                # Continuar para fallback
+                logger.error(f"❌ Erro no OpenAI: {e}")
         
-        # Fallback: respostas locais simples se ChatGPT falhar
+        # Modo IA Local apenas
+        elif self.ai_mode == "local" and local_ai.is_initialized:
+            try:
+                local_response = await local_ai.responder_ia(user_message)
+                if local_response:
+                    logger.info(f"🤖 IA Local respondeu para {user_name or 'usuário'}")
+                    return local_response
+            except Exception as e:
+                logger.error(f"❌ Erro na IA Local: {e}")
+        
+        # Fallback: respostas simples se todas as IAs falharem
         message_lower = user_message.lower()
         
         if any(word in message_lower for word in ["oi", "olá", "hello", "hi", "ola", "oii"]):
@@ -293,6 +338,14 @@ Mantenha respostas concisas (máximo 2-3 frases) e sempre seja positiva e útil!
         
         else:
             return "Interessante! 🤔 Me conte mais sobre isso, ou use `/ajuda` para ver o que posso fazer! 💫"
+    
+    def set_ai_mode(self, mode: str):
+        """Define o modo de IA (auto, openai, local)"""
+        if mode in ["auto", "openai", "local"]:
+            self.ai_mode = mode
+            logger.info(f"🔄 Modo de IA alterado para: {mode}")
+        else:
+            logger.warning(f"❌ Modo de IA inválido: {mode}")
 
 # Import PostgreSQL (obrigatório)
 import psycopg2
@@ -936,6 +989,25 @@ def init_database():
                 created_at {timestamp_type}
             )''')
 
+            # Migração: Verificar se a tabela interactive_messages existe
+            try:
+                cursor.execute("SELECT 1 FROM interactive_messages LIMIT 1")
+                logger.info("✅ Tabela interactive_messages verificada")
+            except Exception as table_check_error:
+                logger.info(f"ℹ️ Verificação tabela interactive_messages: {table_check_error}")
+                # Tentar criar novamente se necessário
+                cursor.execute(f'''CREATE TABLE IF NOT EXISTS interactive_messages (
+                    id {auto_increment},
+                    message_id {integer_type},
+                    channel_id {integer_type},
+                    guild_id {integer_type},
+                    message_type {text_type},
+                    data {text_type} DEFAULT '{{}}',
+                    status {text_type} DEFAULT 'active',
+                    created_at {timestamp_type}
+                )''')
+                logger.info("✅ Tabela interactive_messages recriada")
+
             # Tabela de partidas da copinha
             cursor.execute(f'''CREATE TABLE IF NOT EXISTS copinha_matches (
                 id {auto_increment},
@@ -1426,6 +1498,21 @@ async def cleanup_inactive_messages():
             conn = get_db_connection()
             cursor = conn.cursor()
             
+            # Verificar se a tabela existe antes de tentar limpar
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'interactive_messages'
+                )
+            """)
+            table_exists = cursor.fetchone()[0]
+            
+            if not table_exists:
+                logger.info("ℹ️ Tabela interactive_messages não existe - pulando limpeza")
+                conn.close()
+                return
+            
             # Buscar mensagens antigas (mais de 7 dias)
             cursor.execute('''
                 SELECT message_id, channel_id FROM interactive_messages 
@@ -1491,31 +1578,78 @@ async def check_giveaways():
             return
 
         for giveaway in finished_giveaways:
-            # Descompactar corretamente incluindo bet_amount (13 valores no total)
-            if len(giveaway) == 13:
-                giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, bet_amount, end_time, message_id, participants_json, status, created_at = giveaway
-            else:
-                # Fallback para estrutura antiga (12 valores)
-                giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, participants_json, status, created_at = giveaway
-                bet_amount = 0
-
             try:
-                channel = bot.get_channel(channel_id)
-                if not channel:
+                # Validar estrutura do giveaway primeiro
+                if not giveaway or len(giveaway) < 10:
+                    logger.warning(f"Estrutura de sorteio inválida: {giveaway}")
+                    continue
+                
+                # Descompactar corretamente incluindo bet_amount (13 valores no total)
+                if len(giveaway) == 13:
+                    giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, bet_amount, end_time, message_id, participants_json, status, created_at = giveaway
+                else:
+                    # Fallback para estrutura antiga (12 valores)
+                    giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, participants_json, status, created_at = giveaway
+                    bet_amount = 0
+
+                # Validar message_id antes de usar
+                if not message_id or message_id == "[]" or not str(message_id).isdigit():
+                    logger.error(f"Message ID inválido para sorteio {giveaway_id}: {message_id}")
+                    # Marcar sorteio como erro e continuar
+                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('error', giveaway_id))
                     continue
 
-                message = await channel.fetch_message(message_id)
-                if not message:
+                # Converter message_id para int se necessário
+                try:
+                    message_id = int(message_id)
+                except (ValueError, TypeError):
+                    logger.error(f"Não foi possível converter message_id para int: {message_id}")
+                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('error', giveaway_id))
+                    continue
+
+                # Validar outros IDs críticos
+                if not channel_id or not guild_id:
+                    logger.error(f"IDs críticos inválidos para sorteio {giveaway_id}: channel={channel_id}, guild={guild_id}")
+                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('error', giveaway_id))
+                    continue
+
+                channel = bot.get_channel(channel_id)
+                if not channel:
+                    logger.warning(f"Canal não encontrado: {channel_id}")
+                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('expired', giveaway_id))
+                    continue
+
+                # Tentar buscar mensagem com tratamento de erro
+                try:
+                    message = await channel.fetch_message(message_id)
+                    if not message:
+                        logger.warning(f"Mensagem não encontrada: {message_id}")
+                        execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('expired', giveaway_id))
+                        continue
+                except discord.NotFound:
+                    logger.warning(f"Mensagem deletada: {message_id}")
+                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('expired', giveaway_id))
+                    continue
+                except discord.HTTPException as http_err:
+                    logger.error(f"Erro HTTP ao buscar mensagem {message_id}: {http_err}")
+                    continue
+                except Exception as fetch_err:
+                    logger.error(f"Erro inesperado ao buscar mensagem {message_id}: {fetch_err}")
                     continue
 
                 # Obter participantes das reações
                 participants = []
-                for reaction in message.reactions:
-                    if str(reaction.emoji) == "🎉":
-                        async for user in reaction.users():
-                            if not user.bot:
-                                participants.append(user.id)
+                try:
+                    for reaction in message.reactions:
+                        if str(reaction.emoji) == "🎉":
+                            async for user in reaction.users():
+                                if not user.bot:
+                                    participants.append(user.id)
+                except Exception as reaction_err:
+                    logger.error(f"Erro ao obter reações: {reaction_err}")
+                    participants = []
 
+                # Determinar vencedores
                 if len(participants) < winners_count:
                     winners = participants
                 else:
@@ -1529,42 +1663,44 @@ async def check_giveaways():
 
                     # Se é sorteio de coins, distribuir automaticamente
                     if coin_amount > 0 and "coins" in prize.lower():
-
                         coins_per_winner = coin_amount // len(winners)
 
                         for winner_id in winners:
-                            # Adicionar coins usando execute_query
-                            winner_data = get_user_data(winner_id)
-                            if not winner_data:
-                                update_user_data(winner_id)
-                                current_coins = 50
-                            else:
-                                current_coins = winner_data[1]
-
-                            new_coins = current_coins + coins_per_winner
-                            execute_query('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, winner_id))
-
-                            # Registrar transação
-                            execute_query('''
-                                INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                                VALUES (%s, %s, %s, %s, %s)
-                            ''', (winner_id, guild_id, 'giveaway_win', coins_per_winner, f"Ganhou sorteio: {title}"))
-
-                            winner_mentions.append(f"<@{winner_id}>")
-
-                            # Notificar vencedor por DM
                             try:
-                                winner_user = bot.get_user(winner_id)
-                                if winner_user:
-                                    dm_embed = create_embed(
-                                        "🎉 Você Ganhou!",
-                                        f"Parabéns! Você ganhou **{coins_per_winner:,} coins** no sorteio **{title}**!\n\n"
-                                        f"Os coins foram automaticamente adicionados ao seu saldo.",
-                                        color=0xffd700
-                                    )
-                                    await winner_user.send(embed=dm_embed)
-                            except:
-                                pass
+                                # Adicionar coins usando execute_query
+                                winner_data = get_user_data(winner_id)
+                                if not winner_data:
+                                    update_user_data(winner_id)
+                                    current_coins = 50
+                                else:
+                                    current_coins = winner_data[1]
+
+                                new_coins = current_coins + coins_per_winner
+                                execute_query('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, winner_id))
+
+                                # Registrar transação
+                                execute_query('''
+                                    INSERT INTO transactions (user_id, guild_id, type, amount, description)
+                                    VALUES (%s, %s, %s, %s, %s)
+                                ''', (winner_id, guild_id, 'giveaway_win', coins_per_winner, f"Ganhou sorteio: {title}"))
+
+                                winner_mentions.append(f"<@{winner_id}>")
+
+                                # Notificar vencedor por DM
+                                try:
+                                    winner_user = bot.get_user(winner_id)
+                                    if winner_user:
+                                        dm_embed = create_embed(
+                                            "🎉 Você Ganhou!",
+                                            f"Parabéns! Você ganhou **{coins_per_winner:,} coins** no sorteio **{title}**!\n\n"
+                                            f"Os coins foram automaticamente adicionados ao seu saldo.",
+                                            color=0xffd700
+                                        )
+                                        await winner_user.send(embed=dm_embed)
+                                except Exception as dm_err:
+                                    logger.info(f"Não foi possível enviar DM para {winner_id}: {dm_err}")
+                            except Exception as winner_err:
+                                logger.error(f"Erro ao processar vencedor {winner_id}: {winner_err}")
 
                         embed = create_embed(
                             f"🎉 Sorteio de Coins Finalizado: {title}",
@@ -1593,16 +1729,24 @@ async def check_giveaways():
                         color=0xff6b6b
                     )
 
-                await channel.send(embed=embed)
+                # Enviar resultado no canal
+                try:
+                    await channel.send(embed=embed)
+                except Exception as send_err:
+                    logger.error(f"Erro ao enviar resultado do sorteio: {send_err}")
 
                 # Marcar como finalizado
                 execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('finished', giveaway_id))
+                logger.info(f"Sorteio {giveaway_id} finalizado com sucesso")
 
             except Exception as e:
-                logger.error(f"Erro ao finalizar sorteio {giveaway_id}: {e}")
+                logger.error(f"Erro ao finalizar sorteio {giveaway.get('id', 'unknown') if isinstance(giveaway, dict) else 'unknown'}: {e}")
+                # Marcar sorteio com erro para evitar tentar novamente
+                if 'giveaway_id' in locals():
+                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('error', giveaway_id))
 
     except Exception as e:
-        logger.error(f"Erro check_giveaways: {e}")
+        logger.error(f"Erro geral no check_giveaways: {e}")
 
 
 async def get_user_position(user_id, guild_id):
@@ -1683,6 +1827,22 @@ async def restore_interactive_messages():
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
+            
+            # Verificar se a tabela existe antes de tentar consultar
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'interactive_messages'
+                )
+            """)
+            table_exists = cursor.fetchone()[0]
+            
+            if not table_exists:
+                logger.info("ℹ️ Tabela interactive_messages não existe ainda - pulando restauração")
+                conn.close()
+                return
+            
             cursor.execute('''
                 SELECT message_id, channel_id, guild_id, message_type, data 
                 FROM interactive_messages 
@@ -3017,7 +3177,7 @@ async def on_message(message):
     
     if should_respond and content:
         try:
-            response = kaori_ai.get_response(content, message.author.display_name)
+            response = await kaori_ai.get_response(content, message.author.display_name)
             await message.reply(response)
         except Exception as e:
             logger.error(f"Erro no sistema IA: {e}")
@@ -7346,6 +7506,92 @@ async def slash_ban_user(interaction: discord.Interaction, usuario: discord.Memb
         await interaction.response.send_message(embed=embed)
     except:
         await interaction.response.send_message("Erro ao banir usuário!", ephemeral=True)
+
+@bot.tree.command(name="ia_trocar", description="Trocar modelo de IA da Kaori (Admin)")
+@app_commands.describe(
+    tipo="""Tipo de IA a usar:
+    - auto: OpenAI primeiro, depois IA local
+    - openai: Apenas OpenAI (ChatGPT)  
+    - local: Apenas IA local (LLaMA)""",
+    modelo="Nome do modelo local (.gguf) - apenas para modo 'local'"
+)
+@app_commands.choices(tipo=[
+    app_commands.Choice(name="Auto (OpenAI + Local)", value="auto"),
+    app_commands.Choice(name="OpenAI (ChatGPT)", value="openai"),
+    app_commands.Choice(name="Local (LLaMA)", value="local")
+])
+async def slash_trocar_ia(interaction: discord.Interaction, tipo: str, modelo: str = None):
+    """Slash command para trocar IA da Kaori (apenas admins)"""
+    try:
+        # Verificar se é admin ou usuário privilegiado
+        is_admin = (interaction.user.guild_permissions.administrator or 
+                   interaction.user.id == PRIVILEGED_USER_ID or
+                   interaction.user.id in USUARIOS_AUTORIZADOS_CARGOS)
+        
+        if not is_admin:
+            embed = create_embed(
+                "❌ Acesso Negado", 
+                "Apenas administradores podem trocar o sistema de IA!", 
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        # Status atual
+        status_ai = local_ai.get_status()
+        openai_status = "✅ Conectado" if kaori_ai.openai_client else "❌ Não configurado"
+        local_status = "✅ Carregado" if status_ai["inicializada"] else "❌ Não carregado"
+        
+        # Trocar modo de IA
+        if tipo in ["auto", "openai", "local"]:
+            kaori_ai.set_ai_mode(tipo)
+            
+            # Se modo local e modelo especificado, trocar modelo
+            if tipo == "local" and modelo:
+                if local_ai.trocar_modelo(modelo):
+                    modelo_info = f"\n🔄 Modelo trocado para: **{modelo}**"
+                else:
+                    modelo_info = f"\n❌ Erro ao trocar para modelo: **{modelo}**"
+            else:
+                modelo_info = ""
+            
+            # Criar embed de resposta
+            embed = create_embed(
+                "🤖 Sistema de IA Atualizado",
+                f"""**Modo atual:** {tipo.upper()}
+
+**Status dos sistemas:**
+🌐 **OpenAI ChatGPT:** {openai_status}
+🖥️ **IA Local:** {local_status}
+📦 **Modelo Local:** {status_ai['modelo_atual']}
+
+**Modelos disponíveis:** {len(status_ai['modelos_disponiveis'])} arquivos .gguf{modelo_info}
+
+**Como funciona:**
+• **Auto:** Tenta OpenAI primeiro, depois IA local
+• **OpenAI:** Usa apenas ChatGPT (requer API key)
+• **Local:** Usa apenas LLaMA local (requer modelo .gguf)""",
+                color=0x00ff88
+            )
+            
+            await interaction.response.send_message(embed=embed)
+            
+        else:
+            embed = create_embed(
+                "❌ Tipo Inválido", 
+                "Use: `auto`, `openai` ou `local`", 
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+    except Exception as e:
+        logger.error(f"Erro no comando /trocar: {e}")
+        embed = create_embed(
+            "❌ Erro", 
+            "Erro interno do sistema - verifique os logs", 
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="limpar_canal", description="Limpar mensagens do canal")
 async def slash_limpar_canal(interaction: discord.Interaction, quantidade: int):
