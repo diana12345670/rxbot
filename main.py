@@ -989,25 +989,6 @@ def init_database():
                 created_at {timestamp_type}
             )''')
 
-            # Migração: Verificar se a tabela interactive_messages existe
-            try:
-                cursor.execute("SELECT 1 FROM interactive_messages LIMIT 1")
-                logger.info("✅ Tabela interactive_messages verificada")
-            except Exception as table_check_error:
-                logger.info(f"ℹ️ Verificação tabela interactive_messages: {table_check_error}")
-                # Tentar criar novamente se necessário
-                cursor.execute(f'''CREATE TABLE IF NOT EXISTS interactive_messages (
-                    id {auto_increment},
-                    message_id {integer_type},
-                    channel_id {integer_type},
-                    guild_id {integer_type},
-                    message_type {text_type},
-                    data {text_type} DEFAULT '{{}}',
-                    status {text_type} DEFAULT 'active',
-                    created_at {timestamp_type}
-                )''')
-                logger.info("✅ Tabela interactive_messages recriada")
-
             # Tabela de partidas da copinha
             cursor.execute(f'''CREATE TABLE IF NOT EXISTS copinha_matches (
                 id {auto_increment},
@@ -1498,21 +1479,6 @@ async def cleanup_inactive_messages():
             conn = get_db_connection()
             cursor = conn.cursor()
             
-            # Verificar se a tabela existe antes de tentar limpar
-            cursor.execute("""
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.tables 
-                    WHERE table_schema = 'public' 
-                    AND table_name = 'interactive_messages'
-                )
-            """)
-            table_exists = cursor.fetchone()[0]
-            
-            if not table_exists:
-                logger.info("ℹ️ Tabela interactive_messages não existe - pulando limpeza")
-                conn.close()
-                return
-            
             # Buscar mensagens antigas (mais de 7 dias)
             cursor.execute('''
                 SELECT message_id, channel_id FROM interactive_messages 
@@ -1827,22 +1793,6 @@ async def restore_interactive_messages():
         with db_lock:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
-            # Verificar se a tabela existe antes de tentar consultar
-            cursor.execute("""
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.tables 
-                    WHERE table_schema = 'public' 
-                    AND table_name = 'interactive_messages'
-                )
-            """)
-            table_exists = cursor.fetchone()[0]
-            
-            if not table_exists:
-                logger.info("ℹ️ Tabela interactive_messages não existe ainda - pulando restauração")
-                conn.close()
-                return
-            
             cursor.execute('''
                 SELECT message_id, channel_id, guild_id, message_type, data 
                 FROM interactive_messages 
