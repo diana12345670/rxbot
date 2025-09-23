@@ -317,7 +317,7 @@ function logPerformance() {
 logPerformance();
 // Dashboard JavaScript for RXbot
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Kaori Dashboard loaded successfully!');
+    console.log('RXbot Dashboard loaded successfully!');
     
     // Auto-refresh stats every 30 seconds
     setInterval(updateStats, 30000);

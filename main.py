@@ -150,9 +150,71 @@ import hmac
 import requests # Importado para substituir aiohttp
 from flask import Flask, render_template, jsonify, request
 
-# Sistema de IA da Kaori - LOCAL AI (será carregado após configurar logging)
-USING_LOCAL_AI = False
-local_ai = None
+# Sistema de IA da Kaori
+class KaoriAI:
+    def __init__(self):
+        self.personality = {
+            "name": "Kaori",
+            "traits": [
+                "Carinhosa e atenciosa",
+                "Inteligente e útil", 
+                "Divertida e brincalhona",
+                "Sempre disposta a ajudar",
+                "Gosta de conversar sobre anime e tecnologia"
+            ],
+            "greeting_responses": [
+                "Oi! 🌸 Como posso ajudar você hoje?",
+                "Olá! ✨ Em que posso ser útil?",
+                "Oi querido! 💕 O que você gostaria de saber?",
+                "Olá! 🌟 Como está seu dia? Posso ajudar com algo?"
+            ],
+            "help_responses": [
+                "Claro! 💫 Posso ajudar com comandos, jogos, economia e muito mais!",
+                "Estou aqui para ajudar! ✨ Use `/ajuda` para ver todos os meus comandos!",
+                "Com certeza! 🌸 Sou especialista em diversão e utilidades!"
+            ],
+            "thanks_responses": [
+                "De nada! 💕 Fico feliz em ajudar!",
+                "Por nada! ✨ Sempre às ordens!",
+                "É um prazer! 🌸 Estou sempre aqui para você!"
+            ]
+        }
+    
+    def get_response(self, user_message, user_name=""):
+        """Gera resposta da Kaori baseada na mensagem do usuário"""
+        message_lower = user_message.lower()
+        
+        # Respostas para saudações
+        if any(word in message_lower for word in ["oi", "olá", "hello", "hi", "ola", "oii"]):
+            response = random.choice(self.personality["greeting_responses"])
+            if user_name:
+                response = response.replace("você", user_name)
+            return response
+        
+        # Respostas para pedidos de ajuda
+        elif any(word in message_lower for word in ["ajuda", "help", "como", "o que", "que você faz"]):
+            return random.choice(self.personality["help_responses"])
+        
+        # Respostas para agradecimentos
+        elif any(word in message_lower for word in ["obrigado", "obrigada", "thanks", "valeu", "brigado"]):
+            return random.choice(self.personality["thanks_responses"])
+        
+        # Respostas sobre si mesma
+        elif any(word in message_lower for word in ["quem é você", "quem você é", "seu nome", "como se chama"]):
+            return f"Eu sou a Kaori! 🌸 Sou sua assistente virtual carinhosa e estou aqui para tornar este servidor mais divertido! ✨"
+        
+        # Resposta padrão
+        else:
+            default_responses = [
+                f"Interessante! 🤔 Me conte mais sobre isso, ou use `/ajuda` para ver o que posso fazer!",
+                f"Hmm! 💭 Que tal tentarmos alguns comandos? Digite `/ajuda` para ver todas as opções!",
+                f"Oi! 🌸 Não entendi muito bem, mas posso ajudar com jogos, economia e muito mais! Use `/ajuda`!",
+                f"Que legal! ✨ Se precisar de alguma coisa específica, é só usar `/ajuda` para ver meus comandos!"
+            ]
+            return random.choice(default_responses)
+
+# Instanciar a IA da Kaori
+kaori_ai = KaoriAI()
 
 # Import PostgreSQL (obrigatório)
 import psycopg2
@@ -273,7 +335,7 @@ async def safe_send_response(interaction: discord.Interaction, embed=None, conte
                 interaction.channel and 
                 hasattr(interaction.channel, 'send') and 
                 not isinstance(interaction.channel, (discord.ForumChannel, discord.CategoryChannel))):
-                pass  # Mensagem de erro removida - mantido apenas log interno"
+                await interaction.channel.send("❌ Erro interno do bot. Tente novamente.")
         except Exception as fallback_error:
             logger.error(f"Erro no fallback de envio: {fallback_error}")
         return None
@@ -349,68 +411,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger('Kaori')
 
-# Sistema de IA da Kaori - LOCAL AI (após configurar logging)
-try:
-    from local_ai import local_ai
-    USING_LOCAL_AI = True
-    logger.info("🤖 IA Local carregada com sucesso!")
-except ImportError as e:
-    print(f"⚠️ IA Local não disponível, usando fallback: {e}")
-    logger.info(f"⚠️ IA Local não disponível, usando fallback: {e}")
-    USING_LOCAL_AI = False
-    
-    # Sistema de IA de fallback melhorado
-    class BasicKaoriAI:
-        def __init__(self):
-            self.responses = {
-                'cumprimento': [
-                    "Oi! 🌸 Como posso ajudar você hoje?",
-                    "Olá! ✨ Em que posso ser útil?", 
-                    "Hey! 💫 Pronto para ajudar!",
-                    "Salve! 🎮 O que precisamos fazer hoje?"
-                ],
-                'ajuda': [
-                    "Claro! Use `/ajuda` para ver todos os meus comandos! 💡",
-                    "Posso ajudar sim! Digite `/ajuda` para ver o que posso fazer! 🚀",
-                    "Com certeza! Use `/ping` para testar ou `/ajuda` para comandos! ⚡"
-                ],
-                'ping': [
-                    "Pong! 🏓 Estou funcionando perfeitamente!",
-                    "Pong! ⚡ Tudo certo por aqui!",
-                    "Pong! 🎯 Use `/ping` para ver minha latência!"
-                ],
-                'default': [
-                    "Interessante! 🤔 Use `/ajuda` para ver meus comandos!",
-                    "Que legal! ✨ Se precisar de algo, é só usar `/ajuda`!",
-                    "Legal! 🎉 Digite `/ping` para testar ou `/ajuda` para comandos!",
-                    "Bacana! 💫 Estou aqui para ajudar! Use `/ajuda` para ver o que posso fazer!"
-                ]
-            }
-            
-        def get_response(self, user_message, user_name=""):
-            content_lower = user_message.lower()
-            
-            if any(word in content_lower for word in ['oi', 'olá', 'hello', 'hey', 'salve', 'eae']):
-                return random.choice(self.responses['cumprimento'])
-            elif any(word in content_lower for word in ['como', 'help', 'ajuda', 'comando']):
-                return random.choice(self.responses['ajuda'])  
-            elif any(word in content_lower for word in ['ping', 'test', 'funcionando', 'online']):
-                return random.choice(self.responses['ping'])
-            else:
-                return random.choice(self.responses['default'])
-                
-        def generate_response(self, message, user_id=None, context=""):
-            return self.get_response(message)
-            
-        def is_ready(self):
-            return True
-            
-        @property
-        def current_model(self):
-            return "Kaori AI Básica (Fallback)"
-    
-    local_ai = BasicKaoriAI()
-
 # Configuração de intents
 intents = discord.Intents.all()
 intents.message_content = True
@@ -457,10 +457,7 @@ _db_connection_error_state = False
 # Detectar se está no Railway ou ambiente de produção
 def is_production():
     """Detectar se está rodando em produção (Railway)"""
-    # Replit tem DATABASE_URL mas não é considerado produção para Flask
-    if os.getenv('REPLIT_ENVIRONMENT'):
-        return False
-    return bool(os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RAILWAY_PROJECT_NAME'))
+    return bool(os.getenv('DATABASE_URL') or os.getenv('RAILWAY_ENVIRONMENT'))
 
 def get_db_connection():
     """Get PostgreSQL database connection with schema normalization"""
@@ -1636,7 +1633,7 @@ def save_interactive_message(message_id, channel_id, guild_id, message_type, dat
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO interactive_messages (message_id, channel_id, guild_id, type, data)
+                INSERT INTO interactive_messages (message_id, channel_id, guild_id, message_type, data)
                 VALUES (%s, %s, %s, %s, %s)
             ''', (message_id, channel_id, guild_id, message_type, json.dumps(data)))
             conn.commit()
@@ -1653,7 +1650,7 @@ async def restore_interactive_messages():
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute('''
-                SELECT message_id, channel_id, guild_id, type, data 
+                SELECT message_id, channel_id, guild_id, message_type, data 
                 FROM interactive_messages 
                 WHERE status = 'active'
             ''')
@@ -2095,7 +2092,7 @@ Mencione o bot para conversar!
 
     except Exception as e:
         logger.error(f"Erro no comando ajuda: {e}")
-        # Mensagem de erro removida - mantido apenas log"
+        await interaction.response.send_message("Erro ao carregar ajuda!", ephemeral=True)
 
 # 2. COMANDOS DE DIVERSÃO (25 comandos)
 # COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
@@ -2136,7 +2133,8 @@ async def slash_jokenpo(interaction: discord.Interaction, escolha: str):
         await safe_interaction_response(interaction, embed)
     except Exception as e:
         logger.error(f"Erro no jokenpo: {e}")
-        # Mensagem de erro removida - mantido apenas log
+        error_embed = create_embed("❌ Erro", "Erro no jogo!", color=0xff0000)
+        await safe_interaction_response(interaction, error_embed, ephemeral=True)
 
 # COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
 # @bot.tree.command(name="dado", description="Rolar um dado")
@@ -2157,7 +2155,8 @@ async def slash_dado(interaction: discord.Interaction, lados: int = 6):
         await safe_interaction_response(interaction, embed)
     except Exception as e:
         logger.error(f"Erro no dado: {e}")
-        # Mensagem de erro removida - mantido apenas log
+        error_embed = create_embed("❌ Erro", "Erro no dado!", color=0xff0000)
+        await safe_interaction_response(interaction, error_embed, ephemeral=True)
 
 # MAIS 270+ SLASH COMMANDS ADICIONADOS
 # COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
@@ -2176,7 +2175,8 @@ async def slash_moeda(interaction: discord.Interaction):
         await safe_interaction_response(interaction, embed)
     except Exception as e:
         logger.error(f"Erro na moeda: {e}")
-        # Mensagem de erro removida - mantido apenas log
+        error_embed = create_embed("❌ Erro", "Erro na moeda!", color=0xff0000)
+        await safe_interaction_response(interaction, error_embed, ephemeral=True)
 
 # COMANDO TEMPORARIAMENTE DESABILITADO PARA FICAR DENTRO DO LIMITE DE 100 SLASH COMMANDS
 # @bot.tree.command(name="piada", description="Contar uma piada")
@@ -2196,7 +2196,8 @@ async def slash_piada(interaction: discord.Interaction):
         await safe_interaction_response(interaction, embed)
     except Exception as e:
         logger.error(f"Erro na piada: {e}")
-        # Mensagem de erro removida - mantido apenas log
+        error_embed = create_embed("❌ Erro", "Erro na piada!", color=0xff0000)
+        await safe_interaction_response(interaction, error_embed, ephemeral=True)
 
 @bot.tree.command(name="copinha", description="Criar uma copinha/torneio de Stumble Guys")
 @app_commands.describe(
@@ -2233,8 +2234,8 @@ async def slash_copinha(interaction: discord.Interaction,
                        max_jogadores: int):
     """Slash command para criar copinha de Stumble Guys"""
     try:
-        # Verificar permissões (usuário privilegiado tem acesso total)
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_messages):
+        # Verificar permissões
+        if not interaction.user.guild_permissions.manage_messages:
             embed = create_embed(
                 "❌ Permissão negada", 
                 "Você precisa da permissão 'Gerenciar Mensagens' para criar copinhas!", 
@@ -2362,7 +2363,8 @@ async def slash_saldo(interaction: discord.Interaction, usuario: discord.Member 
         await safe_interaction_response(interaction, embed)
     except Exception as e:
         logger.error(f"Erro no saldo: {e}")
-        # Mensagem de erro removida - mantido apenas log
+        error_embed = create_embed("❌ Erro", "Erro ao carregar saldo!", color=0xff0000)
+        await safe_interaction_response(interaction, error_embed, ephemeral=True)
 
 @bot.tree.command(name="daily", description="Recompensa diária")
 async def slash_daily(interaction: discord.Interaction):
@@ -2568,7 +2570,7 @@ async def slash_weekly(interaction: discord.Interaction):
         await interaction.response.send_message(embed=embed)
     except Exception as e:
         logger.error(f"Erro no weekly: {e}")
-        # Mensagem de erro removida - mantido apenas log"
+        await interaction.response.send_message("Erro ao coletar weekly!", ephemeral=True)
 
 @bot.tree.command(name="monthly", description="Recompensa mensal")
 async def slash_monthly(interaction: discord.Interaction):
@@ -2915,288 +2917,62 @@ async def on_command_error(ctx, error):
 
 @bot.event
 async def on_message(message):
-    """Handler principal para mensagens - XP, IA e comandos"""
-    # Ignorar mensagens do próprio bot
-    if message.author.bot or message.author == bot.user:
+    """Processar mensagens para XP, IA e moderação"""
+    if message.author.bot:
         return
 
+    global_stats['messages_processed'] += 1
+
+    # Sistema de XP
     try:
-        global_stats['messages_processed'] += 1
-
-        # Sistema de XP
-        try:
-            leveled_up, new_level, rank_up, new_rank_id, old_rank_id = add_xp(message.author.id, XP_PER_MESSAGE)
-            
-            # Atualizar cargo Discord se houve rank up
-            if rank_up and message.guild:
-                try:
-                    member = message.guild.get_member(message.author.id)
-                    if member:
-                        await update_user_rank_role(member, new_rank_id)
-                except Exception as e:
-                    logger.error(f"Erro ao atualizar cargo de rank: {e}")
-
-            if leveled_up:
-                embed = create_embed(
-                    f"🎉 Level Up!",
-                    f"{message.author.mention} subiu para o **Level {new_level}**!",
-                    color=0xffd700
-                )
-                try:
-                    await message.channel.send(embed=embed, delete_after=10)
-                except:
-                    pass
-
-            if rank_up:
-                rank_data = RANK_SYSTEM[new_rank_id]
-                embed = create_embed(
-                    f"⭐ Rank Up!",
-                    f"{message.author.mention} alcançou o rank **{rank_data['emoji']} {rank_data['name']}**!",
-                    color=rank_data['color']
-                )
-                try:
-                    await message.channel.send(embed=embed, delete_after=15)
-                except:
-                    pass
-        except Exception as e:
-            logger.error(f"Erro no sistema XP: {e}")
-
-        # Sistema de IA - Verificar se bot foi mencionado OU se tem "kaori" no texto
-        mentioned_directly = bot.user in message.mentions
-        has_kaori_in_text = any(word in message.content.lower() for word in ['kaori', 'bot', 'ia'])
+        leveled_up, new_level, rank_up, new_rank_id, old_rank_id = add_xp(message.author.id, XP_PER_MESSAGE)
         
-        if mentioned_directly or has_kaori_in_text:
-            mention_type = "menção direta" if mentioned_directly else "kaori no texto"
-            logger.info(f"🎯 Kaori detectada ({mention_type}) por {message.author.display_name} em {message.guild.name if message.guild else 'DM'}")
-            
+        # Atualizar cargo Discord se houve rank up
+        if rank_up and message.guild:
             try:
-                # Remover menções do bot da mensagem
-                content = message.content
-                for mention_string in [f'<@{bot.user.id}>', f'<@!{bot.user.id}>']:
-                    content = content.replace(mention_string, '').strip()
-                
-                # Se não sobrou conteúdo, usar saudação padrão
-                if not content:
-                    content = "olá"
-                
-                logger.info(f"💬 Processando: '{content}'")
-                
-                # Gerar resposta com sistema de IA
-                if USING_LOCAL_AI and hasattr(local_ai, 'is_ready') and local_ai.is_ready():
-                    logger.info("🤖 Usando IA local avançada")
-                    response = local_ai.generate_response(
-                        content, 
-                        user_id=message.author.id,
-                        context=f"Servidor: {message.guild.name if message.guild else 'DM'}"
-                    )
-                else:
-                    # Sistema de fallback melhorado
-                    logger.info("🔄 Usando sistema de fallback")
-                    responses = [
-                        f"Oi {message.author.display_name}! 🌸 Como posso ajudar você hoje?",
-                        f"Olá! ✨ Em que posso ser útil?",
-                        f"Hey! 💫 Pronto para ajudar! Use `/ajuda` para ver meus comandos!",
-                        f"Salve! 🎮 O que precisamos fazer hoje?",
-                        f"Interessante! 🤔 Use `/ping` para testar ou `/ajuda` para comandos!",
-                        f"Oi! 😊 Mencione-me sempre que precisar de ajuda!"
-                    ]
-                    
-                    # Personalizar resposta baseada no conteúdo
-                    content_lower = content.lower()
-                    if any(word in content_lower for word in ['oi', 'olá', 'hello', 'hey', 'salve']):
-                        response = f"Olá {message.author.display_name}! 🌸 Como posso ajudar você hoje?"
-                    elif any(word in content_lower for word in ['como', 'help', 'ajuda']):
-                        response = f"Claro! Use `/ajuda` para ver todos os meus comandos! 💡"
-                    elif any(word in content_lower for word in ['ping', 'test', 'funcionando']):
-                        response = f"Pong! 🏓 Estou funcionando perfeitamente! Use `/ping` para ver minha latência!"
-                    else:
-                        response = random.choice(responses)
-                
-                logger.info(f"✅ Resposta: '{response}'")
-                
-                # Enviar resposta
-                await message.reply(response)
-                logger.info("📤 Resposta enviada com sucesso!")
-                
+                member = message.guild.get_member(message.author.id)
+                if member:
+                    await update_user_rank_role(member, new_rank_id)
             except Exception as e:
-                logger.error(f"Erro no sistema IA: {e}")
-                try:
-                    await message.reply("Ops! 🔧 Tive um probleminha técnico. Tente novamente em alguns instantes!")
-                except:
-                    logger.error("Falha ao enviar resposta de erro")
+                logger.error(f"Erro ao atualizar cargo de rank: {e}")
 
-        # Processar comandos tradicionais
-        await bot.process_commands(message)
-        
+        if leveled_up:
+            embed = create_embed(
+                f"🎉 Level Up!",
+                f"{message.author.mention} subiu para o **Level {new_level}**!",
+                color=0xffd700
+            )
+            await message.channel.send(embed=embed, delete_after=10)
+
+        if rank_up:
+            rank_data = RANK_SYSTEM[new_rank_id]
+            embed = create_embed(
+                f"⭐ Rank Up!",
+                f"{message.author.mention} alcançou o rank **{rank_data['emoji']} {rank_data['name']}**!",
+                color=rank_data['color']
+            )
+            await message.channel.send(embed=embed, delete_after=15)
     except Exception as e:
-        logger.error(f"Erro geral no on_message: {e}")
-        # Não falhar completamente - apenas logar
+        logger.error(f"Erro no sistema XP: {e}")
 
-# ID do servidor oficial RX CLAN (RX | Clã - #100)
-RX_CLAN_SERVER_ID = 1398027573967192214
+    # Sistema de IA (responder quando mencionado)
+    if bot.user.mentioned_in(message) and not message.mention_everyone:
+        try:
+            content = message.content.replace(f'<@{bot.user.id}>', '').strip()
+            if content:
+                response = ai_system.generate_response(content)
+                await message.reply(response)
+        except Exception as e:
+            logger.error(f"Erro no sistema IA: {e}")
 
-@bot.event
-async def on_member_join(member):
-    """Evento quando um membro entra no servidor - APENAS para RX CLAN"""
-    try:
-        # Verificar se é o servidor oficial RX CLAN
-        if member.guild.id != RX_CLAN_SERVER_ID:
-            # Ignorar completamente outros servidores - não enviar boas-vindas
-            logger.info(f"🚫 Boas-vindas ignoradas - servidor não é RX CLAN: {member.guild.name} (ID: {member.guild.id})")
-            return
-            
-        # Sistema de boas-vindas APENAS para RX CLAN
-        try:
-            # Canal de boas-vindas padrão (geral ou primeiro canal disponível)
-            welcome_channel = None
-            
-            # Buscar canal chamado "geral", "boas-vindas" ou similar
-            for channel in member.guild.text_channels:
-                if channel.name.lower() in ['geral', 'boas-vindas', 'welcome', 'chat-geral', '💬・chat-geral']:
-                    if channel.permissions_for(member.guild.me).send_messages:
-                        welcome_channel = channel
-                        break
-            
-            # Se não encontrou, usar o primeiro canal disponível
-            if not welcome_channel:
-                for channel in member.guild.text_channels:
-                    if channel.permissions_for(member.guild.me).send_messages:
-                        welcome_channel = channel
-                        break
-            
-            if welcome_channel:
-                # Mensagens de boas-vindas variadas da Kaori
-                welcome_messages = [
-                    f"🌸 Bem-vindo(a) ao **{member.guild.name}**, {member.mention}! Espero que se divirta muito aqui! ✨",
-                    f"🎉 Oi {member.mention}! Que bom te ver no **{member.guild.name}**! Sou a Kaori e estou aqui para ajudar! 💫",
-                    f"✨ {member.mention} entrou no servidor! Bem-vindo(a) ao **{member.guild.name}**! 🌟",
-                    f"🌺 Olá {member.mention}! Seja muito bem-vindo(a) ao **{member.guild.name}**! Divirta-se! 🎊",
-                    f"💖 {member.mention} chegou! Bem-vindo(a) ao nosso cantinho especial **{member.guild.name}**! 🏠"
-                ]
-                
-                welcome_text = random.choice(welcome_messages)
-                
-                # Criar embed de boas-vindas
-                embed = create_embed(
-                    "🎉 Novo Membro!",
-                    f"{welcome_text}\n\n"
-                    f"**👤 Membro:** {member.display_name}\n"
-                    f"**📊 Você é o membro #{member.guild.member_count}**\n"
-                    f"**📅 Conta criada:** <t:{int(member.created_at.timestamp())}:R>\n\n"
-                    f"**💡 Dicas:**\n"
-                    f"• Use `/ajuda` para ver meus comandos\n"
-                    f"• Digite `RXping` para testar\n"
-                    f"• Mencione-me para conversar!\n\n"
-                    f"🎮 **Divirta-se no {member.guild.name}!**",
-                    color=0x00ff00
-                )
-                
-                # Avatar do novo membro
-                embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
-                
-                # Footer com informações do servidor
-                embed.set_footer(
-                    text=f"🏛️ {member.guild.name} • Membro #{member.guild.member_count}",
-                    icon_url=member.guild.icon.url if member.guild.icon else None
-                )
-                
-                await welcome_channel.send(embed=embed)
-                
-                logger.info(f"🌸 Boas-vindas enviadas para {member.display_name} no RX CLAN (ID: {member.guild.id})")
-                
-        except Exception as welcome_error:
-            logger.error(f"Erro ao enviar boas-vindas: {welcome_error}")
-            # Fallback: mensagem simples se embed falhar
-            try:
-                if welcome_channel:
-                    await welcome_channel.send(f"🌸 Bem-vindo(a) {member.mention}! 🎉")
-            except:
-                pass
-                
-        # Adicionar cargo padrão se configurado (apenas no RX CLAN)
-        try:
-            # Buscar cargo "Membro" ou similar
-            default_roles = ['Membro', 'Member', 'Novato', 'Iniciante']
-            for role_name in default_roles:
-                role = discord.utils.get(member.guild.roles, name=role_name)
-                if role and role < member.guild.me.top_role:
-                    await member.add_roles(role, reason="Cargo automático de boas-vindas")
-                    logger.info(f"✅ Cargo '{role_name}' adicionado para {member.display_name}")
-                    break
-        except Exception as role_error:
-            logger.error(f"Erro ao adicionar cargo padrão: {role_error}")
-            
-    except Exception as e:
-        logger.error(f"Erro no evento on_member_join: {e}")
-
-@bot.event
-async def on_member_remove(member):
-    """Evento quando um membro sai do servidor - APENAS para RX CLAN"""
-    try:
-        # Verificar se é o servidor oficial RX CLAN
-        if member.guild.id != RX_CLAN_SERVER_ID:
-            # Ignorar completamente outros servidores - não enviar despedidas
-            logger.info(f"🚫 Despedida ignorada - servidor não é RX CLAN: {member.guild.name} (ID: {member.guild.id})")
-            return
-            
-        # Sistema de despedida APENAS para RX CLAN
-        try:
-            # Buscar canal de despedidas
-            goodbye_channel = None
-            
-            # Buscar canal chamado "geral", "despedidas" ou similar
-            for channel in member.guild.text_channels:
-                if channel.name.lower() in ['geral', 'despedidas', 'goodbye', 'chat-geral', '💬・chat-geral']:
-                    if channel.permissions_for(member.guild.me).send_messages:
-                        goodbye_channel = channel
-                        break
-            
-            # Se não encontrou, usar o primeiro canal disponível
-            if not goodbye_channel:
-                for channel in member.guild.text_channels:
-                    if channel.permissions_for(member.guild.me).send_messages:
-                        goodbye_channel = channel
-                        break
-            
-            if goodbye_channel:
-                goodbye_messages = [
-                    f"😢 {member.display_name} saiu do servidor... Até mais! 👋",
-                    f"🌸 Adeus {member.display_name}! Esperamos te ver novamente! ✨",
-                    f"👋 {member.display_name} nos deixou... Volte sempre! 💕",
-                    f"🍃 {member.display_name} partiu... As portas estão sempre abertas! 🚪",
-                ]
-                
-                goodbye_text = random.choice(goodbye_messages)
-                
-                embed = create_embed(
-                    "👋 Membro Saiu",
-                    f"{goodbye_text}\n\n"
-                    f"**👤 Membro:** {member.display_name}\n"
-                    f"**📊 Agora temos {member.guild.member_count} membros**\n"
-                    f"**⏱️ Ficou conosco:** <t:{int(member.joined_at.timestamp())}:R>",
-                    color=0xff9500
-                )
-                
-                await goodbye_channel.send(embed=embed)
-                logger.info(f"👋 Despedida enviada para {member.display_name} do RX CLAN (ID: {member.guild.id})")
-                
-        except Exception as goodbye_error:
-            logger.error(f"Erro ao enviar despedida: {goodbye_error}")
-            
-    except Exception as e:
-        logger.error(f"Erro no evento on_member_remove: {e}")
+    # Processar comandos
+    await bot.process_commands(message)
 
 @bot.event
 async def on_guild_join(guild):
     """Evento quando o bot entra em um novo servidor"""
     try:
         logger.info(f"🎉 Bot adicionado ao servidor: {guild.name} (ID: {guild.id})")
-        
-        # Verificar se é o servidor oficial
-        if guild.id == RX_CLAN_SERVER_ID:
-            logger.info(f"✅ Servidor oficial RX CLAN detectado: {guild.name}")
-        else:
-            logger.info(f"ℹ️ Servidor secundário: {guild.name} (boas-vindas desabilitadas)")
         
         # Criar cargo Kaori automaticamente
         await ensure_kaori_role(guild)
@@ -3211,7 +2987,42 @@ async def on_guild_join(guild):
         logger.error(f"Erro no evento on_guild_join: {e}")
         await send_error_to_privileged_user(f"Erro ao entrar no servidor {guild.name}: {e}", guild)
 
-
+@bot.event
+async def on_message(message):
+    """Handler para mensagens - inclui sistema de IA da Kaori"""
+    # Ignorar mensagens do próprio bot
+    if message.author == bot.user:
+        return
+    
+    # Verificar se o bot foi mencionado
+    if bot.user in message.mentions:
+        try:
+            # Remover a menção do bot da mensagem
+            content = message.content
+            for mention in message.mentions:
+                if mention == bot.user:
+                    content = content.replace(f'<@{mention.id}>', '').replace(f'<@!{mention.id}>', '').strip()
+            
+            # Se não sobrou conteúdo, usar saudação padrão
+            if not content:
+                content = "oi"
+            
+            # Gerar resposta da Kaori
+            user_name = message.author.display_name
+            ai_response = kaori_ai.get_response(content, user_name)
+            
+            # Responder na thread se for reply, senão no canal
+            if message.reference:
+                await message.reply(ai_response)
+            else:
+                await message.channel.send(ai_response)
+                
+        except Exception as e:
+            # Log silencioso para evitar spam
+            pass
+    
+    # Processar comandos normalmente
+    await bot.process_commands(message)
 
 @bot.event
 async def on_ready():
@@ -3414,7 +3225,7 @@ class CopinhaScoreboardView(discord.ui.View):
 
     @discord.ui.button(label="➕ Adicionar Troféus", style=discord.ButtonStyle.success, emoji="➕")
     async def add_points(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_messages):
+        if not interaction.user.guild_permissions.manage_messages:
             await interaction.response.send_message("❌ Apenas staff pode usar este botão!", ephemeral=True)
             return
         
@@ -3429,7 +3240,7 @@ class CopinhaScoreboardView(discord.ui.View):
 
     @discord.ui.button(label="➖ Remover Troféus", style=discord.ButtonStyle.danger, emoji="➖")
     async def remove_points(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_messages):
+        if not interaction.user.guild_permissions.manage_messages:
             await interaction.response.send_message("❌ Apenas staff pode usar este botão!", ephemeral=True)
             return
         
@@ -4062,316 +3873,59 @@ async def create_persistent_ticket_message(ctx_or_interaction):
 
         embed = create_embed(
             "🎫 Sistema de Tickets - RXbot",
-            "Clique no botão abaixo para criar um ticket de suporte!",
+            """**Precisa de ajuda? Crie um ticket!**
+
+**📋 Reaja com o emoji correspondente:**
+🐛 - Bug/Erro no bot
+💰 - Problema com economia  
+⚖️ - Denúncia/Moderação
+💡 - Sugestão/Ideia
+❓ - Dúvida geral
+🛠️ - Suporte técnico
+👑 - Ticket especial (apenas Tier)
+
+**⚡ Resposta rápida garantida!**
+*Equipe de suporte estará com você em breve*""",
             color=0x00ff00
         )
-        
-        # TODO: Add ticket view and message handling here
-        logger.info("Função create_persistent_ticket_message precisa ser implementada")
-        
+
+        if hasattr(ctx_or_interaction, 'respond'):  # Slash command
+            message = await ctx_or_interaction.respond(embed=embed)
+            if hasattr(message, 'message'):
+                message = message.message
+        elif hasattr(ctx_or_interaction, 'send'):  # Traditional command
+            message = await ctx_or_interaction.send(embed=embed)
+        else:
+            message = await channel.send(embed=embed)
+
+        # Adicionar reações
+        reactions = ["🐛", "💰", "⚖️", "💡", "❓", "🛠️", "👑"]
+        for emoji in reactions:
+            await message.add_reaction(emoji)
+
+        # Salvar no banco para persistir
+        save_interactive_message(
+            message.id, 
+            channel.id, 
+            guild.id, 
+            'ticket_creation',
+            {'user': user.id if user else None}
+        )
+
+        # Salvar em memória também
+        active_games[message.id] = {
+            'type': 'ticket_creation',
+            'channel_id': channel.id,
+            'guild_id': guild.id,
+            'user': user.id if user else None
+        }
+
+        logger.info(f"Mensagem de ticket persistente criada: {message.id}")
+        return message
+
     except Exception as e:
         logger.error(f"Erro ao criar mensagem de ticket persistente: {e}")
-
-# ============ COMANDOS DE CONTROLE DA IA LOCAL ============
-
-@bot.tree.command(name="ia_status", description="Ver status da IA local")
-async def slash_ia_status(interaction: discord.Interaction):
-    """Status da IA local"""
-    try:
-        if not USING_LOCAL_AI:
-            embed = create_embed(
-                "🤖 IA Local - Status",
-                "❌ **IA Local não disponível**\n\n"
-                "Usando sistema básico de fallback.\n"
-                "Para ativar IA local, instale as dependências necessárias.",
-                color=0xff6b6b
-            )
-        elif local_ai.is_ready():
-            info = local_ai.get_model_info()
-            embed = create_embed(
-                "🤖 IA Local - Status",
-                f"✅ **IA Local ATIVA**\n\n"
-                f"**📋 Modelo atual:** {info['current_model']}\n"
-                f"**🚀 Status:** {'Carregado' if info['loaded'] else 'Carregando...'}\n"
-                f"**💾 Conversas na memória:** {info['memory_conversations']}\n"
-                f"**🔧 Modelos disponíveis:** {', '.join(info['available_models'])}\n\n"
-                f"**💡 Use `/ia_trocar_modelo` para mudar o modelo!**",
-                color=0x00ff00
-            )
-        else:
-            embed = create_embed(
-                "🤖 IA Local - Status", 
-                "🔄 **Carregando IA Local...**\n\n"
-                "O modelo está sendo carregado em background.\n"
-                "Isso pode levar alguns minutos na primeira vez.",
-                color=0xffa500
-            )
-        
-        await interaction.response.send_message(embed=embed)
-        
-    except Exception as e:
-        logger.error(f"Erro no comando ia_status: {e}")
-        await interaction.response.send_message("❌ Erro ao verificar status da IA!", ephemeral=True)
-
-@bot.tree.command(name="ia_trocar_modelo", description="Trocar modelo de IA (Admin)")
-@app_commands.describe(modelo="Nome do modelo: gpt2-medium, distilgpt2, ou microsoft/DialoGPT-medium")
-@app_commands.choices(modelo=[
-    app_commands.Choice(name="GPT-2 Medium (355M) - Melhor qualidade", value="gpt2-medium"),
-    app_commands.Choice(name="DistilGPT-2 (82M) - Mais rápido", value="distilgpt2"),
-    app_commands.Choice(name="DialoGPT Medium - Especializado em diálogo", value="microsoft/DialoGPT-medium")
-])
-async def slash_ia_trocar_modelo(interaction: discord.Interaction, modelo: str):
-    """Trocar modelo de IA local"""
-    try:
-        # Verificar permissões (admin ou usuário privilegiado)
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
-            embed = create_embed("❌ Sem permissão", "Apenas administradores podem trocar o modelo de IA!", color=0xff0000)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        
-        if not USING_LOCAL_AI:
-            embed = create_embed("❌ IA Local indisponível", "IA Local não está configurada neste bot.", color=0xff0000)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        
-        # Trocar modelo
-        result = local_ai.switch_model(modelo)
-        
-        embed = create_embed(
-            "🔄 Trocando Modelo de IA",
-            f"{result}\n\n"
-            f"**📋 Novo modelo:** {modelo}\n"
-            f"**⏱️ Tempo estimado:** 1-3 minutos\n"
-            f"**👤 Solicitado por:** {interaction.user.mention}\n\n"
-            f"*A IA ficará temporariamente indisponível durante o carregamento.*",
-            color=0xffa500
-        )
-        
-        await interaction.response.send_message(embed=embed)
-        
-        # Log da ação
-        logger.info(f"Admin {interaction.user.name} trocou modelo de IA para: {modelo}")
-        
-    except Exception as e:
-        logger.error(f"Erro ao trocar modelo: {e}")
-        await interaction.response.send_message("❌ Erro ao trocar modelo de IA!", ephemeral=True)
-
-@bot.tree.command(name="ia_conversar", description="Conversar diretamente com a IA")
-@app_commands.describe(mensagem="Sua mensagem para a IA")
-async def slash_ia_conversar(interaction: discord.Interaction, mensagem: str):
-    """Conversar diretamente com IA local"""
-    try:
-        if not USING_LOCAL_AI:
-            embed = create_embed("❌ IA Local indisponível", "Use menções @bot para conversar.", color=0xff0000)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        
-        # Defer para dar tempo de processar
-        await interaction.response.defer()
-        
-        if local_ai.is_ready():
-            response = local_ai.generate_response(
-                mensagem,
-                user_id=interaction.user.id,
-                context=f"Comando direto - Canal: {interaction.channel.name}"
-            )
-        else:
-            response = "🔄 Ainda estou carregando meu cérebro! Tente novamente em alguns instantes. ✨"
-        
-        embed = create_embed(
-            "🤖 Kaori AI Local",
-            f"**💬 Você:** {mensagem}\n\n**🌸 Kaori:** {response}",
-            color=0x7289da
-        )
-        embed.set_footer(text=f"IA Local • Modelo: {local_ai.current_model if USING_LOCAL_AI else 'Básico'}")
-        
-        await interaction.followup.send(embed=embed)
-        
-    except Exception as e:
-        logger.error(f"Erro na conversa com IA: {e}")
-        try:
-            await interaction.followup.send("❌ Erro ao processar conversa com IA!", ephemeral=True)
-        except:
-            await interaction.response.send_message("❌ Erro ao processar conversa com IA!", ephemeral=True)
-
-@bot.tree.command(name="ia_aprender", description="Controlar sistema de aprendizado contínuo da IA (Admin)")
-@app_commands.describe(acao="Ativar, desativar ou ver status do aprendizado")
-@app_commands.choices(acao=[
-    app_commands.Choice(name="📚 Ativar aprendizado", value="ativar"),
-    app_commands.Choice(name="🚫 Desativar aprendizado", value="desativar"),
-    app_commands.Choice(name="📊 Ver estatísticas", value="status"),
-    app_commands.Choice(name="🏋️ Treinar agora", value="treinar"),
-    app_commands.Choice(name="🗑️ Limpar dados", value="limpar")
-])
-async def slash_ia_aprender(interaction: discord.Interaction, acao: str):
-    """Controlar sistema de aprendizado da IA"""
-    try:
-        # Verificar permissões (admin ou usuário privilegiado)
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
-            embed = create_embed("❌ Sem permissão", "Apenas administradores podem controlar o aprendizado da IA!", color=0xff0000)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        
-        if not USING_LOCAL_AI:
-            embed = create_embed("❌ IA Local indisponível", "IA Local não está configurada neste bot.", color=0xff0000)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        
-        if acao == "ativar":
-            local_ai.learning_enabled = True
-            embed = create_embed(
-                "✅ Aprendizado Ativado",
-                "🧠 **Sistema de aprendizado contínuo ATIVADO**\n\n"
-                "A IA agora aprende automaticamente com as conversas!\n\n"
-                "**Como funciona:**\n"
-                "• Analisa padrões de conversa\n"
-                "• Detecta sentimentos com Hugging Face\n"
-                "• Melhora respostas baseadas no feedback\n"
-                "• Salva conhecimento automaticamente\n\n"
-                "**Privacidade:** Apenas padrões são salvos, não dados pessoais.",
-                color=0x00ff00
-            )
-        
-        elif acao == "desativar":
-            local_ai.learning_enabled = False
-            embed = create_embed(
-                "🚫 Aprendizado Desativado",
-                "Sistema de aprendizado foi **DESATIVADO**.\n\n"
-                "A IA funcionará apenas com conhecimento base.",
-                color=0xff6600
-            )
-        
-        elif acao == "limpar":
-            local_ai.learning_data.clear()
-            local_ai.learning_patterns.clear()
-            local_ai._save_learning_data()
-            embed = create_embed(
-                "🗑️ Dados Limpos",
-                "Todos os dados de aprendizado foram limpos!\n\n"
-                "A IA voltará ao estado inicial de conhecimento.",
-                color=0x7289da
-            )
-        
-        elif acao == "treinar":
-            await interaction.response.defer()
-            result = local_ai.train_with_huggingface()
-            embed = create_embed(
-                "🏋️ Treinamento Executado",
-                f"{result}\n\n"
-                f"**Status:** {'Concluído' if '✅' in result else 'Erro'}\n"
-                f"**Executado por:** {interaction.user.mention}",
-                color=0x00ff00 if '✅' in result else 0xff0000
-            )
-            await interaction.followup.send(embed=embed)
-            return
-        
-        else:  # status
-            info = local_ai.get_model_info()
-            embed = create_embed(
-                "📊 Estatísticas de Aprendizado",
-                f"**🧠 Aprendizado:** {'🟢 Ativo' if info['learning_enabled'] else '🔴 Inativo'}\n"
-                f"**💬 Conversas aprendidas:** {info['learned_conversations']}\n"
-                f"**🎯 Padrões reconhecidos:** {info['learned_patterns']}\n"
-                f"**🤗 Hugging Face:** {'🟢 Disponível' if info['huggingface_available'] else '🔴 Indisponível'}\n"
-                f"**😊 Análise de sentimento:** {'🟢 Ativo' if info['sentiment_analysis'] else '🔴 Inativo'}\n\n"
-                f"**📋 Funcionalidades ativas:**\n"
-                f"• Detecção automática de 'kaori' no texto\n"
-                f"• Aprendizado com feedback positivo/negativo\n"
-                f"• Padrões de resposta personalizados\n"
-                f"• Análise de sentimento em tempo real",
-                color=0x00ff00 if info['learning_enabled'] else 0xff0000
-            )
-        
-        await interaction.response.send_message(embed=embed)
-        
-        # Log da ação
-        logger.info(f"Admin {interaction.user.name} {acao} sistema de aprendizado da IA")
-        
-    except Exception as e:
-        logger.error(f"Erro ao controlar aprendizado: {e}")
-        await interaction.response.send_message("❌ Erro ao controlar sistema de aprendizado!", ephemeral=True)
-
-@bot.tree.command(name="ia_pesquisa", description="Controlar sistema de pesquisa na internet da IA (Admin)")
-@app_commands.describe(acao="Ativar ou desativar pesquisa na internet")
-@app_commands.choices(acao=[
-    app_commands.Choice(name="🔍 Ativar pesquisa", value="ativar"),
-    app_commands.Choice(name="🚫 Desativar pesquisa", value="desativar"),
-    app_commands.Choice(name="📊 Ver status", value="status"),
-    app_commands.Choice(name="🗑️ Limpar cache", value="limpar_cache")
-])
-async def slash_ia_pesquisa(interaction: discord.Interaction, acao: str):
-    """Controlar sistema de pesquisa na internet"""
-    try:
-        # Verificar permissões (admin ou usuário privilegiado)
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
-            embed = create_embed("❌ Sem permissão", "Apenas administradores podem controlar a pesquisa da IA!", color=0xff0000)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        
-        if not USING_LOCAL_AI:
-            embed = create_embed("❌ IA Local indisponível", "IA Local não está configurada neste bot.", color=0xff0000)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        
-        if acao == "ativar":
-            local_ai.search_enabled = True
-            embed = create_embed(
-                "✅ Pesquisa Ativada",
-                "🔍 **Sistema de pesquisa na internet ATIVADO**\n\n"
-                "A IA agora pode pesquisar informações na internet quando não souber algo específico!\n\n"
-                "**Fontes utilizadas:**\n"
-                "• DuckDuckGo Instant Answer API\n"
-                "• Wikipedia (backup)\n\n"
-                "**Limitações:**\n"
-                "• Máximo 10 pesquisas por minuto\n"
-                "• Cache automático para evitar repetições",
-                color=0x00ff00
-            )
-        
-        elif acao == "desativar":
-            local_ai.search_enabled = False
-            embed = create_embed(
-                "🚫 Pesquisa Desativada",
-                "Sistema de pesquisa na internet foi **DESATIVADO**.\n\n"
-                "A IA funcionará apenas com o conhecimento local (DistilGPT2).",
-                color=0xff6600
-            )
-        
-        elif acao == "limpar_cache":
-            cache_size = len(local_ai.search_cache)
-            local_ai.search_cache.clear()
-            embed = create_embed(
-                "🗑️ Cache Limpo",
-                f"Cache de pesquisas foi limpo!\n\n"
-                f"**Entradas removidas:** {cache_size}\n"
-                f"**Status:** {'Ativo' if local_ai.search_enabled else 'Inativo'}",
-                color=0x7289da
-            )
-        
-        else:  # status
-            info = local_ai.get_model_info()
-            embed = create_embed(
-                "📊 Status da Pesquisa na Internet",
-                f"**🔍 Sistema:** {'🟢 Ativo' if info['search_enabled'] else '🔴 Inativo'}\n"
-                f"**💾 Cache:** {info['search_cache_size']} entradas salvas\n"
-                f"**🌐 Fontes:** DuckDuckGo, Wikipedia\n"
-                f"**⏱️ Limite:** 10 pesquisas/minuto\n\n"
-                f"**📋 Como funciona:**\n"
-                f"• IA detecta quando não sabe algo específico\n"
-                f"• Pesquisa automaticamente na internet\n"
-                f"• Combina conhecimento local + informações atuais\n"
-                f"• Cache inteligente evita pesquisas repetidas",
-                color=0x00ff00 if info['search_enabled'] else 0xff0000
-            )
-        
-        await interaction.response.send_message(embed=embed)
-        
-        # Log da ação
-        logger.info(f"Admin {interaction.user.name} {acao} sistema de pesquisa da IA")
-        
-    except Exception as e:
-        logger.error(f"Erro ao controlar pesquisa: {e}")
-        await interaction.response.send_message("❌ Erro ao controlar sistema de pesquisa!", ephemeral=True)
+        raise
 
 # ============ COMANDOS COM PREFIXO RX (NÃO-SLASH) ============
 
@@ -4379,7 +3933,7 @@ async def slash_ia_pesquisa(interaction: discord.Interaction, acao: str):
 async def rx_escolher_canais(ctx):
     """Comando RX para escolher canais padrão do servidor"""
     try:
-        if not (is_privileged_user(ctx.author.id) or ctx.author.guild_permissions.manage_channels):
+        if not ctx.author.guild_permissions.manage_channels:
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
             await ctx.send(embed=embed)
             return
@@ -4902,8 +4456,8 @@ async def slash_desbugar(interaction: discord.Interaction):
     try:
         global_stats['commands_used'] += 1
         
-        # Verificar permissões (usuário privilegiado tem acesso total)
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_messages):
+        # Verificar permissões
+        if not interaction.user.guild_permissions.manage_messages:
             embed = create_embed(
                 "❌ Permissão negada", 
                 "Você precisa da permissão 'Gerenciar Mensagens' para cancelar copinhas!", 
@@ -5799,8 +5353,8 @@ async def slash_estatisticas_bot(interaction: discord.Interaction):
 async def slash_clear(interaction: discord.Interaction, quantidade: int = 10):
     """Slash command para clear"""
     try:
-        # Verificar permissões (usuário privilegiado tem acesso total)
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_messages):
+        # Verificar permissões
+        if not interaction.user.guild_permissions.manage_messages:
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Mensagens'!", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -5867,7 +5421,7 @@ async def slash_warn(interaction: discord.Interaction, usuario: discord.Member, 
     """Slash command para warn"""
 
 
-    if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_messages):
+    if not interaction.user.guild_permissions.manage_messages:
         embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Mensagens'!", color=0xff0000)
         await safe_send_response(interaction, embed=embed)
         return
@@ -5938,8 +5492,8 @@ async def slash_warn(interaction: discord.Interaction, usuario: discord.Member, 
 async def slash_addcoins(interaction: discord.Interaction, usuario: discord.Member, quantidade: int, motivo: str = "Adição manual"):
     """Slash command para adicionar moedas (Admin only)"""
     try:
-        # Verificar se é administrador ou usuário privilegiado
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
+        # Verificar se é administrador
+        if not interaction.user.guild_permissions.administrator:
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão de 'Administrador' para usar este comando!", color=0xff0000)
             await safe_send_response(interaction, embed, ephemeral=True)
             return
@@ -6018,84 +5572,6 @@ async def slash_addcoins(interaction: discord.Interaction, usuario: discord.Memb
         )
         await safe_interaction_response(interaction, error_embed, ephemeral=True)
 
-@bot.tree.command(name="removecoins", description="Remover moedas de um usuário (Apenas usuário privilegiado)")
-async def slash_removecoins(interaction: discord.Interaction, usuario: discord.Member, quantidade: int, motivo: str = "Remoção manual"):
-    """Slash command para remover moedas (Privileged user only)"""
-    try:
-        # Verificar se é usuário privilegiado APENAS
-        if not is_privileged_user(interaction.user.id):
-            logger.warning(f"Usuário {interaction.user.name} tentou usar removecoins sem permissão")
-            return
-
-        # Validar quantidade
-        if quantidade <= 0:
-            logger.warning(f"Quantidade inválida no removecoins: {quantidade}")
-            return
-
-        if quantidade > 1000000:
-            logger.warning(f"Quantidade muito alta no removecoins: {quantidade}")
-            return
-
-        # Obter dados do usuário
-        user_data = get_user_data(usuario.id)
-        if not user_data:
-            update_user_data(usuario.id)
-            user_data = get_user_data(usuario.id)
-
-        current_coins = user_data[1] if user_data and len(user_data) > 1 else 50
-        
-        # Verificar se tem moedas suficientes
-        if current_coins < quantidade:
-            new_coins = 0
-            quantidade_removida = current_coins
-        else:
-            new_coins = current_coins - quantidade
-            quantidade_removida = quantidade
-
-        # Atualizar banco de dados com tratamento de erro
-        conn = None
-        try:
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-
-                cursor.execute('UPDATE users SET coins = %s WHERE user_id = %s', (new_coins, usuario.id))
-
-                # Registrar transação
-                cursor.execute('''
-                    INSERT INTO transactions (user_id, guild_id, type, amount, description)
-                    VALUES (%s, %s, %s, %s, %s)
-                ''', (usuario.id, interaction.guild.id, 'admin_remove', -quantidade_removida, f"Admin {interaction.user.name}: {motivo}"))
-
-                conn.commit()
-                conn.close()
-                conn = None
-
-            embed = create_embed(
-                "💸 Moedas Removidas!",
-                f"**Usuário:** {usuario.mention}\n"
-                f"**Quantidade:** -{quantidade_removida:,} moedas\n"
-                f"**Saldo anterior:** {current_coins:,} moedas\n"
-                f"**Novo saldo:** {new_coins:,} moedas\n"
-                f"**Motivo:** {motivo}\n"
-                f"**Admin:** {interaction.user.mention}",
-                color=0xff6b6b
-            )
-            await safe_interaction_response(interaction, embed)
-
-            # Log da ação
-            logger.info(f"Admin {interaction.user.name} removeu {quantidade_removida} moedas de {usuario.name}. Motivo: {motivo}")
-
-        except Exception as db_error:
-            logger.error(f"Database error in removecoins: {db_error}")
-            if conn:
-                conn.close()
-            return
-
-    except Exception as e:
-        logger.error(f"Erro no removecoins: {e}")
-        return
-
 @bot.tree.command(name="warns", description="Ver advertências de um usuário")
 async def slash_warns(interaction: discord.Interaction, usuario: discord.Member = None):
     """Slash command para warns"""
@@ -6130,7 +5606,7 @@ async def slash_ban(interaction: discord.Interaction, usuario: discord.Member, m
     """Slash command para ban"""
 
 
-    if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.ban_members):
+    if not interaction.user.guild_permissions.ban_members:
         embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Banir Membros'!", color=0xff0000)
         await safe_send_response(interaction, embed=embed)
         return
@@ -6180,7 +5656,7 @@ async def slash_kick(interaction: discord.Interaction, usuario: discord.Member, 
     """Slash command para kick"""
 
 
-    if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.kick_members):
+    if not interaction.user.guild_permissions.kick_members:
         embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Expulsar Membros'!", color=0xff0000)
         await safe_send_response(interaction, embed=embed)
         return
@@ -6543,7 +6019,7 @@ async def slash_ticket(interaction: discord.Interaction, motivo: str = None):
 async def slash_ticket_publico(interaction: discord.Interaction):
     """Slash command para criar painel público de tickets persistente"""
     try:
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_channels):
+        if not interaction.user.guild_permissions.manage_channels:
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -7139,9 +6615,8 @@ class MatchWinnerView(discord.ui.View):
     async def declare_winner(self, interaction, winning_team, team_name):
         """Declarar vencedor da partida"""
         try:
-            # Verificar permissões (criador da copinha, moderadores ou usuário privilegiado)
+            # Verificar permissões (criador da copinha ou moderadores)
             if not (interaction.user.id == self.creator_id or 
-                   is_privileged_user(interaction.user.id) or
                    interaction.user.guild_permissions.manage_messages):
                 await interaction.response.send_message(
                     "❌ Apenas o criador da copinha ou moderadores podem definir o vencedor!", 
@@ -7534,7 +7009,7 @@ async def slash_capitalize(interaction: discord.Interaction, texto: str):
 async def slash_lockdown(interaction: discord.Interaction, motivo: str = "Manutenção"):
     """Slash command para lockdown"""
     try:
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_channels):
+        if not interaction.user.guild_permissions.manage_channels:
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -7558,7 +7033,7 @@ async def slash_lockdown(interaction: discord.Interaction, motivo: str = "Manute
 async def slash_unlockdown(interaction: discord.Interaction):
     """Slash command para unlock"""
     try:
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_channels):
+        if not interaction.user.guild_permissions.manage_channels:
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -7582,7 +7057,7 @@ async def slash_unlockdown(interaction: discord.Interaction):
 async def slash_slowmode(interaction: discord.Interaction, segundos: int):
     """Slash command para slowmode"""
     try:
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_channels):
+        if not interaction.user.guild_permissions.manage_channels:
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -7617,7 +7092,7 @@ async def slash_slowmode(interaction: discord.Interaction, segundos: int):
 async def slash_nuke(interaction: discord.Interaction):
     """Slash command para nukar canal"""
     try:
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.manage_channels):
+        if not interaction.user.guild_permissions.manage_channels:
             embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -9306,7 +8781,7 @@ async def slash_purge(interaction: discord.Interaction, quantidade: int, filtro:
 async def slash_lockserver(interaction: discord.Interaction, motivo: str = "Emergência"):
     """Bloquear servidor inteiro"""
     try:
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
+        if not interaction.user.guild_permissions.administrator:
             embed = create_embed("❌ Sem permissão", "Você precisa ser administrador", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -9347,7 +8822,7 @@ async def slash_lockserver(interaction: discord.Interaction, motivo: str = "Emer
 async def slash_unlockserver(interaction: discord.Interaction):
     """Desbloquear servidor"""
     try:
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
+        if not interaction.user.guild_permissions.administrator:
             embed = create_embed("❌ Sem permissão", "Você precisa ser administrador", color=0xff0000)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -11602,7 +11077,7 @@ class CopinhaParticipationView(discord.ui.View):
     async def participate(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             # Buscar dados da copinha usando execute_query
-            copinha = execute_query('SELECT * FROM copinhas WHERE message_id = %s AND status = %s', (interaction.message.id, 'active'), fetch_one=True)
+            copinha = execute_query('SELECT * FROM copinhas WHERE message_id = %s AND status = %s', (interaction.message.id, "active"), fetch_one=True)
 
             if not copinha:
                 logger.error("Dados da copinha: Não encontrada")
@@ -12427,7 +11902,7 @@ class AdminCommandView(discord.ui.View):
 
     @discord.ui.button(label="📋 Resultado Teste Tier", style=discord.ButtonStyle.primary, emoji="👑")
     async def tier_result(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
+        if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Apenas administradores podem usar este comando!", ephemeral=True)
             return
         await interaction.response.send_modal(TierResultModal())
@@ -12441,7 +11916,7 @@ class AdminCommandView(discord.ui.View):
 
     @discord.ui.button(label="💰 Sorteio de Coins", style=discord.ButtonStyle.success, emoji="🎁")
     async def coin_giveaway(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
+        if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Apenas administradores podem criar sorteios de coins!", ephemeral=True)
             return
         await interaction.response.send_modal(CoinGiveawayModal(interaction.user.id))
@@ -15686,7 +15161,7 @@ class GiveawayCreateView(discord.ui.View):
     @discord.ui.button(label="🎁 Criar Sorteio", style=discord.ButtonStyle.primary, emoji="🎁")
     async def create_giveaway(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Verificar permissões
-        if not (is_privileged_user(interaction.user.id) or interaction.user.guild_permissions.administrator):
+        if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Apenas administradores podem criar sorteios!", ephemeral=True)
             return
 
@@ -19054,7 +18529,7 @@ def get_guild_stats():
             total_tickets = result[0] if result else 0
 
             # Total de eventos
-            cursor.execute("SELECT COUNT(*) FROM events WHERE status = 'active'")
+            cursor.execute('SELECT COUNT(*) FROM events WHERE status = "active"')
             result = cursor.fetchone()
             active_events = result[0] if result else 0
 
@@ -19062,7 +18537,7 @@ def get_guild_stats():
             try:
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='copinhas'")
                 if cursor.fetchone():
-                    cursor.execute("SELECT COUNT(*) FROM copinhas WHERE status = 'active'")
+                    cursor.execute('SELECT COUNT(*) FROM copinhas WHERE status = "active"')
                     result = cursor.fetchone()
                     active_copinhas = result[0] if result else 0
                 else:
