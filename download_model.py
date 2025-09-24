@@ -16,9 +16,9 @@ def download_model():
     models_dir = Path("models")
     models_dir.mkdir(exist_ok=True)
     
-    # Modelo pequeno e eficiente - TinyLlama 1.1B Q4_K_M (cerca de 700MB)
-    model_url = "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.q4_k_m.gguf"
-    model_name = "tinyllama-1.1b-chat-v1.0.q4_k_m.gguf"
+    # Modelo pequeno e eficiente - Phi-3 Mini Q4_K_M (cerca de 2.3GB - dentro do limite do Railway)
+    model_url = "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf"
+    model_name = "phi-3-mini-4k-instruct-q4.gguf"
     model_path = models_dir / model_name
     
     if model_path.exists():

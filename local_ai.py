@@ -241,7 +241,7 @@ class LocalAI:
             models_dir = Path("models")
             models_dir.mkdir(exist_ok=True)
             
-            model_name = "tinyllama-1.1b-chat-v1.0.q4_k_m.gguf"
+            model_name = "phi-3-mini-4k-instruct-q4.gguf"
             model_path = models_dir / model_name
             
             if model_path.exists():
@@ -249,10 +249,10 @@ class LocalAI:
                 self._initialize_llama()
                 return True
             
-            # URL do modelo pequeno (700MB)
-            model_url = "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.q4_k_m.gguf"
+            # URL do modelo pequeno (2.3GB - compatível com Railway)
+            model_url = "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf"
             
-            logger.info("📥 Baixando TinyLlama (700MB)...")
+            logger.info("📥 Baixando Phi-3 Mini (2.3GB)...")
             response = requests.get(model_url, stream=True, timeout=300)
             response.raise_for_status()
             
