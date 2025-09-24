@@ -72,7 +72,16 @@ class LocalAI:
                 
             else:
                 logger.warning("⚠️ Nenhum modelo .gguf encontrado na pasta 'models'")
-                logger.info("📥 Para usar IA local, baixe um modelo GGUF e coloque na pasta 'models'")
+                logger.info("📥 Para usar IA local, execute: python download_model.py")
+                logger.info("🤖 Ou use o modelo TinyLlama recomendado (700MB)")
+                
+                # Tentar download automático do modelo pequeno
+                try:
+                    logger.info("🔄 Tentando download automático do TinyLlama...")
+                    self._auto_download_model()
+                except Exception as download_error:
+                    logger.warning(f"⚠️ Download automático falhou: {download_error}")
+                    logger.info("💡 Execute manualmente: python rxbot/download_model.py")
                 
         except ImportError:
             logger.warning("⚠️ llama-cpp-python não instalado - IA local desabilitada")
@@ -223,6 +232,43 @@ class LocalAI:
             "config": self.config
         }
     
+    def _auto_download_model(self):
+        """Tenta fazer download automático do modelo pequeno"""
+        try:
+            import requests
+            from pathlib import Path
+            
+            models_dir = Path("models")
+            models_dir.mkdir(exist_ok=True)
+            
+            model_name = "tinyllama-1.1b-chat-v1.0.q4_k_m.gguf"
+            model_path = models_dir / model_name
+            
+            if model_path.exists():
+                logger.info(f"✅ Modelo encontrado: {model_name}")
+                self._initialize_llama()
+                return True
+            
+            # URL do modelo pequeno (700MB)
+            model_url = "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.q4_k_m.gguf"
+            
+            logger.info("📥 Baixando TinyLlama (700MB)...")
+            response = requests.get(model_url, stream=True, timeout=300)
+            response.raise_for_status()
+            
+            with open(model_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            
+            logger.info(f"✅ Modelo baixado: {model_name}")
+            self._initialize_llama()
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Erro no download automático: {e}")
+            return False
+
     def set_config(self, **kwargs):
         """Atualiza configurações da IA"""
         for key, value in kwargs.items():

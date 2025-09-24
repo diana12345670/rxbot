@@ -1479,12 +1479,24 @@ async def cleanup_inactive_messages():
             conn = get_db_connection()
             cursor = conn.cursor()
             
+            # Limpar sorteios com message_id inválido
+            cursor.execute('''
+                UPDATE giveaways 
+                SET status = 'error' 
+                WHERE (message_id IS NULL OR message_id = '' OR message_id = '[]') 
+                AND status = 'active'
+            ''')
+            invalid_giveaways = cursor.rowcount
+            
             # Buscar mensagens antigas (mais de 7 dias)
             cursor.execute('''
                 SELECT message_id, channel_id FROM interactive_messages 
                 WHERE created_at < NOW() - INTERVAL '7 days' AND status = 'active'
             ''')
             old_messages = cursor.fetchall()
+            
+            if invalid_giveaways > 0:
+                logger.info(f"🧹 {invalid_giveaways} sorteios com message_id inválido marcados como erro")
             
             cleaned = 0
             for msg_data in old_messages:
@@ -1544,21 +1556,45 @@ async def check_giveaways():
             return
 
         for giveaway in finished_giveaways:
-            # Descompactar corretamente incluindo bet_amount (13 valores no total)
-            if len(giveaway) == 13:
-                giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, bet_amount, end_time, message_id, participants_json, status, created_at = giveaway
-            else:
-                # Fallback para estrutura antiga (12 valores)
-                giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, participants_json, status, created_at = giveaway
-                bet_amount = 0
-
             try:
+                # Verificar estrutura da tupla/lista retornada
+                if isinstance(giveaway, (list, tuple)) and len(giveaway) >= 11:
+                    # Descompactar corretamente incluindo bet_amount (13 valores no total)
+                    if len(giveaway) == 13:
+                        giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, bet_amount, end_time, message_id, participants_json, status, created_at = giveaway
+                    else:
+                        # Fallback para estrutura antiga (12 valores)
+                        giveaway_id, guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, participants_json, status, created_at = giveaway
+                        bet_amount = 0
+                else:
+                    logger.error(f"Estrutura de giveaway inválida: {giveaway}")
+                    continue
+
+                # Validar message_id antes de usar
+                if not message_id or message_id == "[]" or not str(message_id).isdigit():
+                    logger.error(f"Message ID inválido para sorteio {giveaway_id}: {message_id}")
+                    # Marcar como finalizado para evitar loop
+                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('error', giveaway_id))
+                    continue
+
+                # Converter para int se necessário
+                try:
+                    message_id = int(message_id)
+                except (ValueError, TypeError):
+                    logger.error(f"Não foi possível converter message_id para int: {message_id}")
+                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('error', giveaway_id))
+                    continue
+
                 channel = bot.get_channel(channel_id)
                 if not channel:
+                    logger.warning(f"Canal {channel_id} não encontrado para sorteio {giveaway_id}")
+                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('cancelled', giveaway_id))
                     continue
 
                 message = await channel.fetch_message(message_id)
                 if not message:
+                    logger.warning(f"Mensagem {message_id} não encontrada para sorteio {giveaway_id}")
+                    execute_query('UPDATE giveaways SET status = %s WHERE id = %s', ('cancelled', giveaway_id))
                     continue
 
                 # Obter participantes das reações
@@ -6241,6 +6277,12 @@ class GiveawayModal(discord.ui.Modal):
                 conn = get_db_connection()
                 cursor = conn.cursor()
                 
+                # Validar message.id antes de salvar
+                if not message or not hasattr(message, 'id') or not message.id:
+                    logger.error("Message ID inválido ao criar sorteio")
+                    await interaction.followup.send("❌ Erro interno ao criar sorteio!", ephemeral=True)
+                    return
+                
                 # Query corrigida para PostgreSQL/SQLite
                 cursor.execute('''
                     INSERT INTO giveaways (guild_id, channel_id, creator_id, title, prize, winners_count, end_time, message_id, status)
@@ -6253,11 +6295,13 @@ class GiveawayModal(discord.ui.Modal):
                     prize,
                     winners_count,
                     end_time,
-                    message.id,
+                    int(message.id),  # Garantir que seja um int
                     'active'
                 ))
                 conn.commit()
                 conn.close()
+                
+                logger.info(f"Sorteio criado com message_id: {message.id}")
             
             await interaction.followup.send("✅ Sorteio criado com sucesso!", ephemeral=True)
             
