@@ -1,22 +1,22 @@
 {% extends "base.html" %}
 
-{% block title %}RXbot Dashboard - Início{% endblock %}
+{% block title %}Kaori Dashboard - Início{% endblock %}
 
 {% block content %}
 <div class="row mb-4">
     <div class="col-12">
         <div class="hero-section text-center py-5 bg-gradient rounded">
-            <h1 class="display-4 mb-3" style="color: var(--primary-color);">
-                <i class="fas fa-robot me-3"></i>RXbot Dashboard
+            <h1 class="display-4 mb-3 text-primary">
+                <i class="fas fa-cat me-3"></i>Kaori Dashboard
             </h1>
-            <p class="lead mb-4" style="color: var(--primary-color);">
-                Bot Discord completo com sistema de copinhas/torneios do Stumble Guys
+            <p class="lead mb-4 text-primary opacity-90">
+                kori completa com sistema de copinhas/torneios do Stumble Guys
             </p>
             <div class="d-flex justify-content-center gap-3 flex-wrap">
                 <a href="/commands" class="btn btn-light btn-lg">
                     <i class="fas fa-terminal me-2"></i>Ver Comandos
                 </a>
-                <a href="/tutorials" class="btn btn-outline-light btn-lg">
+                <a href="/tutorials" class="btn btn-outline-primary btn-lg">
                     <i class="fas fa-graduation-cap me-2"></i>Tutoriais
                 </a>
             </div>
@@ -29,10 +29,10 @@
         <div class="card stat-card h-100">
             <div class="card-body text-center">
                 <div class="stat-icon bg-primary text-white rounded-circle mx-auto mb-3">
-                    <i class="fas fa-terminal"></i>
+                    <i class="fas fa-paw"></i>
                 </div>
                 <h3 class="card-title">{{ stats.total_commands }}</h3>
-                <p class="card-text">Comandos Slash</p>
+                <p class="card-text">Comandos Gatinho</p>
             </div>
         </div>
     </div>
@@ -40,10 +40,10 @@
         <div class="card stat-card h-100">
             <div class="card-body text-center">
                 <div class="stat-icon bg-success text-white rounded-circle mx-auto mb-3">
-                    <i class="fas fa-users"></i>
+                    <i class="fas fa-cat"></i>
                 </div>
                 <h3 class="card-title">{{ stats.total_users }}</h3>
-                <p class="card-text">Usuários Registrados</p>
+                <p class="card-text">Gatinhos Registrados</p>
             </div>
         </div>
     </div>
@@ -51,10 +51,10 @@
         <div class="card stat-card h-100">
             <div class="card-body text-center">
                 <div class="stat-icon bg-warning text-white rounded-circle mx-auto mb-3">
-                    <i class="fas fa-trophy"></i>
+                    <i class="fas fa-crown"></i>
                 </div>
                 <h3 class="card-title">{{ stats.total_copinhas }}</h3>
-                <p class="card-text">Copinhas Criadas</p>
+                <p class="card-text">Competições Felinas</p>
             </div>
         </div>
     </div>
@@ -62,10 +62,10 @@
         <div class="card stat-card h-100">
             <div class="card-body text-center">
                 <div class="stat-icon bg-info text-white rounded-circle mx-auto mb-3">
-                    <i class="fas fa-ticket-alt"></i>
+                    <i class="fas fa-heart"></i>
                 </div>
                 <h3 class="card-title">{{ stats.total_tickets }}</h3>
-                <p class="card-text">Tickets Ativos</p>
+                <p class="card-text">Ajudas Ativas</p>
             </div>
         </div>
     </div>
@@ -74,24 +74,24 @@
 <div class="row g-4">
     <div class="col-lg-6">
         <div class="card feature-card h-100">
-            <div class="card-header bg-primary text-white">
+            <div class="card-header text-white" style="background: linear-gradient(135deg, #8B4B9C 0%, #6B3B7C 100%);">
                 <h5 class="mb-0">
-                    <i class="fas fa-trophy me-2"></i>Sistema de Copinhas
+                    <i class="fas fa-crown me-2"></i>Sistema de Competições Felinas
                 </h5>
             </div>
             <div class="card-body">
                 <p class="card-text">
-                    Sistema completo de torneios para Stumble Guys com:
+                    🐱 Sistema completo de torneios para Stumble Guys com:
                 </p>
                 <ul class="list-unstyled">
-                    <li><i class="fas fa-shield-alt text-warning me-2"></i>Apenas moderadores podem criar</li>
-                    <li><i class="fas fa-check text-success me-2"></i>Criação automática de brackets</li>
-                    <li><i class="fas fa-check text-success me-2"></i>Tickets privados para partidas</li>
-                    <li><i class="fas fa-check text-success me-2"></i>Formatos 1v1, 2v2, 3v3</li>
-                    <li><i class="fas fa-check text-success me-2"></i>Até 32 participantes</li>
-                    <li><i class="fas fa-check text-success me-2"></i>Progressão automática</li>
+                    <li><i class="fas fa-paw text-warning me-2"></i>Apenas gatinhos moderadores podem criar</li>
+                    <li><i class="fas fa-heart text-success me-2"></i>Criação automática de brackets</li>
+                    <li><i class="fas fa-heart text-success me-2"></i>Tickets privados para partidas</li>
+                    <li><i class="fas fa-heart text-success me-2"></i>Formatos 1v1, 2v2, 3v3</li>
+                    <li><i class="fas fa-heart text-success me-2"></i>Até 32 participantes</li>
+                    <li><i class="fas fa-heart text-success me-2"></i>Progressão automática</li>
                 </ul>
-                <a href="/tutorials" class="btn btn-primary">Ver Tutorial</a>
+                <a href="/tutorials" class="btn btn-cat">🐾 Ver Tutorial</a>
             </div>
         </div>
     </div>
@@ -99,21 +99,21 @@
         <div class="card feature-card h-100">
             <div class="card-header bg-success text-white">
                 <h5 class="mb-0">
-                    <i class="fas fa-coins me-2"></i>Sistema de Economia
+                    <i class="fas fa-fish me-2"></i>Sistema de Peixinhos (Economia)
                 </h5>
             </div>
             <div class="card-body">
                 <p class="card-text">
-                    Sistema de moedas completo com:
+                    🐟 Sistema de peixinhos completo com:
                 </p>
                 <ul class="list-unstyled">
-                    <li><i class="fas fa-check text-success me-2"></i>Recompensas diárias, semanais e mensais</li>
-                    <li><i class="fas fa-check text-success me-2"></i>Sistema de trabalho</li>
-                    <li><i class="fas fa-check text-success me-2"></i>Roubar coins de outros usuários</li>
-                    <li><i class="fas fa-check text-success me-2"></i>Loja com itens especiais</li>
-                    <li><i class="fas fa-check text-success me-2"></i>Inventário personalizado</li>
+                    <li><i class="fas fa-heart text-success me-2"></i>Recompensas diárias, semanais e mensais</li>
+                    <li><i class="fas fa-heart text-success me-2"></i>Sistema de caça aos peixinhos</li>
+                    <li><i class="fas fa-heart text-success me-2"></i>Roubar peixinhos de outros gatinhos</li>
+                    <li><i class="fas fa-heart text-success me-2"></i>Loja com brinquedos especiais</li>
+                    <li><i class="fas fa-heart text-success me-2"></i>Inventário personalizado</li>
                 </ul>
-                <a href="/commands" class="btn btn-success">Ver Comandos</a>
+                <a href="/commands" class="btn btn-success">🐾 Ver Comandos</a>
             </div>
         </div>
     </div>
@@ -124,18 +124,18 @@
         <div class="card">
             <div class="card-header bg-info text-white">
                 <h5 class="mb-0">
-                    <i class="fas fa-rocket me-2"></i>Recursos Principais
+                    <i class="fas fa-star me-2"></i>Habilidades Felinas Principais
                 </h5>
             </div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <div class="d-flex align-items-start">
-                            <div class="feature-icon bg-primary text-white rounded me-3">
-                                <i class="fas fa-gamepad"></i>
+                            <div class="feature-icon text-white rounded me-3" style="background: #8B4B9C;">
+                                <i class="fas fa-paw"></i>
                             </div>
                             <div>
-                                <h6>Sistema Dual de Comandos</h6>
+                                <h6>🐱 Sistema Dual de Comandos</h6>
                                 <small class="text-muted">Use tanto /comando quanto RX comando</small>
                             </div>
                         </div>
@@ -143,10 +143,10 @@
                     <div class="col-md-4 mb-3">
                         <div class="d-flex align-items-start">
                             <div class="feature-icon bg-warning text-white rounded me-3">
-                                <i class="fas fa-shield-alt"></i>
+                                <i class="fas fa-cat"></i>
                             </div>
                             <div>
-                                <h6>Moderação Completa</h6>
+                                <h6>🛡️ Moderação Felina</h6>
                                 <small class="text-muted">Ban, kick, mute, warn e muito mais</small>
                             </div>
                         </div>
@@ -154,10 +154,10 @@
                     <div class="col-md-4 mb-3">
                         <div class="d-flex align-items-start">
                             <div class="feature-icon bg-success text-white rounded me-3">
-                                <i class="fas fa-dice"></i>
+                                <i class="fas fa-heart"></i>
                             </div>
                             <div>
-                                <h6>Jogos e Diversão</h6>
+                                <h6>🎮 Jogos e Diversão</h6>
                                 <small class="text-muted">Jokenpô, dados, quiz e mais</small>
                             </div>
                         </div>

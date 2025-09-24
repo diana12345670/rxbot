@@ -1,4 +1,4 @@
-// Dashboard JavaScript - RXbot
+// Dashboard JavaScript - Kaori
 
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize tooltips
@@ -315,12 +315,12 @@ function logPerformance() {
 
 // Initialize performance monitoring
 logPerformance();
-// Dashboard JavaScript for RXbot
+// Additional initialization for Kaori Dashboard
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('RXbot Dashboard loaded successfully!');
+    console.log('Kaori Dashboard loaded successfully!');
     
-    // Auto-refresh stats every 30 seconds
-    setInterval(updateStats, 30000);
+    // Auto-refresh stats every 30 seconds using existing refreshStats function
+    // (removing duplicate to avoid conflicts)
     
     // Update statistics
     function updateStats() {

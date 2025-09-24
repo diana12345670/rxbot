@@ -1,26 +1,52 @@
-/* Dashboard CSS - RXbot */
+/* Dashboard CSS - Kaori */
 
 :root {
-    --primary-color: #0d6efd;
-    --success-color: #198754;
+    --primary-color: #8B4B9C;
+    --bs-primary: #8B4B9C;
+    --bs-primary-rgb: 139, 75, 156;
+    --bs-primary-bg-subtle: #F3E8F5;
+    --bs-primary-border-subtle: #E1C7E8;
+    --bs-primary-text-emphasis: #4A2A52;
+    --success-color: #28a745;
     --warning-color: #ffc107;
-    --info-color: #0dcaf0;
+    --info-color: #17a2b8;
     --danger-color: #dc3545;
-    --dark-color: #212529;
-    --light-color: #f8f9fa;
-    --gradient-primary: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);
-    --gradient-success: linear-gradient(135deg, #198754 0%, #20c997 100%);
+    --dark-color: #2C1B3D;
+    --light-color: #FAF8FB;
+    --cat-purple: #8B4B9C;
+    --cat-pink: #D4A5DC;
+    --cat-cream: #FFF8E7;
+    --gradient-primary: linear-gradient(135deg, #8B4B9C 0%, #6B3B7C 100%);
+    --gradient-success: linear-gradient(135deg, #28a745 0%, #20c997 100%);
     --gradient-warning: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
-    --shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-    --shadow-md: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-    --shadow-lg: 0 1rem 3rem rgba(0, 0, 0, 0.175);
+    --shadow-sm: 0 0.125rem 0.25rem rgba(139, 75, 156, 0.075);
+    --shadow-md: 0 0.5rem 1rem rgba(139, 75, 156, 0.15);
+    --shadow-lg: 0 1rem 3rem rgba(139, 75, 156, 0.175);
 }
 
 /* Global Styles */
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: #f8f9fa;
+    background: linear-gradient(135deg, #FAF8FB 0%, #F3E8F5 100%);
     line-height: 1.6;
+    position: relative;
+}
+
+/* Adicionar padrão sutil de patas de gato */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: 
+        radial-gradient(circle at 20% 20%, rgba(139, 75, 156, 0.03) 2px, transparent 3px),
+        radial-gradient(circle at 80% 80%, rgba(212, 165, 220, 0.03) 2px, transparent 3px),
+        radial-gradient(circle at 40% 60%, rgba(139, 75, 156, 0.02) 1px, transparent 2px);
+    background-size: 60px 60px, 80px 80px, 40px 40px;
+    pointer-events: none;
+    z-index: -1;
 }
 
 /* Navigation */
@@ -62,8 +88,15 @@ body {
 
 /* Stat Cards */
 .stat-card {
-    background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
-    border-left: 4px solid var(--primary-color);
+    background: linear-gradient(135deg, #fff 0%, #FAF8FB 100%);
+    border-left: 4px solid var(--cat-purple);
+    border-radius: 20px;
+    box-shadow: 0 4px 15px rgba(139, 75, 156, 0.1);
+}
+
+.stat-card:hover {
+    background: linear-gradient(135deg, #FAF8FB 0%, #F3E8F5 100%);
+    border-left-color: var(--cat-pink);
 }
 
 .stat-icon {
@@ -197,7 +230,7 @@ body {
 }
 
 .accordion-button:not(.collapsed) {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #6610f2 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, #c41e3a 100%);
     color: white;
 }
 
@@ -406,12 +439,58 @@ footer a:hover {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #6610f2 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, #c41e3a 100%);
     border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #0b5ed7 0%, #5a0fc8 100%);
+    background: linear-gradient(135deg, #bb2d3b 0%, #a02630 100%);
+}
+
+/* Bootstrap Overrides for Cat Theme */
+.bg-primary {
+    background-color: #8B4B9C !important;
+    background: linear-gradient(135deg, #8B4B9C 0%, #6B3B7C 100%) !important;
+}
+
+.btn-primary {
+    background-color: #8B4B9C !important;
+    border-color: #8B4B9C !important;
+    background: linear-gradient(135deg, #8B4B9C 0%, #6B3B7C 100%) !important;
+    border-radius: 25px;
+    padding: 0.6rem 1.5rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    box-shadow: 0 4px 15px rgba(139, 75, 156, 0.3);
+}
+
+.btn-primary:hover, .btn-primary:focus {
+    background-color: #6B3B7C !important;
+    border-color: #6B3B7C !important;
+    background: linear-gradient(135deg, #6B3B7C 0%, #5A2B6A 100%) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(139, 75, 156, 0.4);
+}
+
+.text-primary {
+    color: #8B4B9C !important;
+}
+
+/* Botões especiais com tema gato */
+.btn-cat {
+    background: linear-gradient(135deg, #D4A5DC 0%, #B98BC4 100%);
+    border: none;
+    border-radius: 20px;
+    color: white;
+    font-weight: 600;
+    padding: 0.5rem 1.2rem;
+    transition: all 0.3s ease;
+}
+
+.btn-cat:hover {
+    background: linear-gradient(135deg, #B98BC4 0%, #A078B2 100%);
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 5px 15px rgba(212, 165, 220, 0.4);
 }
 
 /* Smooth Transitions */

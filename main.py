@@ -10137,6 +10137,12 @@ async def on_member_join(member):
     if member.bot:
         return
 
+    # Verificar se o membro entrou no servidor específico
+    TARGET_GUILD_ID = 1398027573967192214
+    if member.guild.id != TARGET_GUILD_ID:
+        logger.info(f"Membro {member.name} entrou em servidor diferente ({member.guild.id}), ignorando boas-vindas")
+        return
+
     try:
         # Canal específico para boas-vindas
         welcome_channel_id = 1398027575028220013  # <#1398027575028220013>
@@ -19033,24 +19039,17 @@ def api_user(user_id):
         return jsonify({'error': 'Erro interno do servidor'}), 500
 
 def run_dashboard():
-    """Executar o dashboard Flask usando gunicorn para produção"""
+    """Executar o dashboard Flask para Railway"""
     port = int(os.getenv('PORT', 5000))
     
-    # Verificar se está em produção (Railway/Heroku)
-    if is_production():
-        print(f"🌐 Modo produção detectado - use: gunicorn main:app --bind 0.0.0.0:{port}")
-        print(f"🔗 Para testar localmente, execute: gunicorn main:app --bind 0.0.0.0:{port} --reload")
-        # Em produção, o gunicorn será iniciado externamente
-        # Não executar app.run() aqui
-        return
-    else:
-        # Modo desenvolvimento - usar Flask diretamente
-        print(f"🌐 Modo desenvolvimento - iniciando Flask na porta {port}")
-        try:
-            app.run(host='0.0.0.0', port=port, debug=False, threaded=True, use_reloader=False)
-        except Exception as e:
-            print(f"❌ Erro ao iniciar Flask: {e}")
-            raise
+    print(f"🌐 Iniciando Flask na porta {port}")
+    try:
+        # Rodar Flask diretamente no Railway
+        app.run(host='0.0.0.0', port=port, debug=False, threaded=True, use_reloader=False)
+    except Exception as e:
+        print(f"❌ Erro ao iniciar Flask: {e}")
+        logger.error(f"❌ Erro ao iniciar Flask: {e}")
+        raise
 
 def start_dashboard():
     """Iniciar dashboard Flask em thread separada"""
