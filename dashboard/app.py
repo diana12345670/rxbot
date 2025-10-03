@@ -8,6 +8,7 @@ import threading
 import logging
 import time
 from datetime import datetime
+import random
 
 app = Flask(__name__)
 CORS(app)
@@ -28,38 +29,38 @@ def get_db_connection():
     database_url = os.getenv('DATABASE_URL')
     if not database_url:
         raise Exception("DATABASE_URL não encontrada. PostgreSQL é obrigatório.")
-    
+
     try:
         conn = psycopg2.connect(database_url)
         conn.autocommit = False
-        
+
         # Normalize schema to 'public' and log connection details
         cursor = conn.cursor()
         cursor.execute("SET search_path TO public;")
-        
+
         # Log diagnostic information (mask credentials) - only log once or after error recovery
         global _db_connection_logged, _db_connection_error_state
-        
+
         if not _db_connection_logged or _db_connection_error_state:
             cursor.execute("SELECT current_database(), current_user, current_setting('search_path');")
             result = cursor.fetchone()
             if result:
                 db_name, db_user, search_path = result
-                
+
                 # Mask user details for security
                 masked_user = db_user[:3] + "***" if len(db_user) > 3 else "***"
-                
+
                 if _db_connection_error_state:
                     logger.info(f"🔄 Dashboard DB Reconnected: {db_name} | User: {masked_user} | Schema: {search_path}")
                 else:
                     logger.info(f"🔗 Dashboard DB Connected: {db_name} | User: {masked_user} | Schema: {search_path}")
-                
+
                 _db_connection_logged = True
                 _db_connection_error_state = False
         else:
             # Still need to set search path, just don't log it
             cursor.execute("SET search_path TO public;")
-        
+
         conn.commit()
         return conn
     except Exception as e:
@@ -71,24 +72,24 @@ def get_db_connection():
 def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=10):
     """Executar query PostgreSQL com melhor tratamento de erros"""
     max_retries = 3
-    
+
     # All queries now use native PostgreSQL %s placeholders
     if '?' in query:
         raise ValueError(f"SQLite placeholder '?' detected in query. Use '%s' instead: {query}")
-    
+
     # Validar parâmetros
     if params is None:
         params = []
     elif not isinstance(params, (list, tuple)):
         params = [params]
-    
+
     for attempt in range(max_retries):
         conn = None
         try:
             with db_lock:
                 conn = get_db_connection()
                 cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-                
+
                 try:
                     if params:
                         cursor.execute(query, params)
@@ -117,15 +118,15 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False, timeout=
                 finally:
                     if conn:
                         conn.close()
-                        
+
         except Exception as e:
             logger.error(f"Erro crítico no execute_query (tentativa {attempt + 1}): {e}")
             if attempt == max_retries - 1:
                 return None
-            
+
         # Pausa progressiva antes de tentar novamente
         time.sleep(0.1 * (attempt + 1))
-    
+
     return None
 
 def get_bot_stats():
@@ -138,7 +139,7 @@ def get_bot_stats():
         except Exception as e:
             logger.error(f"Erro ao contar usuários: {e}")
             total_users = 0
-        
+
         # Contar copinhas criadas com tratamento de erro
         try:
             result = execute_query('SELECT COUNT(*) as total_copinhas FROM copinhas', fetch_one=True)
@@ -146,7 +147,7 @@ def get_bot_stats():
         except Exception as e:
             logger.error(f"Erro ao contar copinhas: {e}")
             total_copinhas = 0
-        
+
         # Contar tickets abertos com tratamento de erro
         try:
             result = execute_query("SELECT COUNT(*) as total_tickets FROM tickets WHERE status = %s", ['open'], fetch_one=True)
@@ -154,7 +155,7 @@ def get_bot_stats():
         except Exception as e:
             logger.error(f"Erro ao contar tickets: {e}")
             total_tickets = 0
-        
+
         # Contar giveaways com tratamento de erro
         try:
             result = execute_query('SELECT COUNT(*) as total_giveaways FROM giveaways', fetch_one=True)
@@ -162,12 +163,21 @@ def get_bot_stats():
         except Exception as e:
             logger.error(f"Erro ao contar giveaways: {e}")
             total_giveaways = 0
-        
+
+        # Contar eventos do clan (todos, não apenas ativos)
+        try:
+            result = execute_query('SELECT COUNT(*) as total_events FROM events', fetch_one=True)
+            total_events = result['total_events'] if result else 0
+        except Exception as e:
+            logger.error(f"Erro ao contar eventos: {e}")
+            total_events = 0
+
         return {
             'total_users': total_users,
             'total_copinhas': total_copinhas,
             'total_tickets': total_tickets,
             'total_giveaways': total_giveaways,
+            'total_events': total_events, # Added total_events to the return dictionary
             'total_commands': 99
         }
     except Exception as e:
@@ -177,6 +187,7 @@ def get_bot_stats():
             'total_copinhas': 0,
             'total_tickets': 0,
             'total_giveaways': 0,
+            'total_events': 0, # Added total_events to the return dictionary
             'total_commands': 99
         }
 
@@ -315,7 +326,7 @@ def tutorials():
             'description': 'Mantenha seu servidor organizado e seguro',
             'steps': [
                 '/ban [usuário] [motivo] - Banir definitivamente',
-                '/kick [usuário] [motivo] - Expulsar temporariamente', 
+                '/kick [usuário] [motivo] - Expulsar temporariamente',
                 '/mute [usuário] [tempo] - Silenciar por tempo',
                 '/unmute [usuário] - Remover silenciamento',
                 '/clear [quantidade] - Limpar mensagens (max 100)',
@@ -339,31 +350,31 @@ def health_db():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         # Get database information
         cursor.execute("SELECT current_database(), current_user, current_setting('search_path');")
         result = cursor.fetchone()
         if not result:
             return jsonify({'status': 'error', 'message': 'No database info returned'}), 500
         db_name, db_user, search_path = result
-        
+
         # Check table existence in public schema
         cursor.execute("""
-            SELECT table_name FROM information_schema.tables 
-            WHERE table_schema = 'public' 
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = 'public'
             ORDER BY table_name
         """)
         tables = [row[0] for row in cursor.fetchall()]
-        
+
         # Check for core tables
         core_tables = ['users', 'tickets', 'giveaways', 'copinhas']
         missing_tables = [table for table in core_tables if table not in tables]
-        
+
         conn.close()
-        
+
         # Mask sensitive information
         masked_user = db_user[:3] + "***" if len(db_user) > 3 else "***"
-        
+
         return jsonify({
             'status': 'healthy' if not missing_tables else 'issues_detected',
             'database': db_name,
@@ -376,13 +387,74 @@ def health_db():
             },
             'all_tables': tables[:20]  # Limit to first 20 for readability
         })
-        
+
     except Exception as e:
         return jsonify({
             'status': 'error',
             'error': str(e),
             'database_url_set': bool(os.getenv('DATABASE_URL'))
         }), 500
+
+@app.route('/rxrandownplayers', methods=['POST'])
+def rxrandownplayers():
+    """Sorteia jogadores para copinhas com inscrições abertas."""
+    try:
+        with db_lock:
+            # Busca copinhas ativas e com vagas abertas
+            copinhas_ativas = execute_query("""
+                SELECT
+                    c.id,
+                    c.title as nome,
+                    c.team_format as formato,
+                    c.max_players as max_jogadores,
+                    jsonb_array_length(COALESCE(c.participants, '[]'::jsonb)) AS jogadores_inscritos
+                FROM copinhas c
+                WHERE c.status IN ('inscricoes', 'active')
+                AND jsonb_array_length(COALESCE(c.participants, '[]'::jsonb)) < c.max_players
+            """, fetch_all=True)
+
+            if not copinhas_ativas:
+                return jsonify({'message': 'Nenhuma copinha com vagas abertas encontrada no momento.'}), 404
+
+            # Seleciona uma copinha aleatoriamente para o sorteio
+            copinha_sorteada = random.choice(copinhas_ativas)
+
+            # Busca todos os jogadores inscritos na copinha sorteada
+            copinha_data = execute_query("""
+                SELECT participants FROM copinhas WHERE id = %s
+            """, [copinha_sorteada['id']], fetch_one=True)
+
+            if not copinha_data or not copinha_data['participants']:
+                return jsonify({'message': f'Nenhum participante encontrado para a copinha {copinha_sorteada["nome"]}.'}), 404
+            
+            # Converte JSON de participantes para lista
+            import json
+            participantes = json.loads(copinha_data['participants']) if isinstance(copinha_data['participants'], str) else copinha_data['participants']
+            
+            if not participantes:
+                return jsonify({'message': f'Nenhum participante encontrado para a copinha {copinha_sorteada["nome"]}.'}), 404
+
+            # Embaralha os participantes (que já são IDs de usuários)
+            random.shuffle(participantes)
+
+            # Atualiza o status da copinha para "full" ou "sorting" se necessário
+            if len(participantes) == copinha_sorteada['max_jogadores']:
+                execute_query("UPDATE copinhas SET status = %s WHERE id = %s", ('full', copinha_sorteada['id']))
+            else:
+                # Ou um status intermediário se o sorteio ocorrer antes de encher
+                execute_query("UPDATE copinhas SET status = %s WHERE id = %s", ('sorting', copinha_sorteada['id']))
+
+            # Retorna a lista de participantes sorteados (embaralhados) e a copinha
+            return jsonify({
+                'message': f'Sorteio realizado para a copinha "{copinha_sorteada["nome"]}"!',
+                'copinha': copinha_sorteada['nome'],
+                'formato': copinha_sorteada['formato'],
+                'participantes_sorteados': participantes
+            })
+
+    except Exception as e:
+        logger.error(f"Erro ao sortear jogadores para copinha: {e}")
+        return jsonify({'message': 'Ocorreu um erro ao tentar sortear jogadores.'}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)

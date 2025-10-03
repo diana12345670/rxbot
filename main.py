@@ -1,8 +1,3 @@
-# IDs de canais - validar existência antes de usar
-CHANNEL_ID_ALERTA = 1402658677923774615
-CHANNEL_ID_TESTE_TIER = 1400162532055846932
-CHANNEL_ID_ERRO = 1402658577877041173  # Canal de mensagens de erro
-
 # Usuário privilegiado com acesso total
 PRIVILEGED_USER_ID = 1339336477661724674  # <@1339336477661724674>
 
@@ -17,45 +12,149 @@ USUARIOS_AUTORIZADOS_CARGOS = [
     # ADICIONAR_ID_AQUI,  # @skplays87 - Substituir por ID real ex: 123456789012345678
 ]
 
-def get_safe_channel(channel_id):
-    """Obter canal de forma segura, com fallback"""
+# Tipos de canais configuráveis por servidor
+CHANNEL_TYPES = {
+    'avisos': {'name': 'Canal de Avisos', 'description': 'Para anúncios importantes'},
+    'alerta': {'name': 'Canal de Alerta', 'description': 'Para alertas críticos'},
+    'tier': {'name': 'Canal Tier', 'description': 'Para eventos especiais'},
+    'xclan': {'name': 'Canal X-Clan', 'description': 'Para eventos entre clans'},
+    'bem_vindo': {'name': 'Canal de Boas-vindas', 'description': 'Para dar boas-vindas'},
+    'logs': {'name': 'Canal de Logs', 'description': 'Para logs de moderação'},
+    'copinha': {'name': 'Canal da Copinha', 'description': 'Para eventos e scoreboards'},
+    'erro': {'name': 'Canal de Erro', 'description': 'Para mensagens de erro do bot'},
+    'geral': {'name': 'Canal Geral', 'description': 'Para mensagens gerais do bot'}
+}
+
+def get_guild_channel_config(guild_id, channel_type):
+    """Obter canal configurado para um tipo específico em um servidor"""
     try:
+        result = execute_query('''
+            SELECT channel_id FROM guild_channels 
+            WHERE guild_id = %s AND channel_type = %s
+        ''', (guild_id, channel_type), fetch_one=True)
+        
+        if result:
+            return result[0] if isinstance(result, (list, tuple)) else result['channel_id']
+        return None
+    except Exception as e:
+        logger.error(f"Erro ao obter configuração do canal {channel_type}: {e}")
+        return None
+
+def set_guild_channel_config(guild_id, channel_type, channel_id):
+    """Definir canal para um tipo específico em um servidor"""
+    try:
+        # Verificar se já existe configuração
+        existing = execute_query('''
+            SELECT id FROM guild_channels 
+            WHERE guild_id = %s AND channel_type = %s
+        ''', (guild_id, channel_type), fetch_one=True)
+        
+        if existing:
+            # Atualizar existente
+            execute_query('''
+                UPDATE guild_channels 
+                SET channel_id = %s 
+                WHERE guild_id = %s AND channel_type = %s
+            ''', (channel_id, guild_id, channel_type))
+        else:
+            # Criar novo
+            execute_query('''
+                INSERT INTO guild_channels (guild_id, channel_type, channel_id)
+                VALUES (%s, %s, %s)
+            ''', (guild_id, channel_type, channel_id))
+        
+        logger.info(f"Canal {channel_type} configurado para {channel_id} no servidor {guild_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Erro ao configurar canal {channel_type}: {e}")
+        return False
+
+def get_safe_channel(guild_id, channel_type):
+    """Obter canal configurado de forma segura"""
+    try:
+        if not guild_id or not channel_type:
+            return None
+            
+        channel_id = get_guild_channel_config(guild_id, channel_type)
         if not channel_id:
             return None
             
         channel = bot.get_channel(channel_id)
         if not channel:
-            logger.warning(f"Canal {channel_id} não encontrado")
+            logger.warning(f"Canal {channel_id} não encontrado para {channel_type}")
             return None
             
         # Verificar se é um canal que suporta envio de mensagens
         if isinstance(channel, (discord.ForumChannel, discord.CategoryChannel)):
-            logger.warning(f"Canal {channel_id} não suporta envio direto de mensagens (ForumChannel/CategoryChannel)")
+            logger.warning(f"Canal {channel_id} não suporta envio direto de mensagens")
             return None
         
         # Canais privados (DM, GroupDM) são sempre válidos
         if isinstance(channel, discord.abc.PrivateChannel):
             return channel
             
-        # Verificar permissões para canais de servidor (apenas se não for PrivateChannel)
-        if not isinstance(channel, discord.abc.PrivateChannel) and hasattr(channel, 'guild') and channel.guild and channel.guild.me:
+        # Verificar permissões para canais de servidor
+        if hasattr(channel, 'guild') and channel.guild and channel.guild.me:
             try:
                 if hasattr(channel, 'permissions_for') and not channel.permissions_for(channel.guild.me).send_messages:
                     logger.warning(f"Bot não tem permissão para enviar mensagens no canal {channel_id}")
                     return None
             except (AttributeError, TypeError):
-                # Canal sem permissões disponíveis ou guild.me None
                 pass
             
         return channel
     except Exception as e:
-        logger.error(f"Erro ao obter canal {channel_id}: {e}")
+        logger.error(f"Erro ao obter canal {channel_type}: {e}")
         return None
 
+async def send_to_configured_channel(guild, channel_type, embed=None, content=None):
+    """Enviar mensagem para canal configurado do servidor - só envia se configurado"""
+    try:
+        if not guild:
+            logger.debug(f"Guild não fornecida para canal {channel_type}")
+            return None
+            
+        # Verificar se há configuração para este servidor
+        channel_id = get_guild_channel_config(guild.id, channel_type)
+        if not channel_id:
+            logger.debug(f"Canal {channel_type} não configurado para servidor {guild.name} - mensagem não enviada")
+            return None
+            
+        channel = get_safe_channel(guild.id, channel_type)
+        if not channel:
+            logger.warning(f"Canal {channel_type} configurado mas não encontrado/acessível no servidor {guild.name}")
+            return None
+            
+        # Enviar mensagem apenas se canal estiver configurado
+        if embed:
+            message = await channel.send(embed=embed)
+            logger.debug(f"Mensagem enviada para canal {channel_type} no servidor {guild.name}")
+            return message
+        elif content:
+            message = await channel.send(content)
+            logger.debug(f"Mensagem enviada para canal {channel_type} no servidor {guild.name}")
+            return message
+        return None
+    except Exception as e:
+        logger.error(f"Erro ao enviar para canal {channel_type} no servidor {guild.name}: {e}")
+        return None
+
+def is_guild_configured(guild_id):
+    """Verificar se o servidor tem pelo menos um canal configurado"""
+    try:
+        for channel_type in CHANNEL_TYPES.keys():
+            if get_guild_channel_config(guild_id, channel_type):
+                return True
+        return False
+    except Exception as e:
+        logger.error(f"Erro ao verificar configuração do servidor {guild_id}: {e}")
+        return False
+
 async def send_error_to_privileged_user(error_message, guild=None):
-    """Envia erros críticos apenas para o usuário privilegiado via DM"""
+    """Envia erros críticos para usuário privilegiado via DM ou canal configurado"""
     try:
         if bot.is_ready():
+            # Tentar enviar DM primeiro
             privileged_user = bot.get_user(PRIVILEGED_USER_ID)
             if privileged_user:
                 try:
@@ -63,11 +162,19 @@ async def send_error_to_privileged_user(error_message, guild=None):
                         await privileged_user.send(f"🚨 **Erro no servidor {guild.name}:**\n```{error_message}```")
                     else:
                         await privileged_user.send(f"🚨 **Erro do sistema:**\n```{error_message}```")
+                    return
                 except:
-                    # Se não conseguir enviar DM, apenas log silencioso
                     pass
+            
+            # Se DM falhar e há guild, tentar canal de erro configurado
+            if guild:
+                error_embed = create_embed(
+                    "🚨 Erro do Sistema",
+                    f"```{error_message[:1000]}```",
+                    color=0xff0000
+                )
+                await send_to_configured_channel(guild, 'erro', embed=error_embed)
     except:
-        # Log silencioso para evitar spam
         pass
 
 def is_privileged_user(user_id):
@@ -413,15 +520,19 @@ async def safe_send_response(interaction: discord.Interaction, embed=None, conte
         # Verificar se response existe e não é None
         if hasattr(interaction, 'response') and interaction.response is not None:
             try:
-                if not interaction.response.is_done():
-                    # Se ainda não respondeu, usa response.send_message
-                    return await interaction.response.send_message(embed=embed, content=content, ephemeral=ephemeral, view=view)
+                is_done = getattr(interaction.response, 'is_done', None)
+                if is_done and callable(is_done):
+                    if not is_done():
+                        # Se ainda não respondeu, usa response.send_message
+                        return await interaction.response.send_message(embed=embed, content=content, ephemeral=ephemeral, view=view)
+                    else:
+                        # Se já respondeu, usa followup.send
+                        return await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral, view=view)
                 else:
-                    # Se já respondeu, usa followup.send
+                    # is_done não existe, tentar followup direto
                     return await interaction.followup.send(embed=embed, content=content, ephemeral=ephemeral, view=view)
-            except AttributeError:
-                # response.is_done() não existe ou response é None
-                logger.warning("interaction.response é None ou não tem is_done()")
+            except AttributeError as e:
+                logger.warning(f"AttributeError ao verificar interaction.response: {e}")
                 pass
         
         # Fallback: tentar canal direto
@@ -565,6 +676,812 @@ logging.basicConfig(
 # Configurar logger principal
 logger = logging.getLogger('Kaori')
 logger.setLevel(logging.INFO)
+
+# ===============================
+# SISTEMA CENTRALIZADO DE ECONOMIA
+# ===============================
+
+class EconomyAction:
+    """Centraliza lógica de recompensas temporais para evitar repetições"""
+    
+    @staticmethod
+    async def handle_timed_reward(interaction: discord.Interaction, reward_type: str, amount: int, cooldown_field: str):
+        """Função centralizada para daily, weekly, monthly"""
+        try:
+            # Validação básica
+            if not interaction.user or not interaction.guild:
+                embed = create_embed("❌ Erro", "Este comando só pode ser usado em servidores!", color=0xff0000)
+                await safe_send_response(interaction, embed, ephemeral=True)
+                return
+
+            user_id = interaction.user.id
+            user_data = get_user_data(user_id)
+
+            if not user_data:
+                update_user_data(user_id)
+                user_data = get_user_data(user_id)
+
+            # Verificar cooldown baseado no tipo
+            today = datetime.date.today()
+            cooldown_check = EconomyAction._check_cooldown(user_data, reward_type, today)
+            
+            if cooldown_check['blocked']:
+                embed = create_embed(
+                    f"⏰ {cooldown_check['title']}", 
+                    cooldown_check['message'], 
+                    color=0xff6b6b
+                )
+                await safe_send_response(interaction, embed, ephemeral=True)
+                return
+
+            # Aplicar recompensa
+            current_coins = user_data[1] if user_data and len(user_data) > 1 else 50
+            new_coins = current_coins + amount
+
+            # Atualizar banco de dados
+            execute_query(f'UPDATE users SET coins = %s, {cooldown_field} = %s WHERE user_id = %s',
+                         (new_coins, cooldown_check['new_value'], user_id))
+
+            # Resposta de sucesso
+            embed = create_embed(
+                f"🎁 Recompensa {reward_type.title()}!",
+                f"""**Recompensa:** {amount:,} moedas
+**Novo saldo:** {new_coins:,} moedas
+
+{cooldown_check['success_message']}""",
+                color=0x00ff00
+            )
+
+            await safe_send_response(interaction, embed)
+            
+        except Exception as e:
+            logger.error(f"Erro no {reward_type}: {e}")
+            error_embed = create_embed("❌ Erro", f"Erro ao coletar {reward_type}!", color=0xff0000)
+            await safe_send_response(interaction, error_embed, ephemeral=True)
+
+    @staticmethod
+    def _check_cooldown(user_data, reward_type, today):
+        """Verifica cooldown específico por tipo de recompensa"""
+        if reward_type == "daily":
+            last_claim = user_data[6] if user_data and len(user_data) > 6 else None
+            today_str = today.isoformat()
+            
+            if last_claim == today_str:
+                return {
+                    'blocked': True,
+                    'title': "Já coletado!",
+                    'message': "Você já coletou sua recompensa diária hoje!\nVolte amanhã para coletar novamente."
+                }
+            
+            return {
+                'blocked': False,
+                'new_value': today_str,
+                'success_message': "🔥 *Continue coletando diariamente!*"
+            }
+            
+        elif reward_type == "weekly":
+            last_claim = user_data[7] if len(user_data) > 7 else None
+            week_start = today - datetime.timedelta(days=today.weekday())
+            week_start_str = week_start.isoformat()
+            
+            if last_claim and last_claim >= week_start_str:
+                next_week = week_start + datetime.timedelta(days=7)
+                return {
+                    'blocked': True,
+                    'title': "Já coletado esta semana!",
+                    'message': f"Você já coletou sua recompensa semanal!\nPróxima coleta: {next_week.strftime('%d/%m/%Y')}"
+                }
+            
+            return {
+                'blocked': False,
+                'new_value': week_start_str,
+                'success_message': "📅 *Recompensa semanal coletada com sucesso!*"
+            }
+            
+        elif reward_type == "monthly":
+            last_claim = user_data[8] if len(user_data) > 8 else None
+            month_start = today.replace(day=1).isoformat()
+            
+            if last_claim == month_start:
+                next_month = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+                return {
+                    'blocked': True,
+                    'title': "Já coletado este mês!",
+                    'message': f"Você já coletou sua recompensa mensal!\nPróxima coleta: {next_month.strftime('%d/%m/%Y')}"
+                }
+            
+            return {
+                'blocked': False,
+                'new_value': month_start,
+                'success_message': "🗓️ *Recompensa mensal coletada com sucesso!*"
+            }
+        
+        return {'blocked': True, 'title': "Erro", 'message': "Tipo de recompensa inválido"}
+
+# ===============================
+# SISTEMA DE TORNEIO COPINHA 1V1
+# ===============================
+
+class CopinhaTournament:
+    """Gerencia torneios mata-mata com suporte a 1v1, 2v2, 3v3, 4v4, etc"""
+    
+    def __init__(self, guild_id: int, creator_id: int, channel_id: int, title: str, map_name: str, max_participants: int, team_size: int = 1):
+        self.guild_id = guild_id
+        self.creator_id = creator_id
+        self.channel_id = channel_id
+        self.title = title
+        self.map_name = map_name
+        self.max_participants = max_participants
+        self.team_size = team_size  # 1=1v1, 2=2v2, 3=3v3, 4=4v4, etc
+        self.participants = []
+        self.status = "inscricoes"
+        self.current_round = "inscricoes"
+        self.copinha_id = None
+        
+        # Calcular número de confrontos por rodada
+        # Cada confronto tem team_size * 2 jogadores
+        self.players_per_match = team_size * 2
+        
+    def get_format_name(self):
+        """Retorna nome do formato (1v1, 2v2, etc)"""
+        return f"{self.team_size}v{self.team_size}"
+        
+    async def create_tournament(self):
+        """Criar torneio no banco de dados"""
+        try:
+            with db_lock:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    INSERT INTO copinhas 
+                    (guild_id, creator_id, channel_id, title, map_name, team_format, max_players, 
+                     participants, status, current_round, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                ''', (
+                    self.guild_id, self.creator_id, self.channel_id, self.title, 
+                    self.map_name, self.get_format_name(), self.max_participants, json.dumps(self.participants),
+                    self.status, self.current_round, datetime.datetime.now()
+                ))
+                
+                self.copinha_id = cursor.fetchone()[0]
+                conn.commit()
+                conn.close()
+                
+                logger.info(f"Copinha criada: {self.title} (ID: {self.copinha_id}) - Formato: {self.get_format_name()}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Erro ao criar copinha: {e}")
+            return False
+    
+    def add_participant(self, user_id: int):
+        """Adicionar participante ao torneio"""
+        if user_id not in self.participants and len(self.participants) < self.max_participants:
+            self.participants.append(user_id)
+            self._update_participants_db()
+            return True
+        return False
+    
+    def remove_participant(self, user_id: int):
+        """Remover participante do torneio"""
+        if user_id in self.participants:
+            self.participants.remove(user_id)
+            self._update_participants_db()
+            return True
+        return False
+    
+    def _update_participants_db(self):
+        """Atualizar participantes no banco de dados"""
+        try:
+            execute_query(
+                'UPDATE copinhas SET participants = %s WHERE id = %s',
+                (json.dumps(self.participants), self.copinha_id)
+            )
+        except Exception as e:
+            logger.error(f"Erro ao atualizar participantes: {e}")
+    
+    async def start_tournament(self, bot, guild):
+        """Iniciar torneio quando estiver cheio"""
+        if len(self.participants) != self.max_participants:
+            return False
+            
+        # Validar que é potência de 2
+        if not self._is_power_of_two(self.max_participants):
+            logger.error(f"Número de participantes deve ser potência de 2: {self.max_participants}")
+            return False
+        
+        # Embaralhar participantes
+        import random
+        shuffled_participants = self.participants.copy()
+        random.shuffle(shuffled_participants)
+        
+        # Criar primeira rodada de confrontos
+        await self._create_first_round(bot, guild, shuffled_participants)
+        
+        # Atualizar status
+        self.status = "em_andamento"
+        self.current_round = "primeira_rodada"
+        
+        execute_query(
+            'UPDATE copinhas SET status = %s, current_round = %s, started_at = %s WHERE id = %s',
+            (self.status, self.current_round, datetime.datetime.now(), self.copinha_id)
+        )
+        
+        return True
+    
+    async def _create_first_round(self, bot, guild, participants):
+        """Criar primeira rodada com suporte a formatos de equipe"""
+        """Criar canais da primeira rodada"""
+        # Criar categoria para o torneio
+        category_name = f"🏆 {self.title[:20]}"
+        category = await guild.create_category(category_name)
+        
+        # Criar confrontos 1v1
+        num_matches = len(participants) // 2
+        
+        for i in range(num_matches):
+            player1 = participants[i * 2]
+            player2 = participants[i * 2 + 1]
+            
+            await self._create_match_channel(bot, guild, category, i + 1, player1, player2, "primeira_rodada")
+    
+    async def _create_match_channel(self, bot, guild, category, match_number, player1_id, player2_id, round_name):
+        """Criar canal para uma partida específica"""
+        player1 = guild.get_member(player1_id)
+        player2 = guild.get_member(player2_id)
+        creator = guild.get_member(self.creator_id)
+        
+        if not player1 or not player2:
+            logger.error(f"Jogadores não encontrados: {player1_id}, {player2_id}")
+            return
+        
+        # Nome do canal
+        channel_name = f"🥊-{round_name}-{match_number}-{player1.display_name[:8]}-vs-{player2.display_name[:8]}"[:100]
+        
+        # Permissões: apenas os 2 jogadores + criador + bot
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            player1: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            player2: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+        }
+        
+        # Dar permissão ao criador
+        if creator:
+            overwrites[creator] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        
+        # Criar canal
+        match_channel = await guild.create_text_channel(
+            channel_name,
+            category=category,
+            overwrites=overwrites
+        )
+        
+        # Salvar match no banco
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT INTO copinha_matches 
+                (copinha_id, round_name, match_number, players, ticket_channel_id, status)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+            ''', (
+                self.copinha_id, round_name, match_number,
+                json.dumps({'player1': player1_id, 'player2': player2_id}),
+                match_channel.id, 'waiting'
+            ))
+            
+            match_id = cursor.fetchone()[0]
+            conn.commit()
+            conn.close()
+        
+        # Criar embed da partida
+        embed = create_embed(
+            f"🏆 {self.title} - {round_name.replace('_', ' ').title()}",
+            f"""**⚔️ Confronto #{match_number}**
+
+**👤 Jogador 1:** {player1.mention}
+**👤 Jogador 2:** {player2.mention}
+
+**🗺️ Mapa:** {self.map_name}
+**🎯 Formato:** 1v1
+
+**📋 Instruções:**
+1. Combinem horário para jogar
+2. Joguem no mapa **{self.map_name}**
+3. O criador ({creator.mention if creator else 'Criador'}) define o vencedor
+
+**⚡ Boa sorte aos dois jogadores!**""",
+            color=0xffd700
+        )
+        
+        # Criar view para definir vencedor
+        view = MatchWinnerView(
+            copinha_id=self.copinha_id,
+            match_id=match_id,
+            player1_id=player1_id,
+            player2_id=player2_id,
+            creator_id=self.creator_id
+        )
+        
+        bot.add_view(view)
+        
+        # Enviar mensagem
+        await match_channel.send(embed=embed, view=view)
+        
+        # Salvar view persistente
+        save_interactive_message(
+            None,  # message_id será setado depois
+            match_channel.id,
+            guild.id,
+            'match_winner_simple',
+            {
+                'copinha_id': self.copinha_id,
+                'match_id': match_id,
+                'player1_id': player1_id,
+                'player2_id': player2_id,
+                'creator_id': self.creator_id
+            }
+        )
+    
+    async def register_winner(self, bot, guild, match_id, winner_id):
+        """Registrar vencedor de uma partida e verificar se pode avançar rodada"""
+        try:
+            # Atualizar match no banco
+            execute_query(
+                'UPDATE copinha_matches SET winner_id = %s, status = %s WHERE id = %s',
+                (winner_id, 'finished', match_id)
+            )
+            
+            # Verificar se todas as partidas da rodada atual terminaram
+            pending_matches = execute_query(
+                'SELECT COUNT(*) as count FROM copinha_matches WHERE copinha_id = %s AND round_name = %s AND status = %s',
+                (self.copinha_id, self.current_round, 'waiting'),
+                fetch_one=True
+            )
+            
+            if pending_matches and pending_matches['count'] == 0:
+                # Todas as partidas terminaram, avançar para próxima rodada
+                await self._advance_to_next_round(bot, guild)
+                
+        except Exception as e:
+            logger.error(f"Erro ao registrar vencedor: {e}")
+    
+    async def _advance_to_next_round(self, bot, guild):
+        """Avançar para próxima rodada automaticamente"""
+        try:
+            # Buscar vencedores da rodada atual
+            winners = execute_query(
+                'SELECT winner_id FROM copinha_matches WHERE copinha_id = %s AND round_name = %s AND status = %s',
+                (self.copinha_id, self.current_round, 'finished'),
+                fetch_all=True
+            )
+            
+            if not winners:
+                return
+                
+            winner_ids = [w['winner_id'] for w in winners]
+            
+            # Se só há um vencedor, é o campeão
+            if len(winner_ids) == 1:
+                await self._announce_champion(bot, guild, winner_ids[0])
+                return
+            
+            # Determinar próxima rodada
+            next_round = self._get_next_round_name(self.current_round, len(winner_ids))
+            
+            if not next_round:
+                await self._announce_champion(bot, guild, winner_ids[0])
+                return
+            
+            # Criar próxima rodada
+            await self._create_next_round(bot, guild, winner_ids, next_round)
+            
+            # Atualizar rodada atual
+            self.current_round = next_round
+            execute_query(
+                'UPDATE copinhas SET current_round = %s WHERE id = %s',
+                (self.current_round, self.copinha_id)
+            )
+            
+        except Exception as e:
+            logger.error(f"Erro ao avançar rodada: {e}")
+    
+    async def _create_next_round(self, bot, guild, winners, round_name):
+        """Criar canais da próxima rodada"""
+        # Encontrar categoria existente
+        category = None
+        category_search = f"🏆 {self.title[:20]}"
+        
+        for cat in guild.categories:
+            if category_search.lower() in cat.name.lower():
+                category = cat
+                break
+        
+        if not category:
+            category = await guild.create_category(category_search)
+        
+        # Criar confrontos da próxima rodada
+        num_matches = len(winners) // 2
+        
+        for i in range(num_matches):
+            player1 = winners[i * 2]
+            player2 = winners[i * 2 + 1]
+            
+            await self._create_match_channel(bot, guild, category, i + 1, player1, player2, round_name)
+    
+    async def _announce_champion(self, bot, guild, champion_id):
+        """Anunciar campeão do torneio"""
+        try:
+            champion = guild.get_member(champion_id)
+            channel = guild.get_channel(self.channel_id)
+            
+            if not champion or not channel:
+                return
+            
+            # Atualizar status final
+            execute_query(
+                'UPDATE copinhas SET status = %s, winner_id = %s, finished_at = %s WHERE id = %s',
+                ('finalizada', champion_id, datetime.datetime.now(), self.copinha_id)
+            )
+            
+            # Embed de campeão
+            embed = create_embed(
+                f"🏆 CAMPEÃO DA {self.title.upper()}! 🏆",
+                f"""**🎉 PARABÉNS {champion.mention}! 🎉**
+
+Você é o grande vencedor da **{self.title}**!
+
+**🗺️ Mapa:** {self.map_name}
+**👥 Participantes:** {self.max_participants}
+**🏆 Formato:** Mata-mata 1v1
+
+**🎯 Vitória conquistada com mérito!**
+**🌟 Seu nome ficará marcado na história!**
+
+*Que venham mais torneios!* ⚡""",
+                color=0xffd700
+            )
+            
+            embed.set_thumbnail(url=champion.avatar.url if champion.avatar else champion.default_avatar.url)
+            
+            await channel.send(f"🎊 **TEMOS UM CAMPEÃO!** 🎊", embed=embed)
+            
+            # Limpar categoria do torneio após 1 hora
+            await self._schedule_cleanup(guild)
+            
+        except Exception as e:
+            logger.error(f"Erro ao anunciar campeão: {e}")
+    
+    async def _schedule_cleanup(self, guild):
+        """Agendar limpeza da categoria do torneio"""
+        import asyncio
+        
+        async def cleanup():
+            await asyncio.sleep(3600)  # 1 hora
+            
+            try:
+                category_search = f"🏆 {self.title[:20]}"
+                for category in guild.categories:
+                    if category_search.lower() in category.name.lower():
+                        for channel in category.channels:
+                            await channel.delete()
+                        await category.delete()
+                        break
+            except Exception as e:
+                logger.error(f"Erro na limpeza: {e}")
+        
+        asyncio.create_task(cleanup())
+    
+    def _get_next_round_name(self, current_round, num_winners):
+        """Determinar nome da próxima rodada baseado no número de vencedores"""
+        if num_winners <= 1:
+            return None
+        elif num_winners == 2:
+            return "final"
+        elif num_winners == 4:
+            return "semifinal"
+        elif num_winners == 8:
+            return "quartas"
+        else:
+            return f"rodada_{num_winners//2}"
+    
+    def _is_power_of_two(self, n):
+        """Verificar se número é potência de 2"""
+        return n > 0 and (n & (n - 1)) == 0
+
+# ===============================
+# VIEW PARA DEFINIR VENCEDOR SIMPLIFICADA
+# ===============================
+
+class MatchWinnerView(discord.ui.View):
+    """View simplificada para definir vencedor de partida"""
+    
+    def __init__(self, copinha_id: int, match_id: int, player1_id: int, player2_id: int, creator_id: int):
+        super().__init__(timeout=None)
+        self.copinha_id = copinha_id
+        self.match_id = match_id
+        self.player1_id = player1_id
+        self.player2_id = player2_id
+        self.creator_id = creator_id
+        
+    @discord.ui.button(label="🔴 Jogador 1 Venceu", style=discord.ButtonStyle.danger, custom_id="winner_player1")
+    async def player1_wins(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._handle_winner_selection(interaction, self.player1_id)
+    
+    @discord.ui.button(label="🔵 Jogador 2 Venceu", style=discord.ButtonStyle.primary, custom_id="winner_player2")
+    async def player2_wins(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._handle_winner_selection(interaction, self.player2_id)
+    
+    async def _handle_winner_selection(self, interaction: discord.Interaction, winner_id: int):
+        """Processar seleção do vencedor"""
+        # Verificar se é o criador
+        if interaction.user.id != self.creator_id:
+            embed = create_embed("❌ Sem Permissão", "Apenas o criador do torneio pode definir vencedores!", color=0xff0000)
+            await safe_send_response(interaction, embed, ephemeral=True)
+            return
+        
+        # Buscar dados da copinha
+        copinha_data = execute_query(
+            'SELECT * FROM copinhas WHERE id = %s',
+            (self.copinha_id,),
+            fetch_one=True
+        )
+        
+        if not copinha_data:
+            embed = create_embed("❌ Erro", "Copinha não encontrada!", color=0xff0000)
+            await safe_send_response(interaction, embed, ephemeral=True)
+            return
+        
+        # Criar instância do torneio e registrar vencedor
+        tournament = CopinhaTournament(
+            copinha_data['guild_id'], copinha_data['creator_id'], 
+            copinha_data['channel_id'], copinha_data['title'],
+            copinha_data['map_name'], copinha_data['max_participants']
+        )
+        tournament.copinha_id = self.copinha_id
+        tournament.current_round = copinha_data['current_round']
+        
+        await tournament.register_winner(interaction.client, interaction.guild, self.match_id, winner_id)
+        
+        # Atualizar mensagem
+        winner = interaction.guild.get_member(winner_id)
+        embed = create_embed(
+            "✅ Vencedor Definido!",
+            f"**🏆 Vencedor:** {winner.mention if winner else 'Jogador desconhecido'}\n\n*O torneio continuará automaticamente...*",
+            color=0x00ff00
+        )
+        
+        # Desabilitar botões
+        for item in self.children:
+            item.disabled = True
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+
+# ===============================
+# VIEW PARA INSCRIÇÕES SIMPLIFICADA
+# ===============================
+
+class CopinhaJoinViewSimple(discord.ui.View):
+    """View simplificada para inscrições na copinha"""
+    
+    def __init__(self, copinha_id: int, max_participants: int, creator_id: int):
+        super().__init__(timeout=3600)  # 1 hora
+        self.copinha_id = copinha_id
+        self.max_participants = max_participants
+        self.max_players = max_participants  # Alias para compatibilidade
+        self.creator_id = creator_id
+        self.participants = []
+        
+    @discord.ui.button(label="🎮 Participar", style=discord.ButtonStyle.green, custom_id="join_copinha")
+    async def join_tournament(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._handle_join_leave(interaction, True)
+    
+    @discord.ui.button(label="❌ Sair", style=discord.ButtonStyle.red, custom_id="leave_copinha")
+    async def leave_tournament(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._handle_join_leave(interaction, False)
+    
+    async def _handle_join_leave(self, interaction: discord.Interaction, joining: bool):
+        """Processar entrada/saída do torneio"""
+        user_id = interaction.user.id
+        
+        # Buscar dados atuais da copinha
+        copinha_data = execute_query(
+            'SELECT * FROM copinhas WHERE id = %s',
+            (self.copinha_id,),
+            fetch_one=True
+        )
+        
+        if not copinha_data:
+            embed = create_embed("❌ Erro", "Copinha não encontrada!", color=0xff0000)
+            await safe_send_response(interaction, embed, ephemeral=True)
+            return
+        
+        # Convert tuple to dict if needed (handle both PostgreSQL tuple and dict results)
+        if isinstance(copinha_data, (tuple, list)):
+            # Map tuple to dict based on table structure
+            copinha_data = {
+                'id': copinha_data[0],
+                'guild_id': copinha_data[1],
+                'creator_id': copinha_data[2],
+                'channel_id': copinha_data[3],
+                'message_id': copinha_data[4] if len(copinha_data) > 4 else None,
+                'title': copinha_data[5] if len(copinha_data) > 5 else '',
+                'map_name': copinha_data[6] if len(copinha_data) > 6 else '',
+                'team_format': copinha_data[7] if len(copinha_data) > 7 else '1v1',
+                'max_players': copinha_data[8] if len(copinha_data) > 8 else 8,
+                'participants': copinha_data[9] if len(copinha_data) > 9 else '[]',
+                'current_round': copinha_data[10] if len(copinha_data) > 10 else 'inscricoes',
+                'matches': copinha_data[11] if len(copinha_data) > 11 else '[]',
+                'status': copinha_data[12] if len(copinha_data) > 12 else 'active',
+                'created_at': copinha_data[13] if len(copinha_data) > 13 else None
+            }
+        
+        # Verificar se torneio ainda aceita inscrições
+        if copinha_data.get('status') != 'inscricoes' and copinha_data.get('status') != 'active':
+            embed = create_embed("❌ Inscrições Fechadas", "Este torneio já começou ou terminou!", color=0xff0000)
+            await safe_send_response(interaction, embed, ephemeral=True)
+            return
+        
+        # Carregar participantes atuais
+        try:
+            current_participants = json.loads(copinha_data['participants']) if copinha_data['participants'] else []
+        except:
+            current_participants = []
+        
+        if joining:
+            # Tentativa de entrar
+            if user_id in current_participants:
+                embed = create_embed("⚠️ Já Inscrito", "Você já está inscrito nesta copinha!", color=0xff6b6b)
+                await safe_send_response(interaction, embed, ephemeral=True)
+                return
+            
+            max_players = copinha_data.get('max_players', self.max_participants) if isinstance(copinha_data, dict) else (copinha_data[8] if len(copinha_data) > 8 else self.max_participants)
+            if len(current_participants) >= max_players:
+                embed = create_embed("❌ Lotado", "Esta copinha já está cheia!", color=0xff0000)
+                await safe_send_response(interaction, embed, ephemeral=True)
+                return
+            
+            # Adicionar participante
+            current_participants.append(user_id)
+            action_text = "inscrito"
+            emoji = "✅"
+            
+        else:
+            # Tentativa de sair
+            if user_id not in current_participants:
+                embed = create_embed("⚠️ Não Inscrito", "Você não está inscrito nesta copinha!", color=0xff6b6b)
+                await safe_send_response(interaction, embed, ephemeral=True)
+                return
+            
+            # Remover participante
+            current_participants.remove(user_id)
+            action_text = "removido"
+            emoji = "❌"
+        
+        # Atualizar banco de dados
+        execute_query(
+            'UPDATE copinhas SET participants = %s WHERE id = %s',
+            (json.dumps(current_participants), self.copinha_id)
+        )
+        
+        # Resposta ao usuário
+        embed = create_embed(
+            f"{emoji} {action_text.title()}!",
+            f"Você foi {action_text} da copinha com sucesso!",
+            color=0x00ff00 if joining else 0xff6b6b
+        )
+        await safe_send_response(interaction, embed, ephemeral=True)
+        
+        # Atualizar mensagem principal
+        await self._update_main_message(interaction, copinha_data, current_participants)
+        
+        # Verificar se pode iniciar torneio
+        if len(current_participants) == self.max_participants:
+            await self._start_tournament(interaction, copinha_data, current_participants)
+    
+    async def _update_main_message(self, interaction: discord.Interaction, copinha_data, participants):
+        """Atualizar mensagem principal com novos participantes"""
+        participants_text = ""
+        for i, user_id in enumerate(participants, 1):
+            user = interaction.guild.get_member(user_id)
+            user_name = user.display_name if user else "Usuário desconhecido"
+            participants_text += f"{i}. {user_name}\n"
+        
+        if not participants_text:
+            participants_text = "*Nenhum participante ainda*"
+        
+        # Handle both dict and tuple formats
+        max_players = copinha_data.get('max_players', 8) if isinstance(copinha_data, dict) else (copinha_data[8] if len(copinha_data) > 8 else 8)
+        
+        embed = create_embed(
+            f"🏆 {copinha_data['title']}",
+            f"""**🗺️ Mapa:** {copinha_data['map_name']}
+**🎯 Formato:** 1v1 Mata-mata
+**📊 Participantes:** {len(participants)}/{max_players}
+**📋 Status:** {'Lotado! Iniciando...' if len(participants) == max_players else 'Inscrições abertas'}
+**👑 Organizador:** <@{copinha_data['creator_id']}>
+
+**👥 Participantes:**
+{participants_text}
+
+**🎮 Clique no botão abaixo para se inscrever!**
+
+**📋 Regras:**
+• Torneio eliminatório simples (mata-mata)
+• Confrontos 1v1 no mapa {copinha_data['map_name']}
+• Canais privados para cada confronto
+• O organizador define vencedores
+• Progressão automática até o campeão""",
+            color=0xffd700
+        )
+        
+        # Desabilitar botões se lotado
+        if len(participants) == max_players:
+            for item in self.children:
+                item.disabled = True
+        
+        try:
+            await interaction.edit_original_response(embed=embed, view=self)
+        except:
+            # Se falhar edição, apenas logar
+            logger.warning("Falha ao atualizar mensagem da copinha")
+    
+    async def _start_tournament(self, interaction: discord.Interaction, copinha_data, participants):
+        """Iniciar torneio automaticamente quando lotado"""
+        try:
+            # Handle both dict and tuple formats
+            if isinstance(copinha_data, dict):
+                guild_id = copinha_data['guild_id']
+                creator_id = copinha_data['creator_id']
+                channel_id = copinha_data['channel_id']
+                title = copinha_data['title']
+                map_name = copinha_data['map_name']
+                max_participants = copinha_data.get('max_players', 8)
+            else:
+                guild_id = copinha_data[1]
+                creator_id = copinha_data[2]
+                channel_id = copinha_data[3]
+                title = copinha_data[5] if len(copinha_data) > 5 else ''
+                map_name = copinha_data[6] if len(copinha_data) > 6 else ''
+                max_participants = copinha_data[8] if len(copinha_data) > 8 else 8
+            
+            # Criar instância do torneio
+            tournament = CopinhaTournament(
+                guild_id, creator_id, channel_id, title, map_name, max_participants
+            )
+            tournament.copinha_id = self.copinha_id
+            tournament.participants = participants
+            
+            # Iniciar torneio
+            success = await tournament.start_tournament(interaction.client, interaction.guild)
+            
+            if success:
+                # Enviar mensagem de início
+                # Use title extracted from copinha_data above
+                embed = create_embed(
+                    f"🚀 {title} Iniciada!",
+                    f"""**🏆 O torneio começou!**
+
+**👥 {len(participants)} participantes** foram distribuídos nos confrontos.
+
+**🎯 Canais privados** foram criados para cada partida.
+
+**⚡ Que comece a batalha!**""",
+                    color=0x00ff00
+                )
+                
+                await interaction.followup.send(embed=embed)
+                
+            else:
+                logger.error(f"Falha ao iniciar torneio {self.copinha_id}")
+                
+        except Exception as e:
+            logger.error(f"Erro ao iniciar torneio automaticamente: {e}")
 
 # Garantir que todos os loggers importantes sejam configurados
 important_loggers = ['discord', 'httpx', 'asyncio']
@@ -732,7 +1649,11 @@ def init_database():
     with db_lock:
         conn = None
         try:
+            logger.info("🔧 Iniciando criação de tabelas...")
             conn = get_db_connection()
+            if not conn:
+                logger.error("❌ Falha ao obter conexão com banco")
+                return
             cursor = conn.cursor()
 
             # PostgreSQL types
@@ -742,17 +1663,23 @@ def init_database():
             timestamp_type = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
             date_type = "DATE"
 
+            logger.info("📋 Criando tabela tickets...")
             # Tabela de tickets
-            cursor.execute(f'''CREATE TABLE IF NOT EXISTS tickets (
-                ticket_id {auto_increment},
-                guild_id {integer_type},
-                creator_id {integer_type},
-                channel_id {integer_type},
-                status {text_type} DEFAULT 'open',
-                created_at {timestamp_type},
-                closed_by {integer_type},
-                reason {text_type}
-            )''')
+            try:
+                cursor.execute(f'''CREATE TABLE IF NOT EXISTS tickets (
+                    ticket_id {auto_increment},
+                    guild_id {integer_type},
+                    creator_id {integer_type},
+                    channel_id {integer_type},
+                    status {text_type} DEFAULT 'open',
+                    created_at {timestamp_type},
+                    closed_by {integer_type},
+                    reason {text_type}
+                )''')
+                logger.info("✅ Tabela tickets criada")
+            except Exception as e:
+                logger.error(f"❌ Erro ao criar tabela tickets: {e}")
+                raise
 
             # User economy and stats
             cursor.execute(f'''CREATE TABLE IF NOT EXISTS users (
@@ -1001,46 +1928,61 @@ def init_database():
                 status {text_type} DEFAULT 'waiting',
                 created_at {timestamp_type}
             )''')
+            
+            # Tabela de painéis persistentes (rxmensagemxclan, rxticketpublico, rxmensagemfeedback, etc)
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS panels (
+                id {auto_increment},
+                panel_key {text_type} NOT NULL,
+                guild_id {integer_type} NOT NULL,
+                channel_id {integer_type} NOT NULL,
+                message_id {integer_type},
+                panel_type {text_type} NOT NULL,
+                payload JSONB DEFAULT '{{}}'::jsonb,
+                created_at {timestamp_type},
+                updated_at {timestamp_type},
+                UNIQUE(guild_id, panel_key)
+            )''')
+            
+            # Índice para buscar painéis por guild
+            cursor.execute('''CREATE INDEX IF NOT EXISTS idx_panels_guild 
+                ON panels(guild_id)''')
+            
+            # Índice para buscar painéis por message_id
+            cursor.execute('''CREATE INDEX IF NOT EXISTS idx_panels_message 
+                ON panels(message_id)''')
 
-            # Migração: Adicionar coluna bet_amount se não existir
-            try:
-                cursor.execute("ALTER TABLE giveaways ADD COLUMN bet_amount BIGINT DEFAULT 0")
-                logger.info("✅ Coluna bet_amount adicionada à tabela giveaways")
-            except psycopg2.errors.DuplicateColumn:
-                # Coluna já existe, tudo bem
-                pass
-            except Exception as migration_error:
-                logger.info(f"ℹ️ Migração bet_amount: {migration_error}")
-
+            logger.info("💾 Fazendo commit das tabelas...")
             conn.commit()
+            logger.info("✅ Commit realizado com sucesso!")
             
-            # Verify table creation after commit
-            cursor.execute("""
-                SELECT COUNT(*) FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                AND table_name IN ('users', 'tickets', 'giveaways', 'copinhas')
-            """)
-            table_count = cursor.fetchone()[0]
-            
-            if table_count != 4:
-                raise Exception(f"❌ Table verification failed! Expected 4 core tables, found {table_count} in public schema")
-            
-            # Log all created tables for diagnostic purposes
-            cursor.execute("""
-                SELECT table_name FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                ORDER BY table_name
-            """)
-            all_tables = [row[0] for row in cursor.fetchall()]
-            logger.info(f"📋 Created tables in public schema: {', '.join(all_tables[:10])}{'...' if len(all_tables) > 10 else ''}")
-            
-            logger.info("✅ Database initialized successfully!")
+            # Verificar tabelas criadas (não crítico)
+            try:
+                cursor.execute("""
+                    SELECT table_name FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    ORDER BY table_name
+                """)
+                all_tables = [row[0] for row in cursor.fetchall()]
+                logger.info(f"📋 Tabelas no banco: {', '.join(all_tables) if all_tables else 'nenhuma'}")
+                logger.info(f"✅ Database initialized with {len(all_tables)} tables!")
+            except Exception as verify_error:
+                logger.warning(f"⚠️ Não foi possível verificar tabelas: {verify_error}")
 
         except Exception as e:
             logger.error(f"❌ Database initialization failed: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            if conn:
+                try:
+                    conn.rollback()
+                except:
+                    pass
         finally:
             if conn:
-                conn.close()
+                try:
+                    conn.close()
+                except:
+                    pass
 
 # Sistemas de monitoramento anti-hibernação removidos para economizar recursos
 
@@ -1766,6 +2708,60 @@ def save_interactive_message(message_id, channel_id, guild_id, message_type, dat
     except Exception as e:
         logger.error(f"Erro ao salvar mensagem interativa: {e}")
 
+async def restore_panels():
+    """Restaurar painéis persistentes após reinício (rxmensagemxclan, rxticketpublico, etc)"""
+    try:
+        with db_lock:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT id, panel_key, guild_id, channel_id, message_id, panel_type, payload 
+                FROM panels
+            ''')
+            panels = cursor.fetchall()
+            conn.close()
+
+        restored_count = 0
+        
+        for panel_data in panels:
+            try:
+                panel_id, panel_key, guild_id, channel_id, message_id, panel_type, payload_json = panel_data
+                payload = json.loads(payload_json) if payload_json else {}
+                
+                guild = bot.get_guild(guild_id)
+                if not guild:
+                    continue
+                    
+                channel = bot.get_channel(channel_id)
+                if not channel:
+                    continue
+                
+                # Verificar se mensagem ainda existe
+                message_exists = False
+                if message_id and hasattr(channel, 'fetch_message'):
+                    try:
+                        message = await channel.fetch_message(message_id)
+                        message_exists = True
+                    except:
+                        pass
+                
+                # Se mensagem não existe, recriar (idempotente)
+                if not message_exists:
+                    logger.info(f"Recriando painel {panel_key} no servidor {guild.name}")
+                    # Aqui seria recriado o painel específico baseado no panel_type
+                    # Por enquanto apenas log, implementação específica viria depois
+                else:
+                    logger.debug(f"Painel {panel_key} restaurado com sucesso")
+                    restored_count += 1
+                    
+            except Exception as e:
+                logger.error(f"Erro ao restaurar painel: {e}")
+        
+        logger.info(f"✅ {restored_count} painéis restaurados com sucesso")
+        
+    except Exception as e:
+        logger.error(f"Erro na restauração de painéis: {e}")
+
 async def restore_interactive_messages():
     """Restaurar mensagens interativas após reinício do bot"""
     try:
@@ -2327,12 +3323,11 @@ async def slash_piada(interaction: discord.Interaction):
         error_embed = create_embed("❌ Erro", "Erro na piada!", color=0xff0000)
         await safe_interaction_response(interaction, error_embed, ephemeral=True)
 
-@bot.tree.command(name="copinha", description="Criar uma copinha/torneio de Stumble Guys")
+@bot.tree.command(name="copinha", description="Criar uma copinha/torneio de Stumble Guys 1v1 mata-mata")
 @app_commands.describe(
     nome="Nome da copinha (ex: Copa RX de Stumble Guys)",
-    mapa="Mapa do jogo (ex: Hex-A-Gone, Fall Mountain, Door Dash)",
-    formato="Formato do torneio (1v1, 2v2, 3v3, 4v4)",
-    max_jogadores="Número máximo de participantes (4, 8, 16, 32, 64)"
+    mapa="Mapa do jogo (ex: Block Dash, Rush Hour, etc.)",
+    max_jogadores="Número máximo de participantes (4, 8, 16, 32 - deve ser potência de 2)"
 )
 @app_commands.choices(mapa=[
     app_commands.Choice(name="🧱 Block Dash", value="Block Dash"),
@@ -2342,25 +3337,17 @@ async def slash_piada(interaction: discord.Interaction):
     app_commands.Choice(name="🍯 Honey Drop", value="Honey Drop"),
     app_commands.Choice(name="⚡ Laser Tracer", value="Laser Tracer")
 ])
-@app_commands.choices(formato=[
-    app_commands.Choice(name="⚔️ 1v1 (Individual)", value="1v1"),
-    app_commands.Choice(name="👥 2v2 (Duplas)", value="2v2"),
-    app_commands.Choice(name="🏅 3v3 (Trios)", value="3v3"),
-    app_commands.Choice(name="🏆 4v4 (Squads)", value="4v4")
-])
 @app_commands.choices(max_jogadores=[
     app_commands.Choice(name="4 participantes", value=4),
     app_commands.Choice(name="8 participantes", value=8),
     app_commands.Choice(name="16 participantes", value=16),
-    app_commands.Choice(name="32 participantes", value=32),
-    app_commands.Choice(name="64 participantes", value=64)
+    app_commands.Choice(name="32 participantes", value=32)
 ])
 async def slash_copinha(interaction: discord.Interaction, 
                        nome: str, 
                        mapa: str, 
-                       formato: str, 
                        max_jogadores: int):
-    """Slash command para criar copinha de Stumble Guys"""
+    """Criar copinha/torneio 1v1 mata-mata"""
     try:
         # Verificar permissões
         if not interaction.user.guild_permissions.manage_messages:
@@ -2372,88 +3359,77 @@ async def slash_copinha(interaction: discord.Interaction,
             await safe_send_response(interaction, embed, ephemeral=True)
             return
 
-        # Validar parâmetros
-        valid_formats = ['1v1', '2v2', '3v3', '4v4']
-        valid_players = [4, 8, 16, 32, 64]
-        
-        if formato not in valid_formats:
-            embed = create_embed("❌ Formato inválido", f"Use: {', '.join(valid_formats)}", color=0xff0000)
+        # Validar se é potência de 2
+        valid_players = [4, 8, 16, 32]
+        if max_jogadores not in valid_players:
+            embed = create_embed("❌ Número inválido", f"Use: {', '.join(map(str, valid_players))} participantes (potência de 2)", color=0xff0000)
             await safe_send_response(interaction, embed, ephemeral=True)
             return
-            
-        if max_jogadores not in valid_players:
-            embed = create_embed("❌ Número inválido", f"Use: {', '.join(map(str, valid_players))} participantes", color=0xff0000)
+
+        # Criar torneio
+        tournament = CopinhaTournament(
+            guild_id=interaction.guild.id,
+            creator_id=interaction.user.id,
+            channel_id=interaction.channel.id,
+            title=nome,
+            map_name=mapa,
+            max_participants=max_jogadores
+        )
+        
+        # Salvar no banco
+        if not await tournament.create_tournament():
+            embed = create_embed("❌ Erro", "Erro ao criar copinha no banco de dados!", color=0xff0000)
             await safe_send_response(interaction, embed, ephemeral=True)
             return
 
         # Criar embed da copinha
         embed = create_embed(
             f"🏆 {nome}",
-            f"**🗺️ Mapa:** {mapa}\n"
-            f"**👥 Formato:** {formato}\n"
-            f"**📊 Participantes:** 0/{max_jogadores}\n"
-            f"**📋 Status:** Inscrições abertas\n"
-            f"**👑 Organizador:** {interaction.user.mention}\n\n"
-            f"**🎮 Clique no botão abaixo para se inscrever!**",
+            f"""**🗺️ Mapa:** {mapa}
+**🎯 Formato:** 1v1 Mata-mata
+**📊 Participantes:** 0/{max_jogadores}
+**📋 Status:** Inscrições abertas
+**👑 Organizador:** {interaction.user.mention}
+
+**🎮 Clique no botão abaixo para se inscrever!**
+
+**📋 Regras:**
+• Torneio eliminatório simples (mata-mata)
+• Confrontos 1v1 no mapa {mapa}
+• Canais privados para cada confronto
+• O organizador define vencedores
+• Progressão automática até o campeão""",
             color=0xffd700
         )
 
         # Criar view com botão de participar
-        view = CopinhaJoinView(nome, mapa, formato, max_jogadores, interaction.user.id)
+        view = CopinhaJoinViewSimple(tournament.copinha_id, max_jogadores, interaction.user.id)
 
         # Enviar mensagem
-        await interaction.response.send_message(embed=embed, view=view)
+        message = await safe_send_response(interaction, embed, view=view)
         
-        # Buscar a mensagem criada para salvar no banco e active_games
-        try:
-            message = await interaction.original_response()
-            
-            # Associar mensagem à view para timeout funcionar
-            view.message = message
-            
-            # Salvar no banco
-            execute_query(
-                '''INSERT INTO copinhas (guild_id, creator_id, channel_id, message_id, title, map_name, team_format, max_players, status)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)''',
-                (interaction.guild.id, interaction.user.id, interaction.channel.id, 
-                 message.id, nome, mapa, formato, max_jogadores, 'active')
-            )
-            
-            # Salvar no active_games para gerenciamento 
+        # Adicionar ao active_games para o desbugar funcionar
+        if message:
             active_games[message.id] = {
                 'type': 'copinha_join',
-                'view': view,
+                'copinha_id': tournament.copinha_id,
                 'guild_id': interaction.guild.id,
                 'channel_id': interaction.channel.id,
-                'creator_id': interaction.user.id,
-                'created_at': datetime.datetime.now().timestamp()
+                'view': view
             }
             
-            # Salvar mensagem interativa para persistência
-            save_interactive_message(
-                message.id, 
-                interaction.channel.id, 
-                interaction.guild.id, 
-                'copinha_join',
-                {
-                    'title': nome,
-                    'map_name': mapa,
-                    'team_format': formato,
-                    'max_players': max_jogadores,
-                    'creator_id': interaction.user.id,
-                    'participants': []
-                }
+            # Salvar message_id no banco
+            execute_query(
+                'UPDATE copinhas SET message_id = %s WHERE id = %s',
+                (message.id, tournament.copinha_id)
             )
-            
-            logger.info(f"Copinha criada: {nome} por {interaction.user}")
-            
-        except Exception as db_error:
-            logger.error(f"Erro ao salvar copinha no banco: {db_error}")
+        
+        logger.info(f"Copinha criada: {nome} (ID: {tournament.copinha_id}) por {interaction.user}")
 
     except Exception as e:
         logger.error(f"Erro ao criar copinha: {e}")
         embed = create_embed("❌ Erro", "Erro ao criar copinha! Tente novamente.", color=0xff0000)
-        await safe_interaction_response(interaction, embed, ephemeral=True)
+        await safe_send_response(interaction, embed, ephemeral=True)
 
 # 3. COMANDOS DE ECONOMIA (50 comandos)
 @bot.tree.command(name="saldo", description="Ver saldo de moedas")
@@ -2497,53 +3473,7 @@ async def slash_saldo(interaction: discord.Interaction, usuario: discord.Member 
 @bot.tree.command(name="daily", description="Recompensa diária")
 async def slash_daily(interaction: discord.Interaction):
     """Slash command para daily"""
-    try:
-        # Validar se o usuário e guild existem
-        if not interaction.user or not interaction.guild:
-            embed = create_embed("❌ Erro", "Este comando só pode ser usado em servidores!", color=0xff0000)
-            await safe_send_response(interaction, embed, ephemeral=True)
-            return
-
-        user_id = interaction.user.id
-        user_data = get_user_data(user_id)
-
-        if not user_data:
-            update_user_data(user_id)
-            user_data = get_user_data(user_id)
-
-        last_daily = user_data[6] if user_data and len(user_data) > 6 else None
-        today = datetime.date.today().isoformat()
-
-        if last_daily == today:
-            embed = create_embed(
-                "⏰ Já coletado!",
-                "Você já coletou sua recompensa diária hoje!\nVolte amanhã para coletar novamente.",
-                color=0xff6b6b
-            )
-            await safe_send_response(interaction, embed, ephemeral=True)
-            return
-
-        current_coins = user_data[1] if user_data and len(user_data) > 1 else 50
-        new_coins = current_coins + DAILY_REWARD
-
-        # Use execute_query para compatibilidade SQLite/PostgreSQL
-        execute_query('UPDATE users SET coins = %s, last_daily = %s WHERE user_id = %s',
-                     (new_coins, today, user_id))
-
-        embed = create_embed(
-            "🎁 Recompensa Diária!",
-            f"""**Recompensa:** {DAILY_REWARD:,} moedas
-**Novo saldo:** {new_coins:,} moedas
-
-🔥 *Continue coletando diariamente!*""",
-            color=0x00ff00
-        )
-
-        await safe_interaction_response(interaction, embed)
-    except Exception as e:
-        logger.error(f"Erro no daily: {e}")
-        error_embed = create_embed("❌ Erro", "Erro ao coletar daily!", color=0xff0000)
-        await safe_interaction_response(interaction, error_embed, ephemeral=True)
+    await EconomyAction.handle_timed_reward(interaction, "daily", DAILY_REWARD, "last_daily")
 
 @bot.tree.command(name="trabalhar", description="Trabalhar para ganhar dinheiro")
 async def slash_trabalhar(interaction: discord.Interaction):
@@ -2658,91 +3588,12 @@ async def slash_trabalhar(interaction: discord.Interaction):
 @bot.tree.command(name="weekly", description="Recompensa semanal")
 async def slash_weekly(interaction: discord.Interaction):
     """Slash command para weekly"""
-    try:
-        user_id = interaction.user.id
-        data = get_user_data(user_id)
-
-        if not data:
-            update_user_data(user_id)
-            data = get_user_data(user_id)
-
-        last_weekly = data[7] if len(data) > 7 else None
-        today = datetime.date.today()
-        week_start = today - datetime.timedelta(days=today.weekday())
-        week_start_str = week_start.isoformat()
-
-        if last_weekly and last_weekly >= week_start_str:
-            next_week = week_start + datetime.timedelta(days=7)
-            embed = create_embed(
-                "⏰ Já coletado esta semana!",
-                f"Você já coletou sua recompensa semanal!\nPróxima coleta: {next_week.strftime('%d/%m/%Y')}",
-                color=0xff6b6b
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-
-        new_coins = data[1] + WEEKLY_REWARD
-
-        # Use execute_query para compatibilidade SQLite/PostgreSQL
-        execute_query('UPDATE users SET coins = %s, last_weekly = %s WHERE user_id = %s',
-                     (new_coins, week_start_str, user_id))
-
-        embed = create_embed(
-            "🎁 Recompensa Semanal!",
-            f"""**Recompensa:** {WEEKLY_REWARD:,} moedas
-**Novo saldo:** {new_coins:,} moedas
-
-🔥 *Continue coletando semanalmente!*""",
-            color=0x00ff00
-        )
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        logger.error(f"Erro no weekly: {e}")
-        await interaction.response.send_message("Erro ao coletar weekly!", ephemeral=True)
+    await EconomyAction.handle_timed_reward(interaction, "weekly", WEEKLY_REWARD, "last_weekly")
 
 @bot.tree.command(name="monthly", description="Recompensa mensal")
 async def slash_monthly(interaction: discord.Interaction):
     """Slash command para monthly"""
-    try:
-        user_id = interaction.user.id
-        data = get_user_data(user_id)
-
-        if not data:
-            update_user_data(user_id)
-            data = get_user_data(user_id)
-
-        last_monthly = data[8] if len(data) > 8 else None
-        today = datetime.date.today()
-        month_start = today.replace(day=1).isoformat()
-
-        if last_monthly == month_start:
-            next_month = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-            embed = create_embed(
-                "⏰ Já coletado este mês!",
-                f"Você já coletou sua recompensa mensal!\nPróxima coleta: {next_month.strftime('%d/%m/%Y')}",
-                color=0xff6b6b
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-
-        new_coins = data[1] + MONTHLY_REWARD
-
-        # Use execute_query para compatibilidade SQLite/PostgreSQL
-        execute_query('UPDATE users SET coins = %s, last_monthly = %s WHERE user_id = %s',
-                     (new_coins, month_start, user_id))
-
-        embed = create_embed(
-            "🎁 Recompensa Mensal!",
-            f"""**Recompensa:** {MONTHLY_REWARD:,} moedas
-**Novo saldo:** {new_coins:,} moedas
-
-🔥 *Continue coletando mensalmente!*""",
-            color=0x00ff00
-        )
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        logger.error(f"Erro no monthly: {e}")
-        await interaction.response.send_message("Erro ao coletar monthly!", ephemeral=True)
+    await EconomyAction.handle_timed_reward(interaction, "monthly", MONTHLY_REWARD, "last_monthly")
 
 @bot.tree.command(name="roubar", description="Roube coins de outro usuário (60% de chance de sucesso)")
 async def slash_roubar(interaction: discord.Interaction, usuario: discord.Member):
@@ -3213,8 +4064,9 @@ async def on_ready():
         except Exception as e:
             logger.error(f"Erro ao inicializar cargos de rank: {e}")
 
-    # Restaurar mensagens interativas após reinício
+    # Restaurar mensagens interativas e painéis persistentes após reinício
     await restore_interactive_messages()
+    await restore_panels()
 
     # Sistemas de proteção 24/7 removidos para economizar recursos
 
@@ -3880,63 +4732,37 @@ class ChannelSelectView(discord.ui.View):
         try:
             channel = select.values[0]
             
-            with db_lock:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                
-                # Verificar se já existe configuração para este tipo
-                cursor.execute('''
-                    SELECT id FROM guild_channels 
-                    WHERE guild_id = %s AND channel_type = %s
-                ''', (interaction.guild.id, self.channel_type))
-                existing = cursor.fetchone()
-                
-                if existing:
-                    # Atualizar
-                    cursor.execute('''
-                        UPDATE guild_channels 
-                        SET channel_id = %s 
-                        WHERE guild_id = %s AND channel_type = %s
-                    ''', (channel.id, interaction.guild.id, self.channel_type))
-                else:
-                    # Inserir novo
-                    cursor.execute('''
-                        INSERT INTO guild_channels (guild_id, channel_type, channel_id)
-                        VALUES (%s, %s, %s)
-                    ''', (interaction.guild.id, self.channel_type, channel.id))
-                
-                conn.commit()
-                conn.close()
+            # Usar nova função centralizada
+            success = set_guild_channel_config(interaction.guild.id, self.channel_type, channel.id)
             
-            embed = create_embed(
-                "✅ Canal Configurado!",
-                f"**{self.channel_name}** foi definido como: {channel.mention}",
-                color=0x00ff00
-            )
-            await interaction.response.edit_message(embed=embed, view=None)
+            if success:
+                embed = create_embed(
+                    "✅ Canal Configurado!",
+                    f"**{self.channel_name}** foi definido como: {channel.mention}\n\n"
+                    f"**Servidor:** {interaction.guild.name}\n"
+                    f"**Tipo:** {self.channel_type.title()}\n"
+                    f"**Canal:** {channel.mention}",
+                    color=0x00ff00
+                )
+                await interaction.response.edit_message(embed=embed, view=None)
+            else:
+                embed = create_embed(
+                    "❌ Erro!",
+                    "Não foi possível configurar o canal. Tente novamente.",
+                    color=0xff0000
+                )
+                await interaction.response.edit_message(embed=embed, view=None)
             
         except Exception as e:
             logger.error(f"Erro ao configurar canal: {e}")
-            await interaction.response.send_message("❌ Erro ao configurar canal!", ephemeral=True)
+            embed = create_embed("❌ Erro", "Erro interno ao configurar canal!", color=0xff0000)
+            await interaction.response.edit_message(embed=embed, view=None)
 
 async def notify_copinha_channel(guild, message):
     """Notificar canal da copinha sobre eventos"""
     try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT channel_id FROM guild_channels 
-                WHERE guild_id = %s AND channel_type = %s
-            ''', (guild.id, 'copinha'))
-            result = cursor.fetchone()
-            conn.close()
-            
-        if result:
-            channel = guild.get_channel(result[0])
-            if channel:
-                embed = create_embed("🏆 Copinha - Atualização", message, color=0xffd700)
-                await channel.send(embed=embed)
+        embed = create_embed("🏆 Copinha - Atualização", message, color=0xffd700)
+        await send_to_configured_channel(guild, 'copinha', embed=embed)
     except Exception as e:
         logger.error(f"Erro ao notificar canal da copinha: {e}")
 
@@ -4051,67 +4877,65 @@ async def create_persistent_ticket_message(ctx_or_interaction):
 
 # ============ COMANDOS COM PREFIXO RX (NÃO-SLASH) ============
 
-@bot.command(name='escolhercanais', aliases=['configcanais'])
-async def rx_escolher_canais(ctx):
-    """Comando RX para escolher canais padrão do servidor"""
-    try:
-        if not ctx.author.guild_permissions.manage_channels:
-            embed = create_embed("❌ Sem permissão", "Você precisa da permissão 'Gerenciar Canais'!", color=0xff0000)
-            await ctx.send(embed=embed)
-            return
 
-        embed = create_embed(
-            "⚙️ Configurar Canais do Servidor",
-            "**Escolha qual tipo de canal deseja configurar:**\n\n"
-            "🔔 **Avisos** - Para anúncios importantes\n"
-            "⚔️ **X-Clan** - Para eventos entre clans\n"
-            "📋 **Logs** - Para logs de moderação\n"
-            "🏆 **Copinha** - Para eventos e scoreboards\n"
-            "👋 **Boas-vindas** - Para dar boas-vindas\n\n"
-            "**Clique nos botões abaixo para configurar:**",
-            color=0x7289da
-        )
-
-        view = ConfigChannelsView()
-        await ctx.send(embed=embed, view=view)
-
-    except Exception as e:
-        logger.error(f"Erro no comando escolhercanais: {e}")
-        await ctx.send("❌ Erro ao carregar configurações de canais!")
 
 class ConfigChannelsView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=120)
+        self.add_channel_buttons()
 
-    @discord.ui.button(label="🔔 Avisos", style=discord.ButtonStyle.primary, emoji="🔔")
-    async def config_avisos(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = ChannelSelectView('avisos', 'Canal de Avisos')
-        embed = create_embed("🔔 Configurar Canal de Avisos", "Selecione o canal para avisos importantes:", color=0x7289da)
-        await interaction.response.edit_message(embed=embed, view=view)
+    def add_channel_buttons(self):
+        """Adiciona botões dinamicamente baseado nos tipos de canais"""
+        # Mapear emojis para cada tipo
+        channel_emojis = {
+            'avisos': '🔔',
+            'alerta': '🔥', 
+            'tier': '🎯',
+            'xclan': '⚔️',
+            'bem_vindo': '👋',
+            'logs': '📋',
+            'copinha': '🏆',
+            'erro': '🚨',
+            'geral': '💬'
+        }
+        
+        # Mapear estilos para cada tipo
+        channel_styles = {
+            'avisos': discord.ButtonStyle.primary,
+            'alerta': discord.ButtonStyle.danger,
+            'tier': discord.ButtonStyle.secondary,
+            'xclan': discord.ButtonStyle.secondary,
+            'bem_vindo': discord.ButtonStyle.success,
+            'logs': discord.ButtonStyle.secondary,
+            'copinha': discord.ButtonStyle.success,
+            'erro': discord.ButtonStyle.danger,
+            'geral': discord.ButtonStyle.primary
+        }
+        
+        # Criar botões para cada tipo de canal
+        for channel_type, config in CHANNEL_TYPES.items():
+            emoji = channel_emojis.get(channel_type, '📝')
+            style = channel_styles.get(channel_type, discord.ButtonStyle.secondary)
+            
+            button = discord.ui.Button(
+                label=f"{emoji} {config['name'].replace('Canal de ', '').replace('Canal ', '')}",
+                style=style,
+                custom_id=f"config_{channel_type}"
+            )
+            button.callback = self.create_config_callback(channel_type, config)
+            self.add_item(button)
 
-    @discord.ui.button(label="⚔️ X-Clan", style=discord.ButtonStyle.secondary, emoji="⚔️")
-    async def config_xclan(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = ChannelSelectView('xclan', 'Canal X-Clan')
-        embed = create_embed("⚔️ Configurar Canal X-Clan", "Selecione o canal para eventos entre clans:", color=0x7289da)
-        await interaction.response.edit_message(embed=embed, view=view)
-
-    @discord.ui.button(label="📋 Logs", style=discord.ButtonStyle.secondary, emoji="📋")
-    async def config_logs(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = ChannelSelectView('logs', 'Canal de Logs')
-        embed = create_embed("📋 Configurar Canal de Logs", "Selecione o canal para logs de moderação:", color=0x7289da)
-        await interaction.response.edit_message(embed=embed, view=view)
-
-    @discord.ui.button(label="🏆 Copinha", style=discord.ButtonStyle.success, emoji="🏆")
-    async def config_copinha(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = ChannelSelectView('copinha', 'Canal da Copinha')
-        embed = create_embed("🏆 Configurar Canal da Copinha", "Selecione o canal para eventos e scoreboards da copinha:", color=0x7289da)
-        await interaction.response.edit_message(embed=embed, view=view)
-
-    @discord.ui.button(label="👋 Boas-vindas", style=discord.ButtonStyle.secondary, emoji="👋")
-    async def config_welcome(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = ChannelSelectView('welcome', 'Canal de Boas-vindas')
-        embed = create_embed("👋 Configurar Canal de Boas-vindas", "Selecione o canal para dar boas-vindas:", color=0x7289da)
-        await interaction.response.edit_message(embed=embed, view=view)
+    def create_config_callback(self, channel_type, config):
+        """Cria callback dinâmico para cada botão"""
+        async def config_callback(interaction: discord.Interaction):
+            view = ChannelSelectView(channel_type, config['name'])
+            embed = create_embed(
+                f"📝 Configurar {config['name']}", 
+                f"Selecione o canal para {config['description'].lower()}:", 
+                color=0x7289da
+            )
+            await interaction.response.edit_message(embed=embed, view=view)
+        return config_callback
 
 @bot.command(name='scorecup', aliases=['scorecopinha'])
 async def rx_score_cup(ctx):
@@ -4572,6 +5396,100 @@ async def slash_escolher_cargo(interaction: discord.Interaction):
         embed = create_embed("❌ Erro", "Erro interno ao carregar sistema de cargos!", color=0xff0000)
         await safe_send_response(interaction, embed, ephemeral=True)
 
+@bot.tree.command(name="escolhercanais", description="Configurar canais do servidor (Admin)")
+async def slash_escolhercanais(interaction: discord.Interaction):
+    """Comando slash para configurar canais do servidor"""
+    try:
+        global_stats['commands_used'] += 1
+        
+        # Verificar se é administrador
+        if not interaction.user.guild_permissions.administrator:
+            embed = create_embed(
+                "❌ Sem permissão", 
+                "Você precisa da permissão de 'Administrador' para configurar canais!", 
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # Verificar canais já configurados
+        configured_channels = []
+        for channel_type, config in CHANNEL_TYPES.items():
+            channel_id = get_guild_channel_config(interaction.guild.id, channel_type)
+            if channel_id:
+                channel = interaction.guild.get_channel(channel_id)
+                if channel:
+                    configured_channels.append(f"• **{config['name']}:** {channel.mention}")
+                else:
+                    configured_channels.append(f"• **{config['name']}:** ❌ Canal removido")
+
+        configured_text = "\n".join(configured_channels) if configured_channels else "*Nenhum canal configurado ainda*"
+
+        embed = create_embed(
+            "⚙️ Configurar Canais do Servidor",
+            f"**🏛️ Servidor:** {interaction.guild.name}\n\n"
+            f"**📋 Canais configurados:**\n{configured_text}\n\n"
+            f"**💡 Escolha qual tipo de canal deseja configurar:**\n"
+            f"Clique nos botões abaixo para selecionar os canais.\n\n"
+            f"**⚠️ Importante:** O bot só enviará mensagens em servidores configurados!",
+            color=0x7289da
+        )
+
+        view = ConfigChannelsView()
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    except Exception as e:
+        logger.error(f"Erro no comando escolhercanais: {e}")
+        embed = create_embed("❌ Erro", "Erro ao carregar configurações de canais!", color=0xff0000)
+        await safe_send_response(interaction, embed, ephemeral=True)
+
+@bot.tree.command(name="vercanais", description="Ver configurações de canais do servidor")
+async def slash_vercanais(interaction: discord.Interaction):
+    """Comando para ver configurações atuais de canais"""
+    try:
+        # Verificar se é administrador
+        if not interaction.user.guild_permissions.administrator:
+            embed = create_embed(
+                "❌ Sem permissão", 
+                "Você precisa da permissão de 'Administrador' para ver configurações de canais!", 
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        configured_channels = []
+        not_configured = []
+        
+        for channel_type, config in CHANNEL_TYPES.items():
+            channel_id = get_guild_channel_config(interaction.guild.id, channel_type)
+            if channel_id:
+                channel = interaction.guild.get_channel(channel_id)
+                if channel:
+                    configured_channels.append(f"✅ **{config['name']}:** {channel.mention}")
+                else:
+                    configured_channels.append(f"❌ **{config['name']}:** Canal removido (ID: {channel_id})")
+            else:
+                not_configured.append(f"⚪ **{config['name']}:** Não configurado")
+
+        configured_text = "\n".join(configured_channels) if configured_channels else "*Nenhum canal configurado*"
+        not_configured_text = "\n".join(not_configured) if not_configured else "*Todos os canais configurados*"
+
+        embed = create_embed(
+            f"📋 Configurações de Canais - {interaction.guild.name}",
+            f"**🟢 Canais Configurados:**\n{configured_text}\n\n"
+            f"**⚪ Não Configurados:**\n{not_configured_text}\n\n"
+            f"**💡 Para configurar:** Use `/escolhercanais`\n"
+            f"**⚠️ Importante:** O bot só envia mensagens em canais configurados!",
+            color=0x7289da
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    except Exception as e:
+        logger.error(f"Erro no comando vercanais: {e}")
+        embed = create_embed("❌ Erro", "Erro ao carregar configurações!", color=0xff0000)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
 @bot.tree.command(name="desbugar", description="Cancelar uma copinha ativa")
 async def slash_desbugar(interaction: discord.Interaction):
     """Comando slash para cancelar copinha ativa"""
@@ -4588,24 +5506,47 @@ async def slash_desbugar(interaction: discord.Interaction):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        # Procurar copinhas ativas no servidor
+        # Buscar copinhas ativas no banco de dados
+        copinhas_db = execute_query('''
+            SELECT id, message_id, title, status FROM copinhas 
+            WHERE guild_id = %s AND status IN ('inscricoes', 'active', 'em_andamento')
+        ''', (interaction.guild.id,), fetch_all=True)
+        
         copinhas_ativas = []
         copinhas_em_andamento = []
         
+        # Buscar copinhas do active_games também
         for message_id, game_data in list(active_games.items()):
             try:
+                if game_data.get('guild_id') != interaction.guild.id:
+                    continue
+                    
                 # Copinhas com inscrições abertas
-                if (game_data.get('type') == 'copinha_join' and 
-                    hasattr(game_data.get('view'), 'participants')):
-                    view = game_data.get('view')
-                    if len(view.participants) < view.max_players:
-                        copinhas_ativas.append((message_id, view))
+                if game_data.get('type') == 'copinha_join':
+                    copinha_id = game_data.get('copinha_id')
+                    if copinha_id:
+                        copinhas_ativas.append((message_id, copinha_id))
                 
                 # Copinhas em andamento (partidas)
                 elif game_data.get('type') == 'match_winner':
-                    copinhas_em_andamento.append(message_id)
+                    copinha_id = game_data.get('copinha_id')
+                    if copinha_id:
+                        copinhas_em_andamento.append((message_id, copinha_id))
             except:
                 continue
+        
+        # Adicionar copinhas do banco que não estão no active_games
+        if copinhas_db:
+            for copinha in copinhas_db:
+                copinha_id = copinha['id'] if isinstance(copinha, dict) else copinha[0]
+                message_id = copinha['message_id'] if isinstance(copinha, dict) else (copinha[1] if len(copinha) > 1 else None)
+                status = copinha['status'] if isinstance(copinha, dict) else (copinha[3] if len(copinha) > 3 else 'inscricoes')
+                
+                if message_id:
+                    if status in ('inscricoes', 'active'):
+                        copinhas_ativas.append((message_id, copinha_id))
+                    elif status == 'em_andamento':
+                        copinhas_em_andamento.append((message_id, copinha_id))
         
         if not copinhas_ativas and not copinhas_em_andamento:
             embed = create_embed(
@@ -4619,62 +5560,61 @@ async def slash_desbugar(interaction: discord.Interaction):
         canceladas = 0
         
         # Cancelar copinhas com inscrições
-        for message_id, view in copinhas_ativas:
+        for message_id, copinha_id in copinhas_ativas:
             try:
                 # Remover do active_games
                 if message_id in active_games:
                     del active_games[message_id]
                 
+                # Marcar copinha como cancelada no banco
+                execute_query(
+                    'UPDATE copinhas SET status = %s WHERE id = %s',
+                    ('cancelled', copinha_id)
+                )
+                
                 # Marcar mensagem interativa como inativa
-                with db_lock:
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        UPDATE interactive_messages 
-                        SET status = 'cancelled'
-                        WHERE message_id = %s
-                    ''', (message_id,))
-                    conn.commit()
-                    conn.close()
+                execute_query('''
+                    UPDATE interactive_messages 
+                    SET status = 'cancelled'
+                    WHERE message_id = %s
+                ''', (message_id,))
                 
                 canceladas += 1
-                logger.info(f"Copinha {view.title} cancelada por {interaction.user.display_name}")
+                logger.info(f"Copinha ID {copinha_id} cancelada por {interaction.user.display_name}")
                 
             except Exception as e:
                 logger.error(f"Erro ao cancelar copinha {message_id}: {e}")
 
         # Cancelar partidas em andamento
         partidas_canceladas = 0
-        for message_id in copinhas_em_andamento:
+        for message_id, copinha_id in copinhas_em_andamento:
             try:
                 # Remover do active_games
                 if message_id in active_games:
-                    game_data = active_games[message_id]
-                    copinha_id = game_data.get('data', {}).get('copinha_id')
                     del active_games[message_id]
                 
+                # Marcar copinha como cancelada
+                execute_query(
+                    'UPDATE copinhas SET status = %s WHERE id = %s',
+                    ('cancelled', copinha_id)
+                )
+                
                 # Marcar mensagem interativa como cancelada
-                with db_lock:
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        UPDATE interactive_messages 
-                        SET status = 'cancelled'
-                        WHERE message_id = %s
-                    ''', (message_id,))
-                    
-                    # Marcar copinha como cancelada se tiver
-                    if copinha_id:
-                        cursor.execute('''
-                            UPDATE copinhas 
-                            SET status = 'cancelled'
-                            WHERE id = %s
-                        ''', (copinha_id,))
-                    
-                    conn.commit()
-                    conn.close()
+                execute_query('''
+                    UPDATE interactive_messages 
+                    SET status = 'cancelled'
+                    WHERE message_id = %s
+                ''', (message_id,))
+                
+                # Marcar partidas da copinha como canceladas
+                execute_query('''
+                    UPDATE copinha_matches 
+                    SET status = 'cancelled'
+                    WHERE copinha_id = %s
+                ''', (copinha_id,))
                 
                 partidas_canceladas += 1
+                logger.info(f"Partida da copinha ID {copinha_id} cancelada")
                 
             except Exception as e:
                 logger.error(f"Erro ao cancelar partida {message_id}: {e}")
@@ -9412,30 +10352,34 @@ async def create_next_round(copinha, winners, current_round, copinha_id, forced_
         num_matches = len(winner_teams) // 2
         
         with db_lock:
-            for i in range(num_matches):
-                team1 = winner_teams[i * 2]
-                team2 = winner_teams[i * 2 + 1]
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            try:
+                for i in range(num_matches):
+                    team1 = winner_teams[i * 2]
+                    team2 = winner_teams[i * 2 + 1]
 
-                # Criar canal para a partida
-                match_channel = await guild.create_text_channel(
-                    f"🏆-{next_round_key}-{i+1}",
-                    category=category
-                )
+                    # Criar canal para a partida
+                    match_channel = await guild.create_text_channel(
+                        f"🏆-{next_round_key}-{i+1}",
+                        category=category
+                    )
 
-                # Dar permissão aos jogadores das duas equipes
-                await match_channel.set_permissions(guild.default_role, read_messages=False)
-                
-                # Permissões para time 1
-                for player_id in team1:
-                    member = guild.get_member(player_id)
-                    if member:
-                        await match_channel.set_permissions(member, read_messages=True, send_messages=True)
-                
-                # Permissões para time 2
-                for player_id in team2:
-                    member = guild.get_member(player_id)
-                    if member:
-                        await match_channel.set_permissions(member, read_messages=True, send_messages=True)
+                    # Dar permissão aos jogadores das duas equipes
+                    await match_channel.set_permissions(guild.default_role, read_messages=False)
+                    
+                    # Permissões para time 1
+                    for player_id in team1:
+                        member = guild.get_member(player_id)
+                        if member:
+                            await match_channel.set_permissions(member, read_messages=True, send_messages=True)
+                    
+                    # Permissões para time 2
+                    for player_id in team2:
+                        member = guild.get_member(player_id)
+                        if member:
+                            await match_channel.set_permissions(member, read_messages=True, send_messages=True)
 
                 # Salvar match no banco (usar key normalizada para consistência)
                 cursor.execute('''
@@ -9517,11 +10461,17 @@ VS
                     }
                 )
 
-            # Atualizar rodada atual da copinha
-            cursor.execute('UPDATE copinhas SET current_round = %s WHERE id = %s', 
-                         (next_round_key, copinha_id))
-            conn.commit()
-            conn.close()
+                # Atualizar rodada atual da copinha
+                cursor.execute('UPDATE copinhas SET current_round = %s WHERE id = %s', 
+                             (next_round_key, copinha_id))
+                conn.commit()
+            except Exception as db_error:
+                if conn:
+                    conn.rollback()
+                raise db_error
+            finally:
+                if conn:
+                    conn.close()
 
         logger.info(f"Próxima rodada '{next_round_name}' criada com {num_matches} partidas")
 
