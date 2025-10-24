@@ -3,14 +3,18 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import random
+import asyncio
 from datetime import datetime
 from models.bet import Bet
 from utils.database import Database
 
-# Detectar se está rodando no Railway
+# Detectar ambiente de execução
+IS_FLYIO = os.getenv("FLY_APP_NAME") is not None
 IS_RAILWAY = os.getenv("RAILWAY_ENVIRONMENT") is not None or os.getenv("RAILWAY_STATIC_URL") is not None
 
-if IS_RAILWAY:
+if IS_FLYIO:
+    print("✈️ Detectado ambiente Fly.io")
+elif IS_RAILWAY:
     print("🚂 Detectado ambiente Railway")
 else:
     print("💻 Detectado ambiente Replit/Local")
@@ -26,6 +30,9 @@ db = Database()
 MODES = ["1v1-misto", "1v1-mob", "2v2-misto"]
 ACTIVE_BETS_CATEGORY = "💰 Apostas Ativas"
 EMBED_COLOR = 0x5865F2
+
+# Dicionário para mapear queue_id -> (channel_id, message_id, mode, bet_value)
+queue_messages = {}
 
 
 class QueueButton(discord.ui.View):
@@ -132,6 +139,7 @@ class QueueButton(discord.ui.View):
             )
             return
 
+        # Recarrega a fila para garantir que está atualizada
         queue = db.get_queue(self.queue_id)
 
         if user_id in queue:
@@ -531,16 +539,9 @@ class PixModal(discord.ui.Modal, title='Inserir Chave PIX'):
             perms.read_messages = True
             perms.send_messages = True
             await channel.set_permissions(interaction.user, overwrite=perms)
-
-        try:
-            await player1.send(f"Um mediador aceitou sua aposta. Acesse {channel.mention}")
-        except:
-            pass
-
-        try:
-            await player2.send(f"Um mediador aceitou sua aposta. Acesse {channel.mention}")
-        except:
-            pass
+            
+            # Envia uma mensagem no canal mencionando os jogadores
+            await channel.send(f"{player1.mention} {player2.mention} Um mediador aceitou a aposta! ✅")
 
 
 class AcceptMediationButton(discord.ui.View):
@@ -567,6 +568,104 @@ class AcceptMediationButton(discord.ui.View):
         await interaction.response.send_modal(PixModal(self.bet_id))
 
 
+async def cleanup_expired_queues():
+    """Tarefa em background que remove jogadores que ficaram muito tempo na fila"""
+    await bot.wait_until_ready()
+    print("🧹 Iniciando sistema de limpeza automática de filas (2 minutos)")
+    
+    while not bot.is_closed():
+        try:
+            # Busca jogadores expirados (mais de 2 minutos na fila)
+            expired_players = db.get_expired_queue_players(timeout_minutes=2)
+            
+            if expired_players:
+                print(f"🧹 Encontrados jogadores expirados em {len(expired_players)} filas")
+                
+                for queue_id, user_ids in expired_players.items():
+                    # Remove cada jogador expirado
+                    for user_id in user_ids:
+                        db.remove_from_queue(queue_id, user_id)
+                        print(f"⏱️ Removido usuário {user_id} da fila {queue_id} (timeout)")
+                    
+                    # Atualiza a mensagem da fila se possível
+                    if queue_id in queue_messages:
+                        channel_id, message_id, mode, bet_value = queue_messages[queue_id]
+                        try:
+                            channel = bot.get_channel(channel_id)
+                            if channel:
+                                message = await channel.fetch_message(message_id)
+                                
+                                # Verifica se é 2v2 ou 1v1
+                                is_2v2 = "2v2" in mode
+                                
+                                if is_2v2:
+                                    team1_queue = db.get_queue(f"{queue_id}_team1")
+                                    team2_queue = db.get_queue(f"{queue_id}_team2")
+                                    
+                                    guild = channel.guild
+                                    team1_names = []
+                                    for uid in team1_queue:
+                                        try:
+                                            member = await guild.fetch_member(uid)
+                                            team1_names.append(member.mention)
+                                        except:
+                                            team1_names.append(f"<@{uid}>")
+                                    
+                                    team2_names = []
+                                    for uid in team2_queue:
+                                        try:
+                                            member = await guild.fetch_member(uid)
+                                            team2_names.append(member.mention)
+                                        except:
+                                            team2_names.append(f"<@{uid}>")
+                                    
+                                    team1_text = "\n".join(team1_names) if team1_names else "Nenhum jogador"
+                                    team2_text = "\n".join(team2_names) if team2_names else "Nenhum jogador"
+                                    
+                                    embed = discord.Embed(
+                                        title=mode.replace('-', ' ').title(),
+                                        color=EMBED_COLOR
+                                    )
+                                    embed.add_field(name="Valor", value=f"R$ {bet_value:.2f}".replace('.', ','), inline=True)
+                                    embed.add_field(name="Time 1", value=team1_text, inline=True)
+                                    embed.add_field(name="Time 2", value=team2_text, inline=True)
+                                    if guild.icon:
+                                        embed.set_thumbnail(url=guild.icon.url)
+                                else:
+                                    queue = db.get_queue(queue_id)
+                                    
+                                    guild = channel.guild
+                                    player_names = []
+                                    for uid in queue:
+                                        try:
+                                            member = await guild.fetch_member(uid)
+                                            player_names.append(member.mention)
+                                        except:
+                                            player_names.append(f"<@{uid}>")
+                                    
+                                    players_text = "\n".join(player_names) if player_names else "Vazio"
+                                    
+                                    embed = discord.Embed(
+                                        title=mode.replace('-', ' ').title(),
+                                        color=EMBED_COLOR
+                                    )
+                                    embed.add_field(name="Valor", value=f"R$ {bet_value:.2f}".replace('.', ','), inline=True)
+                                    embed.add_field(name="Fila", value=players_text, inline=True)
+                                    if guild.icon:
+                                        embed.set_thumbnail(url=guild.icon.url)
+                                
+                                await message.edit(embed=embed)
+                        except Exception as e:
+                            print(f"Erro ao atualizar mensagem da fila {queue_id}: {e}")
+            
+            # Aguarda 30 segundos antes de verificar novamente
+            await asyncio.sleep(30)
+            
+        except Exception as e:
+            print(f"Erro na limpeza de filas: {e}")
+            await asyncio.sleep(30)
+
+
 @bot.event
 async def on_ready():
     print(f'Bot conectado como {bot.user}')
@@ -577,6 +676,9 @@ async def on_ready():
         print(f'{len(synced)} comandos sincronizados')
     except Exception as e:
         print(f'Erro ao sincronizar comandos: {e}')
+    
+    # Inicia a tarefa de limpeza automática de filas
+    bot.loop.create_task(cleanup_expired_queues())
 
 
 
@@ -620,6 +722,15 @@ async def mostrar_fila(interaction: discord.Interaction, modo: app_commands.Choi
     view = QueueButton(mode, valor, taxa, message.id)
 
     await message.edit(embed=embed, view=view)
+    
+    # Salva a informação da fila para o sistema de limpeza automática
+    queue_id = f"{mode}_{message.id}"
+    queue_messages[queue_id] = (interaction.channel.id, message.id, mode, valor)
+    
+    # Para 2v2, também salva as filas dos times
+    if "2v2" in mode:
+        queue_messages[f"{queue_id}_team1"] = (interaction.channel.id, message.id, mode, valor)
+        queue_messages[f"{queue_id}_team2"] = (interaction.channel.id, message.id, mode, valor)
 
 
 
@@ -722,14 +833,7 @@ async def create_2v2_bet_channel(guild: discord.Guild, mode: str, team1: list, t
     view = AcceptMediationButton(bet_id)
 
     all_mentions = " ".join([m.mention for m in team1_members + team2_members])
-    await channel.send(content=f"{all_mentions} {admin_mention}", embed=embed, view=view)
-
-    # Notifica todos os jogadores
-    for member in team1_members + team2_members:
-        try:
-            await member.send(f"Sua aposta 2v2 foi criada. Aguardando mediador. Acesse {channel.mention}")
-        except:
-            pass
+    await channel.send(content=f"{all_mentions} Aposta 2v2 criada! Aguardando mediador... {admin_mention}", embed=embed, view=view)
 
 
 async def create_bet_channel(guild: discord.Guild, mode: str, player1_id: int, player2_id: int, bet_value: float, mediator_fee: float):
@@ -794,17 +898,7 @@ async def create_bet_channel(guild: discord.Guild, mode: str, player1_id: int, p
 
     view = AcceptMediationButton(bet_id)
 
-    await channel.send(content=f"{player1.mention} {player2.mention} {admin_mention}", embed=embed, view=view)
-
-    try:
-        await player1.send(f"Sua aposta foi criada. Aguardando mediador. Acesse {channel.mention}")
-    except:
-        pass
-
-    try:
-        await player2.send(f"Sua aposta foi criada. Aguardando mediador. Acesse {channel.mention}")
-    except:
-        pass
+    await channel.send(content=f"{player1.mention} {player2.mention} Aposta criada! Aguardando mediador... {admin_mention}", embed=embed, view=view)
 
 
 @bot.tree.command(name="confirmar-pagamento", description="Confirmar que você enviou o pagamento ao mediador")
@@ -1066,6 +1160,24 @@ async def minhas_apostas(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
+@bot.tree.command(name="sair-todas-filas", description="Sair de todas as filas em que você está")
+async def sair_todas_filas(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    
+    # Remove o usuário de todas as filas
+    db.remove_from_all_queues(user_id)
+    
+    embed = discord.Embed(
+        title="✅ Removido de todas as filas",
+        description="Você foi removido de todas as filas. Agora você pode entrar novamente.",
+        color=EMBED_COLOR
+    )
+    if interaction.guild.icon:
+        embed.set_thumbnail(url=interaction.guild.icon.url)
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 @bot.tree.command(name="desbugar-filas", description="[ADMIN] Cancelar todas as apostas ativas e limpar filas")
 async def desbugar_filas(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
@@ -1108,6 +1220,7 @@ async def desbugar_filas(interaction: discord.Interaction):
     # Limpar todas as filas
     data = db._load_data()
     data['queues'] = {}
+    data['queue_timestamps'] = {}
     db._save_data(data)
 
     embed = discord.Embed(
@@ -1122,7 +1235,7 @@ async def desbugar_filas(interaction: discord.Interaction):
     if interaction.guild.icon:
         embed.set_thumbnail(url=interaction.guild.icon.url)
 
-    await interaction.followup.send(embed=embed)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @bot.tree.command(name="ajuda", description="Ver todos os comandos disponíveis")
@@ -1174,13 +1287,15 @@ async def ajuda(interaction: discord.Interaction):
 
 
 try:
-    token = os.getenv("TOKEN") or ""
+    token = os.getenv("DISCORD_TOKEN") or os.getenv("TOKEN") or ""
     if token == "":
-        raise Exception("Por favor, adicione seu token do Discord nas variáveis de ambiente (TOKEN).")
+        raise Exception("Por favor, adicione seu token do Discord nas variáveis de ambiente (DISCORD_TOKEN).")
     
-    if IS_RAILWAY:
+    if IS_FLYIO:
+        print("Iniciando bot no Fly.io...")
+        bot.run(token, log_handler=None, root_logger=True)
+    elif IS_RAILWAY:
         print("Iniciando bot no Railway...")
-        # Railway requer que o processo não morra, então usamos configurações específicas
         bot.run(token, log_handler=None, root_logger=True)
     else:
         print("Iniciando bot no Replit/Local...")
